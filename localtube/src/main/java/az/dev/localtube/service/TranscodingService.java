@@ -1,6 +1,7 @@
 package az.dev.localtube.service;
 
 import az.dev.localtube.domain.VideoStatus;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -15,11 +16,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Service
 public class TranscodingService {
 
     private final VideoService videoService;
     private final Path hlsDir;
+    private final Path thumbnailDir;
     private final int segmentDuration;
     private final List<String> allowedQualities;
 
@@ -27,30 +30,37 @@ public class TranscodingService {
 
     public TranscodingService(VideoService videoService,
                               @Value("${localtube.storage.hls-dir}") String hlsDirPath,
+                              @Value("${localtube.storage.thumbnail-dir}") String thumbnailDirPath,
                               @Value("${localtube.transcoding.segment-duration}") int segmentDuration,
                               @Value("${localtube.transcoding.qualities}") List<String> qualities) {
         this.videoService = videoService;
         this.hlsDir = Paths.get(hlsDirPath);
+        this.thumbnailDir = Paths.get(thumbnailDirPath);
         this.segmentDuration = segmentDuration;
         this.allowedQualities = qualities;
     }
 
-    @Async("videoProcessingExecutor")
+//    @Async("videoProcessingExecutor")
     public void transcodeToHLS(String videoId, Path inputFile) {
         try {
-            System.out.println("[Transcoding] Starting for video: " + videoId);
+            log.info("[Transcoding] Starting for video: {}", videoId);
 
             videoService.updateVideoStatus(videoId, VideoStatus.PROCESSING);
 
             Path outputDir = hlsDir.resolve(videoId);
             Files.createDirectories(outputDir);
 
+            // Generate thumbnail
+            generateThumbnail(videoId, inputFile);
+
+            // Get video info
             VideoInfo info = getVideoInfo(inputFile);
-            System.out.println("[Transcoding] Input: " + info.width + "x" + info.height + ", duration: " + info.durationSeconds + "s");
+            log.info("[Transcoding] Input: {}x{}, duration: {}s", info.width, info.height, info.durationSeconds);
 
             videoService.updateVideoMetadata(videoId, info.width, info.height,
                     info.durationSeconds, Files.size(inputFile));
 
+            // Build quality profiles
             List<QualityProfile> profiles = buildQualityProfiles(info);
 
             StringBuilder masterPlaylist = new StringBuilder();
@@ -59,7 +69,7 @@ public class TranscodingService {
 
             for (QualityProfile profile : profiles) {
                 if (!transcodeQuality(videoId, inputFile, outputDir, profile)) {
-                    System.err.println("[Transcoding] Failed for quality: " + profile.label);
+                    log.error("[Transcoding] Failed for quality: {}", profile.label);
                     continue;
                 }
 
@@ -76,20 +86,41 @@ public class TranscodingService {
             Path masterFile = outputDir.resolve("master.m3u8");
             Files.writeString(masterFile, masterPlaylist.toString());
 
+            // Delete original file
             Files.deleteIfExists(inputFile);
 
             videoService.updateVideoStatus(videoId, VideoStatus.READY);
-
-            System.out.println("[Transcoding] SUCCESS: " + videoId);
+            log.info("[Transcoding] SUCCESS: {}", videoId);
 
         } catch (Exception e) {
-            System.err.println("[Transcoding ERROR] " + e.getMessage());
-            e.printStackTrace();
-
+            log.error("[Transcoding ERROR] {}", e.getMessage(), e);
             try {
                 videoService.updateVideoStatus(videoId, VideoStatus.FAILED);
                 Files.deleteIfExists(inputFile);
             } catch (IOException ignored) {}
+        }
+    }
+
+    private void generateThumbnail(String videoId, Path inputFile) {
+        try {
+            Path thumbDir = thumbnailDir.resolve(videoId);
+            Files.createDirectories(thumbDir);
+            Path thumbFile = thumbDir.resolve("default.jpg");
+
+            ProcessBuilder pb = new ProcessBuilder(
+                    "ffmpeg", "-y",
+                    "-i", inputFile.toAbsolutePath().toString(),
+                    "-ss", "00:00:05",
+                    "-vframes", "1",
+                    "-vf", "scale=640:-1",
+                    thumbFile.toAbsolutePath().toString()
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            process.waitFor();
+            log.debug("Generated thumbnail for {}", videoId);
+        } catch (Exception e) {
+            log.warn("Failed to generate thumbnail: {}", e.getMessage());
         }
     }
 
@@ -98,7 +129,7 @@ public class TranscodingService {
             Path qualityDir = outputDir.resolve(profile.label);
             Files.createDirectories(qualityDir);
 
-            System.out.println("[Transcoding] Processing " + profile.label + " for " + videoId);
+            log.info("[Transcoding] Processing {} for {}", profile.label, videoId);
 
             ProcessBuilder pb = new ProcessBuilder(
                     "ffmpeg",
@@ -132,7 +163,7 @@ public class TranscodingService {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.contains("frame=") || line.contains("speed=")) {
-                        System.out.println("[FFmpeg " + profile.label + "] " + line);
+                        log.debug("[FFmpeg {}] {}", profile.label, line);
                     }
                 }
             }
@@ -141,16 +172,16 @@ public class TranscodingService {
             activeProcesses.remove(videoId + "_" + profile.label);
 
             if (exitCode != 0) {
-                System.err.println("[Transcoding] FFmpeg failed with exit code: " + exitCode);
+                log.error("[Transcoding] FFmpeg failed with exit code: {}", exitCode);
                 deleteDirectoryRecursive(qualityDir);
                 return false;
             }
 
-            System.out.println("[Transcoding] SUCCESS: " + profile.label);
+            log.info("[Transcoding] SUCCESS: {}", profile.label);
             return true;
 
         } catch (Exception e) {
-            System.err.println("[Transcoding] Error for " + profile.label + ": " + e.getMessage());
+            log.error("[Transcoding] Error for {}: {}", profile.label, e.getMessage());
             return false;
         }
     }
@@ -195,15 +226,12 @@ public class TranscodingService {
         if (allowedQualities.contains("480p")) {
             profiles.add(new QualityProfile("480p", 854, 480, 1_500_000));
         }
-
         if (info.height >= 720 && allowedQualities.contains("720p")) {
             profiles.add(new QualityProfile("720p", 1280, 720, 3_000_000));
         }
-
         if (info.height >= 1080 && allowedQualities.contains("1080p")) {
             profiles.add(new QualityProfile("1080p", 1920, 1080, 6_000_000));
         }
-
         if (info.height >= 2160 && allowedQualities.contains("2160p")) {
             profiles.add(new QualityProfile("2160p", 3840, 2160, 25_000_000));
         }
@@ -219,33 +247,12 @@ public class TranscodingService {
                         .forEach(p -> {
                             try {
                                 Files.deleteIfExists(p);
-                            } catch (IOException e) {
-                                System.err.println("[Transcoding] Cannot delete: " + p);
-                            }
+                            } catch (IOException ignored) {}
                         });
             }
-        } catch (IOException e) {
-            System.err.println("[Transcoding] Delete failed: " + dir);
-        }
+        } catch (IOException ignored) {}
     }
 
-    private static class VideoInfo {
-        final int width, height, durationSeconds;
-        VideoInfo(int width, int height, int durationSeconds) {
-            this.width = width;
-            this.height = height;
-            this.durationSeconds = durationSeconds;
-        }
-    }
-
-    private static class QualityProfile {
-        final String label;
-        final int width, height, bandwidth;
-        QualityProfile(String label, int width, int height, int bandwidth) {
-            this.label = label;
-            this.width = width;
-            this.height = height;
-            this.bandwidth = bandwidth;
-        }
-    }
+    private record VideoInfo(int width, int height, int durationSeconds) {}
+    private record QualityProfile(String label, int width, int height, int bandwidth) {}
 }

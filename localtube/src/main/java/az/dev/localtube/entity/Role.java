@@ -4,11 +4,12 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
+@Entity
 @Table(schema = "dbo", name = "roles")
-@Entity(name = "roles")
 public class Role {
 
     @Id
@@ -33,5 +34,5 @@ public class Role {
             joinColumns = @JoinColumn(name = "role_id"),
             inverseJoinColumns = @JoinColumn(name = "permission_id")
     )
-    private List<Permission> permissions;
+    private List<Permission> permissions = new ArrayList<>();
 }

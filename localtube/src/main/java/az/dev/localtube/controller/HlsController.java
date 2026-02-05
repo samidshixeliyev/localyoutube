@@ -1,5 +1,6 @@
 package az.dev.localtube.controller;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -7,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,18 +19,23 @@ import java.nio.file.Paths;
 @RequestMapping("/hls")
 public class HlsController {
 
-    private static final String HLS_DIR = "hls/";
+    private final Path hlsDir;
+
+    public HlsController(@Value("${localtube.storage.hls-dir}") String hlsDirPath) {
+        this.hlsDir = Paths.get(hlsDirPath);
+    }
 
     @GetMapping("/**")
-    public ResponseEntity<Resource> serveHlsFile(jakarta.servlet.http.HttpServletRequest request) {
+    public ResponseEntity<Resource> serveHlsFile(HttpServletRequest request) {
         try {
             String requestUri = request.getRequestURI();
             String hlsPath = requestUri.substring("/hls/".length());
             hlsPath = URLDecoder.decode(hlsPath, StandardCharsets.UTF_8);
 
-            Path filePath = Paths.get(HLS_DIR, hlsPath).toAbsolutePath().normalize();
-            Path baseDir = Paths.get(HLS_DIR).toAbsolutePath().normalize();
+            Path filePath = hlsDir.resolve(hlsPath).toAbsolutePath().normalize();
+            Path baseDir = hlsDir.toAbsolutePath().normalize();
 
+            // Security check - prevent path traversal
             if (!filePath.startsWith(baseDir)) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
             }
@@ -46,7 +53,6 @@ public class HlsController {
                     .body(resource);
 
         } catch (Exception e) {
-            System.err.println("[HLS ERROR] " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

@@ -1,9 +1,9 @@
 package az.dev.localtube.service;
 
-import az.dev.localtube.domain.Comment;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
 import az.dev.localtube.repository.VideoRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -15,36 +15,68 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @Service
 public class VideoService {
 
     private final VideoRepository videoRepository;
     private final Path uploadDir;
     private final Path hlsDir;
+    private final Path thumbnailDir;
 
     public VideoService(VideoRepository videoRepository,
                         @Value("${localtube.storage.upload-dir}") String uploadDirPath,
-                        @Value("${localtube.storage.hls-dir}") String hlsDirPath) {
+                        @Value("${localtube.storage.hls-dir}") String hlsDirPath,
+                        @Value("${localtube.storage.thumbnail-dir}") String thumbnailDirPath) {
         this.videoRepository = videoRepository;
         this.uploadDir = Paths.get(uploadDirPath);
         this.hlsDir = Paths.get(hlsDirPath);
+        this.thumbnailDir = Paths.get(thumbnailDirPath);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Create
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     public Video createVideo(String title, String filename, String description) throws IOException {
-        String videoId = sanitizeFilename(filename);
+        return createVideo(title, filename, description, null, null, null);
+    }
 
-        Video video = new Video();
-        video.setId(videoId);
-        video.setTitle(title);
-        video.setFilename(filename);
-        video.setDescription(description);
-        video.setStatus(VideoStatus.UPLOADING);
-        video.setUploadPath(uploadDir.resolve(filename).toString());
-        video.setHlsPath(hlsDir.resolve(videoId).toString());
-        video.setMasterPlaylistUrl("/hls/" + videoId + "/master.m3u8");
+    public Video createVideo(String title, String filename, String description,
+                             List<String> tags, Long uploaderId, String uploaderName) throws IOException {
+        Video video = Video.builder()
+                .title(title)
+                .filename(filename)
+                .originalFilename(filename)
+                .description(description != null ? description : "")
+                .tags(tags != null ? tags : List.of())
+                .uploaderId(uploaderId)
+                .uploaderName(uploaderName)
+                .status(VideoStatus.UPLOADING)
+                .uploadPath(uploadDir.resolve(filename).toString())
+                .hlsPath(hlsDir.toString())
+                .thumbnailPath(thumbnailDir.toString())
+                .uploadedAt(LocalDateTime.now())
+                .views(0L)
+                .likes(0L)
+                .commentCount(0)
+                .build();
 
+        video = videoRepository.save(video);
+        
+        // Update paths with video ID
+        video.setUploadPath(uploadDir.resolve(video.getId()).toString());
+        video.setHlsPath(hlsDir.resolve(video.getId()).toString());
+        video.setThumbnailPath(thumbnailDir.resolve(video.getId()).toString());
+        video.setMasterPlaylistUrl("/hls/" + video.getId() + "/master.m3u8");
+        video.setThumbnailUrl("/thumbnails/" + video.getId() + "/default.jpg");
+        
         return videoRepository.save(video);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Read
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     public Optional<Video> getVideo(String id) throws IOException {
         return videoRepository.findById(id);
@@ -54,12 +86,45 @@ public class VideoService {
         return videoRepository.findAll();
     }
 
+    public List<Video> getAllVideos(int page, int size) throws IOException {
+        return videoRepository.findAll(page, size);
+    }
+
+    public List<Video> getPublicVideos(int page, int size) throws IOException {
+        return videoRepository.findByStatusWithPagination(VideoStatus.READY, page, size);
+    }
+
+    public long countPublicVideos() throws IOException {
+        return videoRepository.countByStatus(VideoStatus.READY);
+    }
+
+    public List<Video> getVideosByUploader(Long uploaderId, int page, int size) throws IOException {
+        return videoRepository.findByUploaderId(uploaderId, page, size);
+    }
+
+    public long countVideosByUploader(Long uploaderId) throws IOException {
+        return videoRepository.countByUploaderId(uploaderId);
+    }
+
     public List<Video> getVideosByStatus(VideoStatus status) throws IOException {
         return videoRepository.findByStatus(status);
     }
 
     public List<Video> searchVideos(String query) throws IOException {
         return videoRepository.search(query);
+    }
+
+    public List<Video> searchVideos(String query, int page, int size) throws IOException {
+        return videoRepository.search(query, page, size);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Update
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    public Video updateVideo(Video video) throws IOException {
+        video.setUpdatedAt(LocalDateTime.now());
+        return videoRepository.save(video);
     }
 
     public void updateVideoStatus(String id, VideoStatus status) throws IOException {
@@ -76,10 +141,17 @@ public class VideoService {
     }
 
     public void addQualityToVideo(String id, String quality) throws IOException {
-        videoRepository.addQuality(id, quality);
+        Optional<Video> videoOpt = videoRepository.findById(id);
+        if (videoOpt.isPresent()) {
+            Video video = videoOpt.get();
+            video.addQuality(quality);
+            videoRepository.save(video);
+            log.debug("Added quality {} to video {}", quality, id);
+        }
     }
 
-    public void updateVideoMetadata(String id, Integer width, Integer height, Integer duration, Long fileSize) throws IOException {
+    public void updateVideoMetadata(String id, Integer width, Integer height, 
+                                    Integer duration, Long fileSize) throws IOException {
         Optional<Video> videoOpt = videoRepository.findById(id);
         if (videoOpt.isPresent()) {
             Video video = videoOpt.get();
@@ -92,45 +164,59 @@ public class VideoService {
     }
 
     public void incrementViews(String id) throws IOException {
-        videoRepository.incrementViews(id);
+        Optional<Video> videoOpt = videoRepository.findById(id);
+        if (videoOpt.isPresent()) {
+            Video video = videoOpt.get();
+            video.incrementViews();
+            videoRepository.save(video);
+        }
     }
 
     public void incrementLikes(String id) throws IOException {
-        videoRepository.incrementLikes(id);
+        Optional<Video> videoOpt = videoRepository.findById(id);
+        if (videoOpt.isPresent()) {
+            Video video = videoOpt.get();
+            video.incrementLikes();
+            videoRepository.save(video);
+        }
     }
 
-    public void addComment(String videoId, String userId, String username, String text) throws IOException {
-        Comment comment = new Comment(userId, username, text);
-        videoRepository.addComment(videoId, comment);
+    public void decrementLikes(String id) throws IOException {
+        Optional<Video> videoOpt = videoRepository.findById(id);
+        if (videoOpt.isPresent()) {
+            Video video = videoOpt.get();
+            video.decrementLikes();
+            videoRepository.save(video);
+        }
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Delete
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     public void deleteVideo(String id) throws IOException {
         Optional<Video> videoOpt = videoRepository.findById(id);
         if (videoOpt.isPresent()) {
             Video video = videoOpt.get();
 
+            // Delete upload directory
             if (video.getUploadPath() != null) {
-                Path uploadPath = Paths.get(video.getUploadPath());
-                Files.deleteIfExists(uploadPath);
+                deleteDirectoryRecursive(Paths.get(video.getUploadPath()));
             }
 
+            // Delete HLS directory
             if (video.getHlsPath() != null) {
-                Path hlsPath = Paths.get(video.getHlsPath());
-                deleteDirectoryRecursive(hlsPath);
+                deleteDirectoryRecursive(Paths.get(video.getHlsPath()));
+            }
+
+            // Delete thumbnail directory
+            if (video.getThumbnailPath() != null) {
+                deleteDirectoryRecursive(Paths.get(video.getThumbnailPath()));
             }
 
             videoRepository.delete(id);
+            log.info("Deleted video and files: {}", id);
         }
-    }
-
-    private String sanitizeFilename(String filename) {
-        String name = filename;
-        if (name.contains(".")) {
-            name = name.substring(0, name.lastIndexOf('.'));
-        }
-        return name.replaceAll("[^a-zA-Z0-9._-]", "_")
-                .replaceAll("_+", "_")
-                .replaceAll("^[._-]+", "");
     }
 
     private void deleteDirectoryRecursive(Path dir) {
@@ -142,12 +228,12 @@ public class VideoService {
                             try {
                                 Files.deleteIfExists(p);
                             } catch (IOException e) {
-                                System.err.println("[VideoService] Cannot delete: " + p);
+                                log.warn("Cannot delete: {}", p);
                             }
                         });
             }
         } catch (IOException e) {
-            System.err.println("[VideoService] Delete failed: " + dir);
+            log.warn("Delete failed: {}", dir);
         }
     }
 }

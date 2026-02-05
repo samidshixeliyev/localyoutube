@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8081}
   address: 0.0.0.0
   tomcat:
     max-swallow-size: 100MB
@@ -14,9 +14,9 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:123}
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 1
-      connection-timeout: 5000
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
 
   jpa:
     hibernate:
@@ -31,22 +31,25 @@ spring:
     multipart:
       enabled: true
       file-size-threshold: 2KB
-      max-file-size: 5GB
-      max-request-size: 5GB
+      max-file-size: 100MB
+      max-request-size: 100MB
 
 jwt:
-  secret: 4gTduyxJahQatgIkxwGErvADeIjfdulxI98B8bAGUOKStnBVTyngXfU5jM1rMbVR
+  secret: ${JWT_SECRET:4gTduyxJahQatgIkxwGErvADeIjfdulxI98B8bAGUOKStnBVTyngXfU5jM1rMbVR}
 
 localtube:
   storage:
     upload-dir: ${UPLOAD_DIR:${user.dir}/uploads}
     hls-dir: ${HLS_DIR:${user.dir}/hls}
+    temp-dir: ${TEMP_DIR:${user.dir}/temp}
+    thumbnail-dir: ${THUMBNAIL_DIR:${user.dir}/thumbnails}
     max-file-size: 53687091200
     min-disk-free: 5368709120
+    allowed-extensions: mp4,mkv,avi,mov,wmv,flv,webm
 
   transcoding:
     segment-duration: 6
-    qualities: 480p, 720p, 1080p, 2160p
+    qualities: 480p,720p,1080p,2160p
 
   elasticsearch:
     host: ${ELASTICSEARCH_HOST:localhost}
@@ -54,7 +57,9 @@ localtube:
     scheme: ${ELASTICSEARCH_SCHEME:http}
     username: ${ELASTICSEARCH_USERNAME:}
     password: ${ELASTICSEARCH_PASSWORD:}
-    index: ${ELASTICSEARCH_INDEX:videos}
+    video-index: ${ELASTICSEARCH_INDEX:videos}
+    comment-index: ${ELASTICSEARCH_INDEX:comments}
+    like-index: ${ELASTICSEARCH_INDEX:likes}
 
 logging:
   level:

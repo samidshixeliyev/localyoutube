@@ -4,6 +4,7 @@ import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
 import az.dev.localtube.service.TranscodingService;
 import az.dev.localtube.service.VideoService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,21 +22,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/upload")
 public class UploadController {
 
     private final VideoService videoService;
     private final TranscodingService transcodingService;
-
     private final Path uploadDir;
     private final long maxFileSize;
     private final long minDiskFree;
-    private static final int STREAM_BUFFER = 8 * 1024;
 
-    private volatile long cachedFreeSpace = Long.MAX_VALUE;
-    private volatile long cacheTimestamp = 0;
-    private static final long CACHE_TTL_MS = 1_000;
+    private static final int BUFFER_SIZE = 8 * 1024;
 
     public UploadController(VideoService videoService,
                             TranscodingService transcodingService,
@@ -59,9 +57,8 @@ public class UploadController {
                     .collect(Collectors.toList());
             return ResponseEntity.ok(result);
         } catch (IOException e) {
-            System.err.println("[Videos ERROR] " + e.getMessage());
-            return ResponseEntity.status(500).body(
-                    List.of(Map.of("error", "Failed to list videos: " + e.getMessage())));
+            log.error("Error listing videos", e);
+            return ResponseEntity.internalServerError().build();
         }
     }
 
@@ -76,15 +73,12 @@ public class UploadController {
         try {
             if (totalSize > maxFileSize) {
                 return ResponseEntity.badRequest().body(Map.of(
-                        "error", "File too large. Max " + (maxFileSize / (1024*1024*1024)) + " GB"));
+                        "error", "File too large. Max " + (maxFileSize / (1024 * 1024 * 1024)) + " GB"));
             }
 
-            cacheTimestamp = 0;
-            long freeSpace = getFreeSpace();
-
+            long freeSpace = Files.getFileStore(uploadDir).getUsableSpace();
             if (freeSpace < totalSize + minDiskFree) {
-                return ResponseEntity.status(507).body(Map.of(
-                        "error", "Not enough disk space"));
+                return ResponseEntity.status(507).body(Map.of("error", "Not enough disk space"));
             }
 
             String videoTitle = title != null ? title : filename;
@@ -99,6 +93,7 @@ public class UploadController {
             ));
 
         } catch (IOException e) {
+            log.error("Error initializing upload", e);
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }
@@ -114,20 +109,13 @@ public class UploadController {
             String safeFilename = sanitizeFilename(filename);
             Path targetFile = uploadDir.resolve(safeFilename);
 
-            if (getFreeSpace() < minDiskFree) {
-                Files.deleteIfExists(targetFile);
-                return ResponseEntity.status(507).body(Map.of(
-                        "status", "error",
-                        "message", "Disk space critically low"));
-            }
-
             StandardOpenOption[] options = (chunkIndex == 0)
-                    ? new StandardOpenOption[]{ StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING }
-                    : new StandardOpenOption[]{ StandardOpenOption.CREATE, StandardOpenOption.APPEND };
+                    ? new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING}
+                    : new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.APPEND};
 
             try (OutputStream out = Files.newOutputStream(targetFile, options);
                  InputStream in = chunk.getInputStream()) {
-                byte[] buffer = new byte[STREAM_BUFFER];
+                byte[] buffer = new byte[BUFFER_SIZE];
                 int n;
                 while ((n = in.read(buffer)) != -1) {
                     out.write(buffer, 0, n);
@@ -143,6 +131,7 @@ public class UploadController {
             ));
 
         } catch (IOException e) {
+            log.error("Error uploading chunk", e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "status", "error",
                     "message", e.getMessage()));
@@ -178,6 +167,7 @@ public class UploadController {
             ));
 
         } catch (Exception e) {
+            log.error("Error completing upload", e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "status", "error",
                     "message", e.getMessage()));
@@ -244,19 +234,6 @@ public class UploadController {
                 .replaceAll("^[._-]+", "");
     }
 
-    private long getFreeSpace() {
-        long now = System.currentTimeMillis();
-        if (now - cacheTimestamp > CACHE_TTL_MS) {
-            try {
-                cachedFreeSpace = Files.getFileStore(uploadDir).getUsableSpace();
-                cacheTimestamp = now;
-            } catch (IOException e) {
-                System.err.println("[DiskCheck] Failed: " + e.getMessage());
-            }
-        }
-        return cachedFreeSpace;
-    }
-
     private Map<String, Object> videoToMap(Video video) {
         Map<String, Object> map = new HashMap<>();
         map.put("id", video.getId());
@@ -264,8 +241,9 @@ public class UploadController {
         map.put("title", video.getTitle());
         map.put("description", video.getDescription());
         map.put("filename", video.getFilename());
-        map.put("status", video.getStatus().name().toLowerCase());
+        map.put("status", video.getStatus() != null ? video.getStatus().name().toLowerCase() : null);
         map.put("hlsUrl", video.getStatus() == VideoStatus.READY ? video.getMasterPlaylistUrl() : null);
+        map.put("thumbnailUrl", video.getThumbnailUrl());
         map.put("qualities", video.getAvailableQualities());
         map.put("views", video.getViews());
         map.put("likes", video.getLikes());

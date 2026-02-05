@@ -99,9 +99,7 @@ public class UploadService {
         Video video = videoService.createVideo(
                 request.getTitle() != null ? request.getTitle() : request.getFilename(),
                 request.getFilename(),
-                request.getDescription(),
-                request.getTags(),
-                user
+                request.getDescription()
         );
 
         String uploadId = video.getId() + "_" + System.currentTimeMillis();

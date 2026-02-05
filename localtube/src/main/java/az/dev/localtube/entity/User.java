@@ -6,7 +6,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@Entity(name = "users")
+@Entity
 @Table(schema = "dbo", name = "users")
 public class User {
 
@@ -35,4 +35,8 @@ public class User {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    public String getFullName() {
+        return name + " " + surname;
+    }
 }

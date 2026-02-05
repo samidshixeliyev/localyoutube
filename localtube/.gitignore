@@ -35,3 +35,12 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Local directories ###
+uploads/
+hls/
+temp/
+thumbnails/
+
+### Docker ###
+.env

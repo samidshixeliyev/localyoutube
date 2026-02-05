@@ -8,9 +8,6 @@ import org.springframework.web.filter.CorsFilter;
 
 import java.util.Arrays;
 
-/**
- * CORS Configuration - Fixed to work without credentials for wildcard origin
- */
 @Configuration
 public class CorsConfig {
 
@@ -19,18 +16,13 @@ public class CorsConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
 
         CorsConfiguration config = new CorsConfiguration();
-        // Don't use allowCredentials with wildcard - it causes errors
         config.setAllowCredentials(false);
         config.addAllowedOriginPattern("*");
-
         config.setAllowedHeaders(Arrays.asList("*"));
-        config.setAllowedMethods(Arrays.asList(
-                "GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"
-        ));
-
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
         config.setMaxAge(3600L);
-        source.registerCorsConfiguration("/**", config);
 
+        source.registerCorsConfiguration("/**", config);
         return new CorsFilter(source);
     }
 }

@@ -30,7 +30,7 @@ public class VideoLikeRepository {
     public VideoLikeRepository(
             ElasticsearchClient client,
             ObjectMapper objectMapper,
-            @Value("${localtube.elasticsearch.indexes.likes}") String indexName
+            @Value("${localtube.elasticsearch.like-index}") String indexName
     ) {
         this.client = client;
         this.objectMapper = objectMapper;

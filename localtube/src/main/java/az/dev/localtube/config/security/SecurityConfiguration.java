@@ -3,6 +3,7 @@ package az.dev.localtube.config.security;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -32,7 +33,16 @@ public class SecurityConfiguration {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/api/upload/**", "/hls/**", "/actuator/**").permitAll()
+                        // Swagger/OpenAPI endpoints
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        // Public endpoints
+                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/hls/**").permitAll()
+                        .requestMatchers("/thumbnails/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/videos/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/view").permitAll()
+                        .requestMatchers("/api/upload/**").permitAll()
+                        // Everything else requires authentication
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

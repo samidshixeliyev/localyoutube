@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Date;
 import java.util.function.Function;
 
 @Slf4j
@@ -23,7 +23,13 @@ public class JwtUtil {
     }
 
     public String extractUsername(String token) {
-        return extractCustomClaim(token, "email", String.class);
+        // Try to get email from custom claim, fall back to subject
+        try {
+            String email = extractCustomClaim(token, "email", String.class);
+            if (email != null) return email;
+        } catch (Exception ignored) {}
+        
+        return extractClaim(token, Claims::getSubject);
     }
 
     public Date extractExpiration(String token) {

@@ -1,27 +1,19 @@
 package az.dev.localtube.controller;
 
-import az.dev.localtube.config.security.LocalTubeUserDetails;
+import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
-import az.dev.localtube.dto.ApiResponse;
-import az.dev.localtube.dto.VideoDto.*;
-import az.dev.localtube.service.UserService;
 import az.dev.localtube.service.VideoService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
-/**
- * Video REST API Controller
- * 
- * Public endpoints: GET operations for browsing/viewing
- * Authenticated endpoints: POST/PUT/DELETE for modifications
- */
 @Slf4j
 @RestController
 @RequestMapping("/api/videos")
@@ -30,135 +22,128 @@ public class VideoController {
 
     private final VideoService videoService;
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Public Endpoints (No Authentication Required)
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    /**
-     * GET /api/videos - List all public videos
-     */
     @GetMapping
-    public ResponseEntity<ApiResponse<VideoListResponse>> listVideos(
+    public ResponseEntity<Map<String, Object>> listVideos(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) throws IOException {
-        VideoListResponse response = videoService.getPublicVideos(page, size);
-        return ResponseEntity.ok(ApiResponse.success(response));
+            @RequestParam(defaultValue = "20") int size) {
+        try {
+            List<Video> videos = videoService.getPublicVideos(page, size);
+            long total = videoService.countPublicVideos();
+
+            return ResponseEntity.ok(Map.of(
+                    "videos", videos.stream().map(this::toResponse).collect(Collectors.toList()),
+                    "totalElements", total,
+                    "totalPages", (int) Math.ceil((double) total / size),
+                    "currentPage", page,
+                    "pageSize", size
+            ));
+        } catch (IOException e) {
+            log.error("Error listing videos", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
-    /**
-     * GET /api/videos/search - Search videos
-     */
     @GetMapping("/search")
-    public ResponseEntity<ApiResponse<VideoListResponse>> searchVideos(
+    public ResponseEntity<Map<String, Object>> searchVideos(
             @RequestParam(required = false) String query,
-            @RequestParam(required = false) List<String> tags,
-            @RequestParam(defaultValue = "uploadedAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortOrder,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) throws IOException {
-        SearchRequest request = SearchRequest.builder()
-                .query(query)
-                .tags(tags)
-                .status(VideoStatus.READY)
-                .sortBy(sortBy)
-                .sortOrder(sortOrder)
-                .page(page)
-                .size(size)
-                .build();
+            @RequestParam(defaultValue = "20") int size) {
+        try {
+            List<Video> videos;
+            if (query != null && !query.isBlank()) {
+                videos = videoService.searchVideos(query, page, size);
+            } else {
+                videos = videoService.getPublicVideos(page, size);
+            }
 
-        Long currentUserId = UserService.getCurrentUserId();
-        VideoListResponse response = videoService.searchVideos(request, currentUserId);
-        return ResponseEntity.ok(ApiResponse.success(response));
+            return ResponseEntity.ok(Map.of(
+                    "videos", videos.stream().map(this::toResponse).collect(Collectors.toList()),
+                    "currentPage", page,
+                    "pageSize", size
+            ));
+        } catch (IOException e) {
+            log.error("Error searching videos", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
-    /**
-     * GET /api/videos/{id} - Get video details
-     */
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<VideoResponse>> getVideo(@PathVariable String id) 
-            throws IOException {
-        Long currentUserId = UserService.getCurrentUserId();
-        VideoResponse response = videoService.getVideoWithLikeStatus(id, currentUserId);
-        return ResponseEntity.ok(ApiResponse.success(response));
+    public ResponseEntity<Map<String, Object>> getVideo(@PathVariable String id) {
+        try {
+            return videoService.getVideo(id)
+                    .map(video -> ResponseEntity.ok(toResponse(video)))
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (IOException e) {
+            log.error("Error getting video", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
-    /**
-     * POST /api/videos/{id}/view - Increment view count
-     */
     @PostMapping("/{id}/view")
-    public ResponseEntity<ApiResponse<Void>> incrementView(@PathVariable String id) 
-            throws IOException {
-        videoService.incrementViews(id);
-        return ResponseEntity.ok(ApiResponse.success("View recorded"));
+    public ResponseEntity<Void> incrementView(@PathVariable String id) {
+        try {
+            videoService.incrementViews(id);
+            return ResponseEntity.ok().build();
+        } catch (IOException e) {
+            log.error("Error incrementing view", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Authenticated Endpoints (JWT Required)
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    /**
-     * PUT /api/videos/{id} - Update video
-     */
-    @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<VideoResponse>> updateVideo(
-            @PathVariable String id,
-            @Valid @RequestBody UpdateVideoRequest request,
-            @AuthenticationPrincipal LocalTubeUserDetails user
-    ) throws IOException {
-        var video = videoService.updateVideo(id, request, user);
-        Long currentUserId = user.getUserId();
-        VideoResponse response = videoService.getVideoWithLikeStatus(id, currentUserId);
-        return ResponseEntity.ok(ApiResponse.success(response, "Video updated"));
-    }
-
-    /**
-     * DELETE /api/videos/{id} - Delete video
-     */
-    @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> deleteVideo(
-            @PathVariable String id,
-            @AuthenticationPrincipal LocalTubeUserDetails user
-    ) throws IOException {
-        videoService.deleteVideo(id, user);
-        return ResponseEntity.ok(ApiResponse.success("Video deleted"));
-    }
-
-    /**
-     * POST /api/videos/{id}/like - Like video
-     */
     @PostMapping("/{id}/like")
-    public ResponseEntity<ApiResponse<Void>> likeVideo(
-            @PathVariable String id,
-            @AuthenticationPrincipal LocalTubeUserDetails user
-    ) throws IOException {
-        videoService.likeVideo(id, user);
-        return ResponseEntity.ok(ApiResponse.success("Video liked"));
+    public ResponseEntity<Void> likeVideo(@PathVariable String id) {
+        try {
+            videoService.incrementLikes(id);
+            return ResponseEntity.ok().build();
+        } catch (IOException e) {
+            log.error("Error liking video", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
-    /**
-     * DELETE /api/videos/{id}/like - Unlike video
-     */
     @DeleteMapping("/{id}/like")
-    public ResponseEntity<ApiResponse<Void>> unlikeVideo(
-            @PathVariable String id,
-            @AuthenticationPrincipal LocalTubeUserDetails user
-    ) throws IOException {
-        videoService.unlikeVideo(id, user);
-        return ResponseEntity.ok(ApiResponse.success("Video unliked"));
+    public ResponseEntity<Void> unlikeVideo(@PathVariable String id) {
+        try {
+            videoService.decrementLikes(id);
+            return ResponseEntity.ok().build();
+        } catch (IOException e) {
+            log.error("Error unliking video", e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
-    /**
-     * GET /api/videos/my - Get current user's videos
-     */
-    @GetMapping("/my")
-    public ResponseEntity<ApiResponse<VideoListResponse>> getMyVideos(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @AuthenticationPrincipal LocalTubeUserDetails user
-    ) throws IOException {
-        VideoListResponse response = videoService.getVideosByUploader(user.getUserId(), page, size);
-        return ResponseEntity.ok(ApiResponse.success(response));
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteVideo(@PathVariable String id) {
+        try {
+            videoService.deleteVideo(id);
+            return ResponseEntity.ok().build();
+        } catch (IOException e) {
+            log.error("Error deleting video", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    private Map<String, Object> toResponse(Video video) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", video.getId());
+        map.put("title", video.getTitle());
+        map.put("description", video.getDescription());
+        map.put("uploaderId", video.getUploaderId());
+        map.put("uploaderName", video.getUploaderName());
+        map.put("hlsUrl", video.getStatus() == VideoStatus.READY ? video.getMasterPlaylistUrl() : null);
+        map.put("thumbnailUrl", video.getThumbnailUrl());
+        map.put("status", video.getStatus() != null ? video.getStatus().name().toLowerCase() : null);
+        map.put("qualities", video.getAvailableQualities());
+        map.put("fileSize", video.getFileSize());
+        map.put("duration", video.getDurationSeconds());
+        map.put("width", video.getWidth());
+        map.put("height", video.getHeight());
+        map.put("views", video.getViews());
+        map.put("likes", video.getLikes());
+        map.put("commentCount", video.getCommentCount());
+        map.put("tags", video.getTags());
+        map.put("uploadedAt", video.getUploadedAt());
+        map.put("processedAt", video.getProcessedAt());
+        return map;
     }
 }

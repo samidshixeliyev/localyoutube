@@ -35,7 +35,7 @@ public class CommentRepository {
             ElasticsearchClient client,
             ObjectMapper objectMapper,
             LocalTubeMetrics metrics,
-            @Value("${localtube.elasticsearch.indexes.comments}") String indexName
+            @Value("${localtube.elasticsearch.comment-index}") String indexName
     ) {
         this.client = client;
         this.objectMapper = objectMapper;
