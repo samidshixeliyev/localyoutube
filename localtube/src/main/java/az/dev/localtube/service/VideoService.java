@@ -2,15 +2,19 @@ package az.dev.localtube.service;
 
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
+import az.dev.localtube.exception.BadRequestException;
 import az.dev.localtube.repository.VideoRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -34,9 +38,9 @@ public class VideoService {
         this.thumbnailDir = Paths.get(thumbnailDirPath);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
     // Create
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
 
     public Video createVideo(String title, String filename, String description) throws IOException {
         return createVideo(title, filename, description, null, null, null);
@@ -74,9 +78,9 @@ public class VideoService {
         return videoRepository.save(video);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
     // Read
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
 
     public Optional<Video> getVideo(String id) throws IOException {
         return videoRepository.findById(id);
@@ -118,9 +122,9 @@ public class VideoService {
         return videoRepository.search(query, page, size);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
     // Update
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
 
     public Video updateVideo(Video video) throws IOException {
         video.setUpdatedAt(LocalDateTime.now());
@@ -190,9 +194,38 @@ public class VideoService {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════════
+    public void uploadCustomThumbnail(String videoId, MultipartFile file) throws IOException {
+        Optional<Video> videoOpt = videoRepository.findById(videoId);
+        if (videoOpt.isEmpty()) {
+            throw new BadRequestException("Video not found: " + videoId);
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new BadRequestException("File must be an image");
+        }
+
+        Path thumbDir = thumbnailDir.resolve(videoId);
+        Files.createDirectories(thumbDir);
+        
+        String extension = getFileExtension(file.getOriginalFilename());
+        Path customThumbnail = thumbDir.resolve("custom." + extension);
+        
+        try (InputStream in = file.getInputStream()) {
+            Files.copy(in, customThumbnail, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        // Update video thumbnail URL
+        Video video = videoOpt.get();
+        video.setThumbnailUrl("/thumbnails/" + videoId + "/custom." + extension);
+        videoRepository.save(video);
+
+        log.info("Custom thumbnail uploaded for video: {}", videoId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Delete
-    // ═══════════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
 
     public void deleteVideo(String id) throws IOException {
         Optional<Video> videoOpt = videoRepository.findById(id);
@@ -235,5 +268,12 @@ public class VideoService {
         } catch (IOException e) {
             log.warn("Delete failed: {}", dir);
         }
+    }
+
+    private String getFileExtension(String filename) {
+        if (filename == null || !filename.contains(".")) {
+            return "jpg";
+        }
+        return filename.substring(filename.lastIndexOf('.') + 1);
     }
 }

@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Slf4j
@@ -46,6 +47,10 @@ public class VideoRepository {
     public Video save(Video video) throws IOException {
         if (video.getId() == null) {
             video.setId(UUID.randomUUID().toString().replace("-", ""));
+        }
+
+        if (video.getUpdatedAt() == null) {
+            video.setUpdatedAt(LocalDateTime.now());
         }
 
         @SuppressWarnings("unchecked")
@@ -160,11 +165,21 @@ public class VideoRepository {
     }
 
     public void updateStatus(String id, VideoStatus status) throws IOException {
-        client.update(u -> u
-                .index(indexName)
-                .id(id)
-                .doc(Map.of("status", status.name())), ObjectNode.class);
-        log.debug("Updated video {} status to {}", id, status);
+        // Use upsert to handle the case where document doesn't exist yet
+        try {
+            Optional<Video> videoOpt = findById(id);
+            if (videoOpt.isPresent()) {
+                Video video = videoOpt.get();
+                video.setStatus(status);
+                video.setUpdatedAt(LocalDateTime.now());
+                save(video);
+            } else {
+                log.warn("Video not found for status update: {}", id);
+            }
+        } catch (Exception e) {
+            log.error("Failed to update status for video {}: {}", id, e.getMessage(), e);
+            throw new IOException("Failed to update video status", e);
+        }
     }
 
     public void delete(String id) throws IOException {
@@ -203,9 +218,9 @@ public class VideoRepository {
                             .properties("status", p -> p.keyword(k -> k))
                             .properties("tags", p -> p.keyword(k -> k))
                             .properties("availableQualities", p -> p.keyword(k -> k))
-                            .properties("uploadedAt", p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis")))
-                            .properties("processedAt", p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis")))
-                            .properties("updatedAt", p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis")))
+                            .properties("uploadedAt", p -> p.date(d -> d))
+                            .properties("processedAt", p -> p.date(d -> d))
+                            .properties("updatedAt", p -> p.date(d -> d))
                             .properties("views", p -> p.long_(l -> l))
                             .properties("likes", p -> p.long_(l -> l))
                             .properties("commentCount", p -> p.integer(i -> i))

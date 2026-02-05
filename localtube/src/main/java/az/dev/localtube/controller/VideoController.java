@@ -1,12 +1,17 @@
 package az.dev.localtube.controller;
 
+import az.dev.localtube.config.security.LocalTubeUserDetails;
+import az.dev.localtube.domain.Comment;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
+import az.dev.localtube.service.CommentService;
 import az.dev.localtube.service.VideoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -21,6 +26,7 @@ import java.util.stream.Collectors;
 public class VideoController {
 
     private final VideoService videoService;
+    private final CommentService commentService;
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> listVideos(
@@ -113,12 +119,131 @@ public class VideoController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteVideo(@PathVariable String id) {
+    public ResponseEntity<Void> deleteVideo(
+            @PathVariable String id,
+            @AuthenticationPrincipal LocalTubeUserDetails user) {
         try {
+            var video = videoService.getVideo(id).orElse(null);
+            if (video == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Check if user owns the video
+            if (!video.getUploaderId().equals(user.getUserId()) && !user.isAdmin()) {
+                return ResponseEntity.status(403).build();
+            }
+
             videoService.deleteVideo(id);
             return ResponseEntity.ok().build();
         } catch (IOException e) {
             log.error("Error deleting video", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    // ========== THUMBNAIL ENDPOINTS ==========
+
+    @PostMapping("/{id}/thumbnail")
+    public ResponseEntity<Map<String, String>> uploadThumbnail(
+            @PathVariable String id,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal LocalTubeUserDetails user) {
+        try {
+            var video = videoService.getVideo(id).orElse(null);
+            if (video == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            if (!video.getUploaderId().equals(user.getUserId()) && !user.isAdmin()) {
+                return ResponseEntity.status(403).build();
+            }
+
+            videoService.uploadCustomThumbnail(id, file);
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "success",
+                    "message", "Thumbnail uploaded successfully",
+                    "thumbnailUrl", "/thumbnails/" + id + "/custom.jpg"
+            ));
+        } catch (IOException e) {
+            log.error("Error uploading thumbnail", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    // ========== COMMENT ENDPOINTS ==========
+
+    @GetMapping("/{id}/comments")
+    public ResponseEntity<Map<String, Object>> getComments(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        try {
+            List<Comment> comments = commentService.getVideoComments(id, page, size);
+            long total = commentService.countVideoComments(id);
+
+            return ResponseEntity.ok(Map.of(
+                    "comments", comments,
+                    "totalElements", total,
+                    "currentPage", page,
+                    "pageSize", size
+            ));
+        } catch (IOException e) {
+            log.error("Error getting comments", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PostMapping("/{id}/comments")
+    public ResponseEntity<Comment> addComment(
+            @PathVariable String id,
+            @RequestBody Map<String, String> request,
+            @AuthenticationPrincipal LocalTubeUserDetails user) {
+        try {
+            var video = videoService.getVideo(id).orElse(null);
+            if (video == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String text = request.get("text");
+            if (text == null || text.isBlank()) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            Comment comment = commentService.addComment(
+                    id,
+                    user.getUserId().toString(),
+                    user.getUsername(),
+                    text
+            );
+
+            return ResponseEntity.ok(comment);
+        } catch (IOException e) {
+            log.error("Error adding comment", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @DeleteMapping("/{videoId}/comments/{commentId}")
+    public ResponseEntity<Void> deleteComment(
+            @PathVariable String videoId,
+            @PathVariable String commentId,
+            @AuthenticationPrincipal LocalTubeUserDetails user) {
+        try {
+            var comment = commentService.getComment(commentId).orElse(null);
+            if (comment == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // Check if user owns the comment or is admin
+            if (!comment.getUserId().equals(user.getUserId().toString()) && !user.isAdmin()) {
+                return ResponseEntity.status(403).build();
+            }
+
+            commentService.deleteComment(commentId, videoId);
+            return ResponseEntity.ok().build();
+        } catch (IOException e) {
+            log.error("Error deleting comment", e);
             return ResponseEntity.internalServerError().build();
         }
     }

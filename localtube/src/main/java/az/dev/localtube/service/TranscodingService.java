@@ -40,7 +40,7 @@ public class TranscodingService {
         this.allowedQualities = qualities;
     }
 
-//    @Async("videoProcessingExecutor")
+    @Async("videoProcessingExecutor")
     public void transcodeToHLS(String videoId, Path inputFile) {
         try {
             log.info("[Transcoding] Starting for video: {}", videoId);
