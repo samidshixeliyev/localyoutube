@@ -1,8 +1,10 @@
 package az.dev.localtube.service;
 
 import az.dev.localtube.domain.Video;
+import az.dev.localtube.domain.VideoLike;
 import az.dev.localtube.domain.VideoStatus;
 import az.dev.localtube.exception.BadRequestException;
+import az.dev.localtube.repository.VideoLikeRepository;
 import az.dev.localtube.repository.VideoRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,15 +27,17 @@ import java.util.UUID;
 public class VideoService {
 
     private final VideoRepository videoRepository;
+    private final VideoLikeRepository videoLikeRepository;
     private final Path uploadDir;
     private final Path hlsDir;
     private final Path thumbnailDir;
 
-    public VideoService(VideoRepository videoRepository,
+    public VideoService(VideoRepository videoRepository, VideoLikeRepository videoLikeRepository,
                         @Value("${localtube.storage.upload-dir}") String uploadDirPath,
                         @Value("${localtube.storage.hls-dir}") String hlsDirPath,
                         @Value("${localtube.storage.thumbnail-dir}") String thumbnailDirPath) {
         this.videoRepository = videoRepository;
+        this.videoLikeRepository = videoLikeRepository;
         this.uploadDir = Paths.get(uploadDirPath);
         this.hlsDir = Paths.get(hlsDirPath);
         this.thumbnailDir = Paths.get(thumbnailDirPath);
@@ -97,13 +101,7 @@ public class VideoService {
         return videoRepository.findAll(page, size);
     }
 
-    public List<Video> getPublicVideos(int page, int size) throws IOException {
-        return videoRepository.findByStatusWithPagination(VideoStatus.READY, page, size);
-    }
 
-    public long countPublicVideos() throws IOException {
-        return videoRepository.countByStatus(VideoStatus.READY);
-    }
 
     public List<Video> getVideosByUploader(Long uploaderId, int page, int size) throws IOException {
         return videoRepository.findByUploaderId(uploaderId, page, size);
@@ -279,4 +277,51 @@ public class VideoService {
         }
         return filename.substring(filename.lastIndexOf('.') + 1);
     }
+
+    public List<Video> getPublicVideos(int page, int size) throws IOException {
+        return videoRepository.findPublicVideos(page, size);
+    }
+
+    public long countPublicVideos() throws IOException {
+        return videoRepository.countPublicVideos();
+    }
+
+    public boolean toggleLike(String videoId, Long userId) throws IOException {
+        Optional<Video> videoOpt = videoRepository.findById(videoId);
+        if (videoOpt.isEmpty()) {
+            throw new IOException("Video not found");
+        }
+
+        // Check if user already liked
+        boolean alreadyLiked = videoLikeRepository.existsByVideoIdAndUserId(videoId, userId);
+
+        if (alreadyLiked) {
+            // Unlike
+            videoLikeRepository.delete(videoId, userId);
+            Video video = videoOpt.get();
+            video.decrementLikes();
+            videoRepository.save(video);
+            return false;
+        } else {
+            // Like
+            VideoLike like = VideoLike.builder()
+                    .id(VideoLike.generateId(videoId, userId))
+                    .videoId(videoId)
+                    .userId(userId)
+                    .createdAt(System.currentTimeMillis())
+                    .build();
+
+            videoLikeRepository.save(like);
+
+            Video video = videoOpt.get();
+            video.incrementLikes();
+            videoRepository.save(video);
+            return true;
+        }
+    }
+
+    public boolean isLikedByUser(String videoId, Long userId) throws IOException {
+        return videoLikeRepository.existsByVideoIdAndUserId(videoId, userId);
+    }
+
 }

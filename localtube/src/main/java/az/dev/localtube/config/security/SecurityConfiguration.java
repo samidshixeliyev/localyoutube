@@ -33,15 +33,74 @@ public class SecurityConfiguration {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        // Swagger/OpenAPI endpoints
+                        // ═══════════════════════════════════════════════════════════════
+                        // AUTHENTICATION ENDPOINTS - Public
+                        // ═══════════════════════════════════════════════════════════════
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/refresh").permitAll()
+
+                        // ═══════════════════════════════════════════════════════════════
+                        // PUBLIC ACCESS - No authentication required
+                        // ═══════════════════════════════════════════════════════════════
+
+                        // Swagger/OpenAPI - Public
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
-                        // Public endpoints
-                        .requestMatchers("/actuator/**").permitAll()
+
+                        // Health check - Public
+                        .requestMatchers("/actuator/health").permitAll()
+
+                        // Video streaming - Public (HLS and thumbnails)
                         .requestMatchers("/hls/**").permitAll()
                         .requestMatchers("/thumbnails/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/videos/**").permitAll()
+
+                        // Video viewing - PUBLIC (all GET requests)
+                        .requestMatchers(HttpMethod.GET, "/api/videos").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/videos/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/videos/*/comments").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/videos/search").permitAll()
+
+                        // Share endpoints - PUBLIC
+                        .requestMatchers(HttpMethod.GET, "/api/videos/*/share").permitAll()
+
+                        // View increment - PUBLIC (for analytics)
                         .requestMatchers(HttpMethod.POST, "/api/videos/*/view").permitAll()
-                        .requestMatchers("/api/upload/**").permitAll()
+
+                        // ═══════════════════════════════════════════════════════════════
+                        // AUTHENTICATED USER ACCESS - Require login
+                        // ═══════════════════════════════════════════════════════════════
+
+                        // Comments - Authenticated users can create
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/comments").authenticated()
+
+                        // Delete own comments - Authenticated users
+                        .requestMatchers(HttpMethod.DELETE, "/api/videos/*/comments/*").authenticated()
+
+                        // Likes - Authenticated users only
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/like").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/videos/*/like").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/videos/*/like-status").authenticated()
+
+                        // ═══════════════════════════════════════════════════════════════
+                        // ADMIN-MODTUBE PERMISSION REQUIRED
+                        // ═══════════════════════════════════════════════════════════════
+
+                        // Video upload
+                        .requestMatchers("/api/upload/**").hasAuthority("admin-modtube")
+
+                        // Video management
+                        .requestMatchers(HttpMethod.PUT, "/api/videos/*").hasAuthority("admin-modtube")
+                        .requestMatchers(HttpMethod.PATCH, "/api/videos/*").hasAuthority("admin-modtube")
+                        .requestMatchers(HttpMethod.DELETE, "/api/videos/*").hasAuthority("admin-modtube")
+
+                        // Thumbnail management
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/thumbnail").hasAuthority("admin-modtube")
+
+                        // Video privacy/visibility settings
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/privacy").hasAuthority("admin-modtube")
+
+                        // Admin metrics
+                        .requestMatchers("/actuator/**").hasAuthority("admin-modtube")
+
                         // Everything else requires authentication
                         .anyRequest().authenticated()
                 )

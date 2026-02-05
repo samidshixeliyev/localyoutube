@@ -1,19 +1,10 @@
 package az.dev.localtube.domain;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-
-/**
- * VideoLike domain model - stored in Elasticsearch
- * Tracks which users liked which videos (for preventing duplicate likes)
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -22,25 +13,25 @@ public class VideoLike {
 
     private String id;
     private String videoId;
-    private Long userId;
-    private String userEmail;
-
-    // Stored as Long (epoch milliseconds) in Elasticsearch
+    private String userEmail;  // Changed from Long userId to String userEmail
     private Long createdAt;
 
-    // Helper method for date conversion
-    @JsonIgnore
-    public LocalDateTime getCreatedAtDateTime() {
-        return createdAt != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(createdAt), ZoneId.systemDefault()) : null;
-    }
+    // Legacy field - keep for backward compatibility during migration
+    @Deprecated
+    private Long userId;
 
-    public void setCreatedAtDateTime(LocalDateTime dateTime) {
-        this.createdAt = dateTime != null ? dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : null;
+    /**
+     * Generate a unique ID for the like using videoId and userEmail
+     */
+    public static String generateId(String videoId, String userEmail) {
+        // Create a deterministic ID from videoId and userEmail
+        return videoId + "_" + userEmail.replace("@", "_at_").replace(".", "_");
     }
 
     /**
-     * Generate composite ID from videoId and userId
+     * Legacy method for backward compatibility
      */
+    @Deprecated
     public static String generateId(String videoId, Long userId) {
         return videoId + "_" + userId;
     }

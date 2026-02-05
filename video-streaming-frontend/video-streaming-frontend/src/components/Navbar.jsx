@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Video, Search, Upload, LogOut, Menu, X } from 'lucide-react';
+import { Video, Search, Upload, LogOut, Menu, X, LogIn } from 'lucide-react';
 
 const Navbar = () => {
-  const { logout } = useAuth();
+  const { logout, user, isAuthenticated, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -19,7 +19,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   return (
@@ -31,7 +31,13 @@ const Navbar = () => {
             <div className="bg-primary-600 p-2 rounded-lg">
               <Video className="h-6 w-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-gray-900">LocalTube</span>
+            <div className="flex items-center text-2xl font-extrabold">
+  <span className="text-black px-1">Mod</span>
+  <span className="px-1 py-1 rounded-md bg-orange-600 text-white">
+    THube
+  </span>
+</div>
+
           </Link>
 
           {/* Search Bar - Desktop */}
@@ -50,28 +56,58 @@ const Navbar = () => {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-4">
-            <Link
-              to="/upload"
-              className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              <Upload className="h-5 w-5" />
-              <span>Upload</span>
-            </Link>
+            {isAuthenticated ? (
+              <>
+                {/* Upload & My Videos - Only for admin-modtube */}
+                {hasPermission('admin-modtube') && (
+                  <>
+                    <Link
+                      to="/upload"
+                      className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      <Upload className="h-5 w-5" />
+                      <span>Upload</span>
+                    </Link>
 
-            <Link
-              to="/my-videos"
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              My Videos
-            </Link>
+                    <Link
+                      to="/my-videos"
+                      className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      My Videos
+                    </Link>
+                  </>
+                )}
 
-            <button
-              onClick={handleLogout}
-              className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <LogOut className="h-5 w-5" />
-              <span>Logout</span>
-            </button>
+                {/* User Info */}
+                <div className="flex items-center space-x-3 px-4 py-2 bg-gray-100 rounded-lg">
+                  <div className="h-8 w-8 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                    {user.name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="text-sm">
+                    <div className="font-medium text-gray-900">{user.name || user.email}</div>
+                    <div className="text-gray-500 text-xs capitalize">{user.role?.toLowerCase()}</div>
+                  </div>
+                </div>
+
+                {/* Logout */}
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <LogOut className="h-5 w-5" />
+                  <span>Logout</span>
+                </button>
+              </>
+            ) : (
+              /* Login Button - For guests */
+              <Link
+                to="/login"
+                className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                <LogIn className="h-5 w-5" />
+                <span>Login</span>
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -106,31 +142,53 @@ const Navbar = () => {
       {isMenuOpen && (
         <div className="md:hidden border-t border-gray-200 bg-white">
           <div className="px-4 py-3 space-y-2">
-            <Link
-              to="/upload"
-              className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              <Upload className="h-5 w-5" />
-              <span>Upload Video</span>
-            </Link>
-            <Link
-              to="/my-videos"
-              className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              My Videos
-            </Link>
-            <button
-              onClick={() => {
-                handleLogout();
-                setIsMenuOpen(false);
-              }}
-              className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg flex items-center space-x-2"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Logout</span>
-            </button>
+            {isAuthenticated ? (
+              <>
+                {/* Admin actions - Only show once */}
+                {hasPermission('admin-modtube') && (
+                  <>
+                    <Link
+                      to="/upload"
+                      className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Upload className="h-5 w-5" />
+                      <span>Upload Video</span>
+                    </Link>
+                    
+                    <Link
+                      to="/my-videos"
+                      className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      My Videos
+                    </Link>
+                  </>
+                )}
+                
+                {/* Logout */}
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg flex items-center space-x-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </button>
+              </>
+            ) : (
+              /* Login Button - For guests */
+              <Link
+                to="/login"
+                className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <LogIn className="h-5 w-5" />
+                <span>Login</span>
+              </Link>
+            )}
           </div>
         </div>
       )}

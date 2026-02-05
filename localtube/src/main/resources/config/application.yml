@@ -39,10 +39,10 @@ jwt:
 
 localtube:
   storage:
-    upload-dir: ${UPLOAD_DIR:${user.dir}/uploads}
-    hls-dir: ${HLS_DIR:${user.dir}/hls}
-    temp-dir: ${TEMP_DIR:${user.dir}/temp}
-    thumbnail-dir: ${THUMBNAIL_DIR:${user.dir}/thumbnails}
+    upload-dir: ${UPLOAD_DIR:${user.dir}/modtube/uploads}
+    hls-dir: ${HLS_DIR:${user.dir}/modtube/hls}
+    temp-dir: ${TEMP_DIR:${user.dir}/modtube/temp}
+    thumbnail-dir: ${THUMBNAIL_DIR:${user.dir}/modtube/thumbnails}
     max-file-size: 53687091200
     min-disk-free: 5368709120
     allowed-extensions: mp4,mkv,avi,mov,wmv,flv,webm

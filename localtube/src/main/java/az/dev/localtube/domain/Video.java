@@ -62,6 +62,15 @@ public class Video {
     // Tags
     @Builder.Default
     private List<String> tags = new ArrayList<>();
+    // Visibility settings
+// Visibility settings
+    @Builder.Default
+    private VideoVisibility visibility = VideoVisibility.PUBLIC;
+
+    @Builder.Default
+    private List<String> allowedEmails = new ArrayList<>();  // Email-based access for RESTRICTED
+
+    private String restrictionNote;  // Optional note about restrictions  // Optional note about restrictions
 
     // Timestamps - stored as Long (epoch milliseconds) in Elasticsearch
     private Long uploadedAt;

@@ -20,10 +20,13 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final VideoRepository videoRepository;
 
-    public Comment addComment(String videoId, String userId, String username, String text) throws IOException {
+    /**
+     * Add comment - userId parameter now expects EMAIL from JWT
+     */
+    public Comment addComment(String videoId, String userEmail, String username, String text) throws IOException {
         Comment comment = new Comment();
         comment.setVideoId(videoId);
-        comment.setUserId(userId);
+        comment.setUserId(userEmail);  // Store email as userId for consistency
         comment.setUsername(username);
         comment.setText(text);
         comment.setCreatedAtDateTime(LocalDateTime.now());
@@ -39,7 +42,7 @@ public class CommentService {
             videoRepository.save(v);
         }
 
-        log.info("Comment added to video {}: {}", videoId, comment.getId());
+        log.info("Comment added to video {} by {}: {}", videoId, userEmail, comment.getId());
         return comment;
     }
 

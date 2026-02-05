@@ -1,5 +1,6 @@
 package az.dev.localtube.controller;
 
+import az.dev.localtube.config.security.LocalTubeUserDetails;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
 import az.dev.localtube.service.TranscodingService;
@@ -7,13 +8,12 @@ import az.dev.localtube.service.VideoService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
@@ -69,12 +69,14 @@ public class UploadController {
     }
 
     @PostMapping("/init")
+    @PreAuthorize("hasAuthority('admin-modtube')")
     public ResponseEntity<Map<String, String>> initUpload(
             @RequestParam String filename,
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String description,
             @RequestParam long totalSize,
-            @RequestParam int totalChunks) {
+            @RequestParam int totalChunks,
+            @AuthenticationPrincipal LocalTubeUserDetails user) {
 
         try {
             if (totalSize > maxFileSize) {
@@ -110,15 +112,16 @@ public class UploadController {
     }
 
     @PostMapping("/chunk")
+    @PreAuthorize("hasAuthority('admin-modtube')")
     public ResponseEntity<Map<String, Object>> uploadChunk(
             @RequestParam("file") MultipartFile chunk,
             @RequestParam int chunkIndex,
             @RequestParam int totalChunks,
-            @RequestParam String videoId) {
+            @RequestParam String videoId,
+            @AuthenticationPrincipal LocalTubeUserDetails user) {
 
         InputStream inputStream = null;
-        FileChannel fileChannel = null;
-        ReadableByteChannel readChannel = null;
+        OutputStream outputStream = null;
 
         try {
             // Validate chunk size
@@ -142,22 +145,25 @@ public class UploadController {
             String extension = getFileExtension(video.getFilename());
             Path targetFile = videoDir.resolve("original." + extension);
 
-            // Use NIO FileChannel for better performance and memory efficiency
+            // Use direct stream-to-file with minimal buffering
             StandardOpenOption[] options = (chunkIndex == 0)
                     ? new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING}
                     : new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND};
 
-            // Stream directly from multipart to file without loading into memory
-            inputStream = new BufferedInputStream(chunk.getInputStream(), BUFFER_SIZE);
-            fileChannel = FileChannel.open(targetFile, options);
-            readChannel = Channels.newChannel(inputStream);
+            // Stream directly - no intermediate buffers
+            inputStream = chunk.getInputStream();
+            outputStream = Files.newOutputStream(targetFile, options);
 
-            // Transfer data efficiently using NIO
-            long position = chunkIndex == 0 ? 0 : Files.size(targetFile);
-            long transferred = fileChannel.transferFrom(readChannel, position, chunk.getSize());
+            byte[] buffer = new byte[8192]; // Small buffer
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
 
-            log.debug("Uploaded chunk {}/{} for video {}, transferred {} bytes",
-                    chunkIndex + 1, totalChunks, videoId, transferred);
+            // Force flush
+            outputStream.flush();
+
+            log.debug("Uploaded chunk {}/{} for video {}", chunkIndex + 1, totalChunks, videoId);
 
             double progress = (double) (chunkIndex + 1) / totalChunks * 100;
 
@@ -173,22 +179,23 @@ public class UploadController {
                     "status", "error",
                     "message", e.getMessage()));
         } finally {
-            // Explicitly close all resources to free memory immediately
-            closeQuietly(readChannel);
-            closeQuietly(fileChannel);
+            // Close streams immediately
             closeQuietly(inputStream);
+            closeQuietly(outputStream);
 
-            // Suggest garbage collection (JVM will decide)
-            if (chunkIndex % 10 == 0) {
+            // Aggressive GC suggestion every 5 chunks
+            if (chunkIndex > 0 && chunkIndex % 5 == 0) {
                 System.gc();
             }
         }
     }
 
     @PostMapping("/complete")
+    @PreAuthorize("hasAuthority('admin-modtube')")
     public ResponseEntity<Map<String, Object>> completeUpload(
             @RequestParam String videoId,
-            @RequestParam int totalChunks) {
+            @RequestParam int totalChunks,
+            @AuthenticationPrincipal LocalTubeUserDetails user) {
 
         try {
             Video video = videoService.getVideo(videoId).orElse(null);

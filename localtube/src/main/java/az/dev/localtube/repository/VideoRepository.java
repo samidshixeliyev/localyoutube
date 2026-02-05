@@ -2,10 +2,14 @@ package az.dev.localtube.repository;
 
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
+import az.dev.localtube.domain.VideoVisibility;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.Result;
 import co.elastic.clients.elasticsearch._types.SortOrder;
-import co.elastic.clients.elasticsearch.core.*;
+import co.elastic.clients.elasticsearch.core.CountResponse;
+import co.elastic.clients.elasticsearch.core.GetResponse;
+import co.elastic.clients.elasticsearch.core.IndexResponse;
+import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -16,8 +20,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.temporal.TemporalField;
 import java.util.*;
 
 @Slf4j
@@ -165,6 +167,34 @@ public class VideoRepository {
         return extractVideos(response);
     }
 
+    public List<Video> findPublicVideos(int page, int size) throws IOException {
+        SearchResponse<ObjectNode> response = client.search(s -> s
+                .index(indexName)
+                .from(page * size)
+                .size(size)
+                .sort(so -> so.field(f -> f.field("uploadedAt").order(SortOrder.Desc)))
+                .query(q -> q.bool(b -> b
+                        .must(m -> m.term(t -> t.field("status").value(VideoStatus.READY.name())))
+                        .should(sh -> sh.term(t -> t.field("visibility").value(VideoVisibility.PUBLIC.name())))
+                        .should(sh -> sh.term(t -> t.field("visibility").value(VideoVisibility.UNLISTED.name())))
+                        .minimumShouldMatch("1")
+                )), ObjectNode.class);
+
+        return extractVideos(response);
+    }
+
+    public long countPublicVideos() throws IOException {
+        CountResponse response = client.count(c -> c
+                .index(indexName)
+                .query(q -> q.bool(b -> b
+                        .must(m -> m.term(t -> t.field("status").value(VideoStatus.READY.name())))
+                        .should(sh -> sh.term(t -> t.field("visibility").value(VideoVisibility.PUBLIC.name())))
+                        .should(sh -> sh.term(t -> t.field("visibility").value(VideoVisibility.UNLISTED.name())))
+                        .minimumShouldMatch("1")
+                )));
+        return response.count();
+    }
+
     public void updateStatus(String id, VideoStatus status) throws IOException {
         // Use upsert to handle the case where document doesn't exist yet
         try {
@@ -217,6 +247,8 @@ public class VideoRepository {
                             .properties("uploaderName", p -> p.keyword(k -> k))
                             .properties("uploaderEmail", p -> p.keyword(k -> k))
                             .properties("status", p -> p.keyword(k -> k))
+                            .properties("visibility", p -> p.keyword(k -> k))  // NEW
+                            .properties("allowedUserIds", p -> p.long_(l -> l))  // NEW
                             .properties("tags", p -> p.keyword(k -> k))
                             .properties("availableQualities", p -> p.keyword(k -> k))
                             .properties("uploadedAt", p -> p.date(d -> d))

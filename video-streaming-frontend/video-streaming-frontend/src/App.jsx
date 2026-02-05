@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './context/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
-import Register from './pages/Register';
 import Home from './pages/Home';
 import VideoDetail from './pages/VideoDetail';
 import Upload from './pages/Upload';
@@ -15,15 +14,14 @@ function App() {
     <AuthProvider>
       <Router>
         <Routes>
-          {/* Public routes */}
+          {/* Public routes - No login required */}
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-
-          {/* Protected routes */}
+          
+          {/* Public video routes - Anyone can view */}
           <Route
             path="/"
             element={
-              <PrivateRoute>
+              <PrivateRoute requireAuth={false}>
                 <Home />
               </PrivateRoute>
             }
@@ -31,31 +29,33 @@ function App() {
           <Route
             path="/video/:id"
             element={
-              <PrivateRoute>
+              <PrivateRoute requireAuth={false}>
                 <VideoDetail />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/upload"
-            element={
-              <PrivateRoute>
-                <Upload />
               </PrivateRoute>
             }
           />
           <Route
             path="/search"
             element={
-              <PrivateRoute>
+              <PrivateRoute requireAuth={false}>
                 <Search />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Protected routes - Require login */}
+          <Route
+            path="/upload"
+            element={
+              <PrivateRoute requireAuth={true}>
+                <Upload />
               </PrivateRoute>
             }
           />
           <Route
             path="/my-videos"
             element={
-              <PrivateRoute>
+              <PrivateRoute requireAuth={true}>
                 <MyVideos />
               </PrivateRoute>
             }
