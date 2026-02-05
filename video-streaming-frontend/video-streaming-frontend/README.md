@@ -27,7 +27,7 @@ A modern video streaming platform built with React, Vite, and Tailwind CSS with 
 
 - Node.js 16+ 
 - npm or yarn
-- Backend API running on `http://localhost:8081`
+- Backend API running on `http://172.22.111.47:8081`
 
 ## Installation
 
@@ -49,7 +49,7 @@ npm install
 npm run dev
 ```
 
-The application will start on `http://localhost:3000`
+The application will start on `http://172.22.111.47:3000`
 
 ## Available Scripts
 
@@ -129,7 +129,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8081', // Your backend URL
+        target: 'http://172.22.111.47:8081', // Your backend URL
         changeOrigin: true,
       }
     }

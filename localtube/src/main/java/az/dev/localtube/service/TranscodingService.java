@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -27,6 +28,9 @@ public class TranscodingService {
     private final List<String> allowedQualities;
 
     private final ConcurrentHashMap<String, Process> activeProcesses = new ConcurrentHashMap<>();
+
+    // Process timeout to prevent hanging processes
+    private static final long PROCESS_TIMEOUT_MINUTES = 60;
 
     public TranscodingService(VideoService videoService,
                               @Value("${localtube.storage.hls-dir}") String hlsDirPath,
@@ -42,8 +46,10 @@ public class TranscodingService {
 
     @Async("videoProcessingExecutor")
     public void transcodeToHLS(String videoId, Path inputFile) {
+        BufferedReader errorReader = null;
+        
         try {
-            log.info("[Transcoding] Starting for video: {}", videoId);
+            log.info("[Transcoding] Starting for video ID: {}", videoId);
 
             videoService.updateVideoStatus(videoId, VideoStatus.PROCESSING);
 
@@ -86,22 +92,35 @@ public class TranscodingService {
             Path masterFile = outputDir.resolve("master.m3u8");
             Files.writeString(masterFile, masterPlaylist.toString());
 
-            // Delete original file
-            Files.deleteIfExists(inputFile);
+            // Delete original file to save space
+            try {
+                Files.deleteIfExists(inputFile);
+                log.info("[Transcoding] Deleted original file to save space: {}", inputFile);
+            } catch (IOException e) {
+                log.warn("[Transcoding] Could not delete original file: {}", e.getMessage());
+            }
 
             videoService.updateVideoStatus(videoId, VideoStatus.READY);
             log.info("[Transcoding] SUCCESS: {}", videoId);
 
+            // Force garbage collection after transcoding
+            System.gc();
+
         } catch (Exception e) {
-            log.error("[Transcoding ERROR] {}", e.getMessage(), e);
+            log.error("[Transcoding ERROR] Video ID: {}, Error: {}", videoId, e.getMessage(), e);
             try {
                 videoService.updateVideoStatus(videoId, VideoStatus.FAILED);
                 Files.deleteIfExists(inputFile);
             } catch (IOException ignored) {}
+        } finally {
+            closeQuietly(errorReader);
         }
     }
 
     private void generateThumbnail(String videoId, Path inputFile) {
+        Process process = null;
+        BufferedReader reader = null;
+        
         try {
             Path thumbDir = thumbnailDir.resolve(videoId);
             Files.createDirectories(thumbDir);
@@ -113,18 +132,41 @@ public class TranscodingService {
                     "-ss", "00:00:05",
                     "-vframes", "1",
                     "-vf", "scale=640:-1",
+                    "-q:v", "2",  // Better quality
                     thumbFile.toAbsolutePath().toString()
             );
+            
             pb.redirectErrorStream(true);
-            Process process = pb.start();
-            process.waitFor();
-            log.debug("Generated thumbnail for {}", videoId);
+            process = pb.start();
+            
+            // Read output to prevent buffer overflow
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                // Consume output
+            }
+            
+            boolean completed = process.waitFor(30, TimeUnit.SECONDS);
+            if (!completed) {
+                process.destroyForcibly();
+                log.warn("Thumbnail generation timed out for {}", videoId);
+            } else {
+                log.debug("Generated thumbnail for {}", videoId);
+            }
         } catch (Exception e) {
             log.warn("Failed to generate thumbnail: {}", e.getMessage());
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
+        } finally {
+            closeQuietly(reader);
         }
     }
 
     private boolean transcodeQuality(String videoId, Path input, Path outputDir, QualityProfile profile) {
+        Process process = null;
+        BufferedReader reader = null;
+        
         try {
             Path qualityDir = outputDir.resolve(profile.label);
             Files.createDirectories(qualityDir);
@@ -138,7 +180,7 @@ public class TranscodingService {
                     ":force_original_aspect_ratio=decrease,pad=" +
                     profile.width + ":" + profile.height + ":(ow-iw)/2:(oh-ih)/2",
                     "-c:v", "libx264",
-                    "-preset", "fast",
+                    "-preset", "veryfast",  // Changed from "fast" to "veryfast" for less CPU/memory
                     "-crf", "23",
                     "-profile:v", "high",
                     "-level", "4.0",
@@ -147,6 +189,7 @@ public class TranscodingService {
                     "-b:a", "128k",
                     "-ar", "48000",
                     "-movflags", "+faststart",
+                    "-max_muxing_queue_size", "1024",  // Prevent buffer overflow
                     "-hls_time", String.valueOf(segmentDuration),
                     "-hls_playlist_type", "vod",
                     "-hls_flags", "independent_segments",
@@ -155,21 +198,32 @@ public class TranscodingService {
             );
 
             pb.redirectErrorStream(true);
-
-            Process process = pb.start();
+            process = pb.start();
             activeProcesses.put(videoId + "_" + profile.label, process);
 
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.contains("frame=") || line.contains("speed=")) {
-                        log.debug("[FFmpeg {}] {}", profile.label, line);
-                    }
+            // Read output with limited buffer to prevent memory issues
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()), 8192);
+            String line;
+            int lineCount = 0;
+            while ((line = reader.readLine()) != null) {
+                lineCount++;
+                // Only log every 100 lines to reduce memory usage
+                if (lineCount % 100 == 0 && (line.contains("frame=") || line.contains("speed="))) {
+                    log.debug("[FFmpeg {}] Processing...", profile.label);
                 }
             }
 
-            int exitCode = process.waitFor();
+            boolean completed = process.waitFor(PROCESS_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+            int exitCode = completed ? process.exitValue() : -1;
+            
             activeProcesses.remove(videoId + "_" + profile.label);
+
+            if (!completed) {
+                log.error("[Transcoding] FFmpeg timeout for {}", profile.label);
+                process.destroyForcibly();
+                deleteDirectoryRecursive(qualityDir);
+                return false;
+            }
 
             if (exitCode != 0) {
                 log.error("[Transcoding] FFmpeg failed with exit code: {}", exitCode);
@@ -182,42 +236,96 @@ public class TranscodingService {
 
         } catch (Exception e) {
             log.error("[Transcoding] Error for {}: {}", profile.label, e.getMessage());
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
             return false;
+        } finally {
+            closeQuietly(reader);
+            
+            // Suggest GC after each quality transcoding
+            System.gc();
         }
     }
 
     private VideoInfo getVideoInfo(Path input) throws IOException, InterruptedException {
-        ProcessBuilder pb = new ProcessBuilder(
-                "ffprobe",
-                "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "stream=width,height,duration",
-                "-of", "csv=p=0",
-                input.toAbsolutePath().toString()
-        );
+        Process process = null;
+        BufferedReader reader = null;
+        
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    "ffprobe",
+                    "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height,duration",
+                    "-of", "csv=p=0",
+                    input.toAbsolutePath().toString()
+            );
 
-        pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+            process = pb.start();
+            
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line = reader.readLine();
 
-        Process process = pb.start();
-        String line;
+            boolean completed = process.waitFor(30, TimeUnit.SECONDS);
+            if (!completed) {
+                process.destroyForcibly();
+                log.warn("FFprobe timeout, using default values");
+            }
 
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            line = reader.readLine();
-        }
+            // Default values if parsing fails
+            int width = 1920;
+            int height = 1080;
+            int duration = 0;
 
-        process.waitFor();
+            if (line != null && !line.trim().isEmpty()) {
+                try {
+                    String[] parts = line.split(",");
+                    
+                    // Parse width
+                    if (parts.length >= 1 && !parts[0].trim().equalsIgnoreCase("N/A")) {
+                        try {
+                            width = Integer.parseInt(parts[0].trim());
+                        } catch (NumberFormatException e) {
+                            log.warn("[FFprobe] Failed to parse width: {}", parts[0]);
+                        }
+                    }
+                    
+                    // Parse height
+                    if (parts.length >= 2 && !parts[1].trim().equalsIgnoreCase("N/A")) {
+                        try {
+                            height = Integer.parseInt(parts[1].trim());
+                        } catch (NumberFormatException e) {
+                            log.warn("[FFprobe] Failed to parse height: {}", parts[1]);
+                        }
+                    }
+                    
+                    // Parse duration
+                    if (parts.length >= 3 && !parts[2].trim().equalsIgnoreCase("N/A")) {
+                        try {
+                            duration = (int) Double.parseDouble(parts[2].trim());
+                        } catch (NumberFormatException e) {
+                            log.warn("[FFprobe] Failed to parse duration: {}", parts[2]);
+                        }
+                    }
+                    
+                    log.info("[FFprobe] Successfully parsed: width={}, height={}, duration={}", width, height, duration);
+                } catch (Exception e) {
+                    log.error("[FFprobe] Error parsing video info: {}", e.getMessage());
+                }
+            } else {
+                log.warn("[FFprobe] No output received, using default values");
+            }
 
-        if (line != null) {
-            String[] parts = line.split(",");
-            if (parts.length >= 2) {
-                int width = Integer.parseInt(parts[0].trim());
-                int height = Integer.parseInt(parts[1].trim());
-                int duration = parts.length >= 3 ? (int) Double.parseDouble(parts[2].trim()) : 0;
-                return new VideoInfo(width, height, duration);
+            return new VideoInfo(width, height, duration);
+            
+        } finally {
+            closeQuietly(reader);
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
             }
         }
-
-        return new VideoInfo(1920, 1080, 0);
     }
 
     private List<QualityProfile> buildQualityProfiles(VideoInfo info) {
@@ -251,6 +359,16 @@ public class TranscodingService {
                         });
             }
         } catch (IOException ignored) {}
+    }
+
+    private void closeQuietly(AutoCloseable closeable) {
+        if (closeable != null) {
+            try {
+                closeable.close();
+            } catch (Exception e) {
+                // Ignore
+            }
+        }
     }
 
     private record VideoInfo(int width, int height, int durationSeconds) {}

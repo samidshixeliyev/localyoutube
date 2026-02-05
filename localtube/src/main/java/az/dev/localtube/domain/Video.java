@@ -1,12 +1,14 @@
 package az.dev.localtube.domain;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,15 +63,38 @@ public class Video {
     @Builder.Default
     private List<String> tags = new ArrayList<>();
 
-    // Timestamps
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime uploadedAt;
+    // Timestamps - stored as Long (epoch milliseconds) in Elasticsearch
+    private Long uploadedAt;
+    private Long processedAt;
+    private Long updatedAt;
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime processedAt;
+    // Helper methods for date conversion
+    @JsonIgnore
+    public LocalDateTime getUploadedAtDateTime() {
+        return uploadedAt != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(uploadedAt), ZoneId.systemDefault()) : null;
+    }
 
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime updatedAt;
+    public void setUploadedAtDateTime(LocalDateTime dateTime) {
+        this.uploadedAt = dateTime != null ? dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : null;
+    }
+
+    @JsonIgnore
+    public LocalDateTime getProcessedAtDateTime() {
+        return processedAt != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(processedAt), ZoneId.systemDefault()) : null;
+    }
+
+    public void setProcessedAtDateTime(LocalDateTime dateTime) {
+        this.processedAt = dateTime != null ? dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : null;
+    }
+
+    @JsonIgnore
+    public LocalDateTime getUpdatedAtDateTime() {
+        return updatedAt != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(updatedAt), ZoneId.systemDefault()) : null;
+    }
+
+    public void setUpdatedAtDateTime(LocalDateTime dateTime) {
+        this.updatedAt = dateTime != null ? dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : null;
+    }
 
     // Helper methods
     public void addQuality(String quality) {

@@ -2,19 +2,50 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { videoService } from '../services/videoService';
 import VideoPlayer from '../components/VideoPlayer';
+import ThumbnailUpload from '../components/ThumbnailUpload';
+import CommentSection from '../components/CommentSection';
 import Navbar from '../components/Navbar';
-import { ThumbsUp, Eye, Calendar, Trash2, Loader2 } from 'lucide-react';
+import { ThumbsUp, Eye, Calendar, Trash2, Loader2, Image } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const VideoDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [video, setVideo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [liked, setLiked] = useState(false);
   const [viewIncremented, setViewIncremented] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showThumbnailUpload, setShowThumbnailUpload] = useState(false);
+
+  useEffect(() => {
+    // Decode JWT token manually to get user info
+    const token = localStorage.getItem('jwt_token');
+    if (token) {
+      try {
+        // Manual JWT decode (without library)
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        
+        const decoded = JSON.parse(jsonPayload);
+        setCurrentUser({
+          id: decoded.userId || decoded.sub,
+          username: decoded.username || decoded.email,
+          email: decoded.email
+        });
+      } catch (err) {
+        console.error('Error decoding token:', err);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     loadVideo();
@@ -73,9 +104,15 @@ const VideoDetail = () => {
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const handleThumbnailUploadSuccess = () => {
+    // Reload video to get updated thumbnail
+    loadVideo();
+    setShowThumbnailUpload(false);
+  };
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return '';
+    return new Date(timestamp).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
@@ -117,7 +154,11 @@ const VideoDetail = () => {
     );
   }
 
-  const canDelete = user && (user.id === video.uploaderId || user.username === video.uploaderName);
+  const canEdit = currentUser && (
+    currentUser.id === video.uploaderId || 
+    currentUser.email === video.uploaderEmail ||
+    currentUser.username === video.uploaderName
+  );
 
   return (
     <>
@@ -125,9 +166,9 @@ const VideoDetail = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main content */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
             {/* Video Player */}
-            <div className="bg-black rounded-lg overflow-hidden mb-6">
+            <div className="bg-black rounded-lg overflow-hidden">
               {video.hlsUrl && video.status === 'ready' ? (
                 <VideoPlayer
                   hlsUrl={video.hlsUrl}
@@ -179,14 +220,23 @@ const VideoDetail = () => {
                     <span>{video.likes || 0}</span>
                   </button>
 
-                  {canDelete && (
-                    <button
-                      onClick={handleDelete}
-                      className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                      <span>Delete</span>
-                    </button>
+                  {canEdit && (
+                    <>
+                      <button
+                        onClick={() => setShowThumbnailUpload(!showThumbnailUpload)}
+                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Image className="h-5 w-5" />
+                        <span>Thumbnail</span>
+                      </button>
+                      <button
+                        onClick={handleDelete}
+                        className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                        <span>Delete</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -236,11 +286,11 @@ const VideoDetail = () => {
                         </span>
                       </div>
                     )}
-                    {video.qualities && video.qualities.length > 0 && (
+                    {video.availableQualities && video.availableQualities.length > 0 && (
                       <div>
                         <span className="text-gray-500">Qualities:</span>
                         <span className="ml-2 text-gray-900">
-                          {video.qualities.join(', ')}
+                          {video.availableQualities.join(', ')}
                         </span>
                       </div>
                     )}
@@ -248,11 +298,26 @@ const VideoDetail = () => {
                 </div>
               )}
             </div>
+
+            {/* Thumbnail Upload Section */}
+            {canEdit && showThumbnailUpload && (
+              <ThumbnailUpload
+                videoId={id}
+                currentThumbnail={video.thumbnailUrl}
+                onUploadSuccess={handleThumbnailUploadSuccess}
+              />
+            )}
+
+            {/* Comments Section */}
+            <CommentSection 
+              videoId={id} 
+              currentUserId={currentUser?.id?.toString()}
+            />
           </div>
 
-          {/* Sidebar - Related videos placeholder */}
+          {/* Sidebar */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="bg-white rounded-lg shadow-md p-6 sticky top-24">
               <h2 className="font-semibold text-gray-900 mb-4">Related Videos</h2>
               <p className="text-gray-500 text-sm">Coming soon...</p>
             </div>

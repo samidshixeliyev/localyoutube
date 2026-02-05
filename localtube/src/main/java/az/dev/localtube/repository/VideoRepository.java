@@ -17,6 +17,7 @@ import org.springframework.stereotype.Repository;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalField;
 import java.util.*;
 
 @Slf4j
@@ -50,7 +51,7 @@ public class VideoRepository {
         }
 
         if (video.getUpdatedAt() == null) {
-            video.setUpdatedAt(LocalDateTime.now());
+            video.setUpdatedAt(new Date().getTime());
         }
 
         @SuppressWarnings("unchecked")
@@ -171,7 +172,7 @@ public class VideoRepository {
             if (videoOpt.isPresent()) {
                 Video video = videoOpt.get();
                 video.setStatus(status);
-                video.setUpdatedAt(LocalDateTime.now());
+                video.setUpdatedAt(new Date().getTime());
                 save(video);
             } else {
                 log.warn("Video not found for status update: {}", id);

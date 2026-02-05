@@ -8,15 +8,15 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8081',
+        target: 'http://172.22.111.47:8081',
         changeOrigin: true,
       },
       '/hls': {
-        target: 'http://localhost:8081',
+        target: 'http://172.22.111.47:8081',
         changeOrigin: true,
       },
       '/thumbnails': {
-        target: 'http://localhost:8081',
+        target: 'http://172.22.111.47:8081',
         changeOrigin: true,
       }
     }

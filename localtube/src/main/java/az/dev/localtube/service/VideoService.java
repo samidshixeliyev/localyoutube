@@ -18,6 +18,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -48,7 +49,11 @@ public class VideoService {
 
     public Video createVideo(String title, String filename, String description,
                              List<String> tags, Long uploaderId, String uploaderName) throws IOException {
+        // Generate UUID for video ID (32 characters without hyphens, like comments)
+        String videoId = UUID.randomUUID().toString().replace("-", "");
+
         Video video = Video.builder()
+                .id(videoId)
                 .title(title)
                 .filename(filename)
                 .originalFilename(filename)
@@ -57,25 +62,23 @@ public class VideoService {
                 .uploaderId(uploaderId)
                 .uploaderName(uploaderName)
                 .status(VideoStatus.UPLOADING)
-                .uploadPath(uploadDir.resolve(filename).toString())
-                .hlsPath(hlsDir.toString())
-                .thumbnailPath(thumbnailDir.toString())
-                .uploadedAt(LocalDateTime.now())
+                .uploadPath(uploadDir.resolve(videoId).toString())
+                .hlsPath(hlsDir.resolve(videoId).toString())
+                .thumbnailPath(thumbnailDir.resolve(videoId).toString())
+                .masterPlaylistUrl("/hls/" + videoId + "/master.m3u8")
+                .thumbnailUrl("/thumbnails/" + videoId + "/default.jpg")
                 .views(0L)
                 .likes(0L)
                 .commentCount(0)
                 .build();
 
+        // Set timestamps as epoch milliseconds
+        video.setUploadedAtDateTime(LocalDateTime.now());
+
         video = videoRepository.save(video);
-        
-        // Update paths with video ID
-        video.setUploadPath(uploadDir.resolve(video.getId()).toString());
-        video.setHlsPath(hlsDir.resolve(video.getId()).toString());
-        video.setThumbnailPath(thumbnailDir.resolve(video.getId()).toString());
-        video.setMasterPlaylistUrl("/hls/" + video.getId() + "/master.m3u8");
-        video.setThumbnailUrl("/thumbnails/" + video.getId() + "/default.jpg");
-        
-        return videoRepository.save(video);
+        log.info("Created video with UUID: {}, filename: {}", videoId, filename);
+
+        return video;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -127,7 +130,7 @@ public class VideoService {
     // ═══════════════════════════════════════════════════════════════════════════
 
     public Video updateVideo(Video video) throws IOException {
-        video.setUpdatedAt(LocalDateTime.now());
+        video.setUpdatedAtDateTime(LocalDateTime.now());
         return videoRepository.save(video);
     }
 
@@ -138,7 +141,7 @@ public class VideoService {
             Optional<Video> videoOpt = videoRepository.findById(id);
             if (videoOpt.isPresent()) {
                 Video video = videoOpt.get();
-                video.setProcessedAt(LocalDateTime.now());
+                video.setProcessedAtDateTime(LocalDateTime.now());
                 videoRepository.save(video);
             }
         }
@@ -154,7 +157,7 @@ public class VideoService {
         }
     }
 
-    public void updateVideoMetadata(String id, Integer width, Integer height, 
+    public void updateVideoMetadata(String id, Integer width, Integer height,
                                     Integer duration, Long fileSize) throws IOException {
         Optional<Video> videoOpt = videoRepository.findById(id);
         if (videoOpt.isPresent()) {
@@ -207,10 +210,10 @@ public class VideoService {
 
         Path thumbDir = thumbnailDir.resolve(videoId);
         Files.createDirectories(thumbDir);
-        
+
         String extension = getFileExtension(file.getOriginalFilename());
         Path customThumbnail = thumbDir.resolve("custom." + extension);
-        
+
         try (InputStream in = file.getInputStream()) {
             Files.copy(in, customThumbnail, StandardCopyOption.REPLACE_EXISTING);
         }

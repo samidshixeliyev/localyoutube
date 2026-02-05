@@ -26,7 +26,7 @@ public class CommentService {
         comment.setUserId(userId);
         comment.setUsername(username);
         comment.setText(text);
-        comment.setCreatedAt(LocalDateTime.now());
+        comment.setCreatedAtDateTime(LocalDateTime.now());
         comment.setLikes(0L);
 
         comment = commentRepository.save(comment);

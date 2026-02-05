@@ -51,20 +51,20 @@ export const videoService = {
     return response.data;
   },
 
-  uploadChunk: async (file, chunkIndex, totalChunks, filename) => {
+  uploadChunk: async (file, chunkIndex, totalChunks, videoId) => {
     const formData = new FormData();
     formData.append('file', file);
     
     const response = await api.post('/upload/chunk', formData, {
-      params: { chunkIndex, totalChunks, filename },
+      params: { chunkIndex, totalChunks, videoId },
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     return response.data;
   },
 
-  completeUpload: async (filename, totalChunks) => {
+  completeUpload: async (videoId, totalChunks) => {
     const response = await api.post('/upload/complete', null, {
-      params: { filename, totalChunks }
+      params: { videoId, totalChunks }
     });
     return response.data;
   },

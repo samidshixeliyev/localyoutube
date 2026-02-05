@@ -10,9 +10,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -33,7 +37,9 @@ public class UploadController {
     private final long maxFileSize;
     private final long minDiskFree;
 
-    private static final int BUFFER_SIZE = 8 * 1024;
+    // Reduced buffer size for better memory management
+    private static final int BUFFER_SIZE = 64 * 1024; // 64KB instead of 8KB for better performance
+    private static final int MAX_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB max chunk
 
     public UploadController(VideoService videoService,
                             TranscodingService transcodingService,
@@ -84,7 +90,12 @@ public class UploadController {
             String videoTitle = title != null ? title : filename;
             String videoDesc = description != null ? description : "";
 
+            // Create video with UUID
             Video video = videoService.createVideo(videoTitle, filename, videoDesc);
+
+            // Create upload directory for this video
+            Path videoDir = uploadDir.resolve(video.getId());
+            Files.createDirectories(videoDir);
 
             return ResponseEntity.ok(Map.of(
                     "status", "initialized",
@@ -103,24 +114,50 @@ public class UploadController {
             @RequestParam("file") MultipartFile chunk,
             @RequestParam int chunkIndex,
             @RequestParam int totalChunks,
-            @RequestParam String filename) {
+            @RequestParam String videoId) {
+
+        InputStream inputStream = null;
+        FileChannel fileChannel = null;
+        ReadableByteChannel readChannel = null;
 
         try {
-            String safeFilename = sanitizeFilename(filename);
-            Path targetFile = uploadDir.resolve(safeFilename);
-
-            StandardOpenOption[] options = (chunkIndex == 0)
-                    ? new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING}
-                    : new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.APPEND};
-
-            try (OutputStream out = Files.newOutputStream(targetFile, options);
-                 InputStream in = chunk.getInputStream()) {
-                byte[] buffer = new byte[BUFFER_SIZE];
-                int n;
-                while ((n = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, n);
-                }
+            // Validate chunk size
+            if (chunk.getSize() > MAX_CHUNK_SIZE) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "error",
+                        "message", "Chunk size too large"));
             }
+
+            // Get video
+            Video video = videoService.getVideo(videoId).orElse(null);
+            if (video == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "error",
+                        "message", "Video not found"));
+            }
+
+            Path videoDir = uploadDir.resolve(videoId);
+            Files.createDirectories(videoDir);
+
+            String extension = getFileExtension(video.getFilename());
+            Path targetFile = videoDir.resolve("original." + extension);
+
+            // Use NIO FileChannel for better performance and memory efficiency
+            StandardOpenOption[] options = (chunkIndex == 0)
+                    ? new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING}
+                    : new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND};
+
+            // Stream directly from multipart to file without loading into memory
+            inputStream = new BufferedInputStream(chunk.getInputStream(), BUFFER_SIZE);
+            fileChannel = FileChannel.open(targetFile, options);
+            readChannel = Channels.newChannel(inputStream);
+
+            // Transfer data efficiently using NIO
+            long position = chunkIndex == 0 ? 0 : Files.size(targetFile);
+            long transferred = fileChannel.transferFrom(readChannel, position, chunk.getSize());
+
+            log.debug("Uploaded chunk {}/{} for video {}, transferred {} bytes",
+                    chunkIndex + 1, totalChunks, videoId, transferred);
 
             double progress = (double) (chunkIndex + 1) / totalChunks * 100;
 
@@ -131,21 +168,39 @@ public class UploadController {
             ));
 
         } catch (IOException e) {
-            log.error("Error uploading chunk", e);
+            log.error("Error uploading chunk {} for video {}", chunkIndex, videoId, e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "status", "error",
                     "message", e.getMessage()));
+        } finally {
+            // Explicitly close all resources to free memory immediately
+            closeQuietly(readChannel);
+            closeQuietly(fileChannel);
+            closeQuietly(inputStream);
+
+            // Suggest garbage collection (JVM will decide)
+            if (chunkIndex % 10 == 0) {
+                System.gc();
+            }
         }
     }
 
     @PostMapping("/complete")
     public ResponseEntity<Map<String, Object>> completeUpload(
-            @RequestParam String filename,
+            @RequestParam String videoId,
             @RequestParam int totalChunks) {
 
         try {
-            String safeFilename = sanitizeFilename(filename);
-            Path uploadedFile = uploadDir.resolve(safeFilename);
+            Video video = videoService.getVideo(videoId).orElse(null);
+            if (video == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "failed",
+                        "message", "Video not found"));
+            }
+
+            String extension = getFileExtension(video.getFilename());
+            Path videoDir = uploadDir.resolve(videoId);
+            Path uploadedFile = videoDir.resolve("original." + extension);
 
             if (!Files.exists(uploadedFile)) {
                 return ResponseEntity.badRequest().body(Map.of(
@@ -153,11 +208,12 @@ public class UploadController {
                         "message", "File not found"));
             }
 
-            String videoId = safeFilename;
-            if (videoId.contains(".")) {
-                videoId = videoId.substring(0, videoId.lastIndexOf('.'));
-            }
+            // Verify file size
+            long fileSize = Files.size(uploadedFile);
+            log.info("Upload completed for video {}, file size: {} MB",
+                    videoId, fileSize / (1024 * 1024));
 
+            // Start transcoding with video ID (async - won't block)
             transcodingService.transcodeToHLS(videoId, uploadedFile);
 
             return ResponseEntity.accepted().body(Map.of(
@@ -167,7 +223,7 @@ public class UploadController {
             ));
 
         } catch (Exception e) {
-            log.error("Error completing upload", e);
+            log.error("Error completing upload for video {}", videoId, e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "status", "error",
                     "message", e.getMessage()));
@@ -228,10 +284,11 @@ public class UploadController {
         }
     }
 
-    private String sanitizeFilename(String filename) {
-        return filename.replaceAll("[^a-zA-Z0-9._-]", "_")
-                .replaceAll("_+", "_")
-                .replaceAll("^[._-]+", "");
+    private String getFileExtension(String filename) {
+        if (filename == null || !filename.contains(".")) {
+            return "mp4";
+        }
+        return filename.substring(filename.lastIndexOf('.') + 1);
     }
 
     private Map<String, Object> videoToMap(Video video) {
@@ -253,5 +310,15 @@ public class UploadController {
         map.put("uploadedAt", video.getUploadedAt());
         map.put("processedAt", video.getProcessedAt());
         return map;
+    }
+
+    private void closeQuietly(AutoCloseable closeable) {
+        if (closeable != null) {
+            try {
+                closeable.close();
+            } catch (Exception e) {
+                log.debug("Error closing resource", e);
+            }
+        }
     }
 }

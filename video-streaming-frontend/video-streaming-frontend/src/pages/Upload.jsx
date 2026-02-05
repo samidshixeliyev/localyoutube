@@ -55,7 +55,8 @@ const UploadPage = () => {
         totalChunks
       );
 
-      setUploadedVideoId(initResponse.videoId);
+      const videoId = initResponse.videoId;
+      setUploadedVideoId(videoId);
 
       // Upload chunks
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
@@ -67,14 +68,14 @@ const UploadPage = () => {
           chunk,
           chunkIndex,
           totalChunks,
-          file.name
+          videoId  // Pass videoId instead of filename
         );
 
         setUploadProgress(Math.round(((chunkIndex + 1) / totalChunks) * 100));
       }
 
       // Complete upload
-      await videoService.completeUpload(file.name, totalChunks);
+      await videoService.completeUpload(videoId, totalChunks);
       
       setSuccess(true);
       setUploading(false);
