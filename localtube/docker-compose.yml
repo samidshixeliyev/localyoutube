@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: localtube-elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=localtube-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - localtube-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: localtube-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - xpack.security.enabled=false
+      - xpack.encryptedSavedObjects.encryptionKey=min-32-byte-long-strong-encryption-key
+    ports:
+      - "5601:5601"
+    networks:
+      - localtube-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: localtube-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - localtube-network
+    depends_on:
+      - localtube-backend
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: localtube-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - localtube-network
+    depends_on:
+      - prometheus
+
+  localtube-backend:
+    build: .
+    container_name: localtube-backend
+    environment:
+      - UPLOAD_DIR=/data/uploads
+      - HLS_DIR=/data/hls
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_SCHEME=http
+      - SERVER_PORT=8080
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://host.docker.internal:65388;instanceName=SQLEXPRESS;databaseName=test_portal;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=123
+    ports:
+      - "8080:8080"
+    volumes:
+      - video_uploads:/data/uploads
+      - video_hls:/data/hls
+    networks:
+      - localtube-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  localtube-network:
+    driver: bridge
+
+volumes:
+  elasticsearch_data:
+  video_uploads:
+  video_hls:
+  prometheus_data:
+  grafana_data:

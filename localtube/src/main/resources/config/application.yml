@@ -1,0 +1,75 @@
+server:
+  port: 8080
+  address: 0.0.0.0
+  tomcat:
+    max-swallow-size: 100MB
+
+spring:
+  application:
+    name: localtube
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://555-PTSVBZ:65388;instanceName=SQLEXPRESS;databaseName=test_portal;encrypt=true;trustServerCertificate=true}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:123}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 5000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.SQLServerDialect
+        default_schema: dbo
+
+  servlet:
+    multipart:
+      enabled: true
+      file-size-threshold: 2KB
+      max-file-size: 5GB
+      max-request-size: 5GB
+
+jwt:
+  secret: 4gTduyxJahQatgIkxwGErvADeIjfdulxI98B8bAGUOKStnBVTyngXfU5jM1rMbVR
+
+localtube:
+  storage:
+    upload-dir: ${UPLOAD_DIR:${user.dir}/uploads}
+    hls-dir: ${HLS_DIR:${user.dir}/hls}
+    max-file-size: 53687091200
+    min-disk-free: 5368709120
+
+  transcoding:
+    segment-duration: 6
+    qualities: 480p, 720p, 1080p, 2160p
+
+  elasticsearch:
+    host: ${ELASTICSEARCH_HOST:localhost}
+    port: ${ELASTICSEARCH_PORT:9200}
+    scheme: ${ELASTICSEARCH_SCHEME:http}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
+    index: ${ELASTICSEARCH_INDEX:videos}
+
+logging:
+  level:
+    root: INFO
+    az.dev.localtube: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true
