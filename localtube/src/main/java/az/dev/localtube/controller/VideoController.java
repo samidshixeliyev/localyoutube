@@ -128,17 +128,20 @@ public class VideoController {
                 return user != null && user.hasPermission("admin-modtube");
 
             case UNLISTED:
-                return true;
+                return true;  // Anyone with direct link can view
 
             case RESTRICTED:
                 if (user == null) return false;
 
                 String userEmail = user.getEmail();
 
-                return user.hasPermission("admin-modtube") ||
-                        (video.getAllowedEmails() != null &&
-                                video.getAllowedEmails().stream()
-                                        .anyMatch(email -> email.equalsIgnoreCase(userEmail)));
+                // FIXED: Check email in allowedEmails list (case-insensitive)
+                boolean isAdmin = user.hasPermission("admin-modtube");
+                boolean isInAllowedList = video.getAllowedEmails() != null &&
+                        video.getAllowedEmails().stream()
+                                .anyMatch(email -> email.equalsIgnoreCase(userEmail));
+
+                return isAdmin || isInAllowedList;
 
             default:
                 return true;
@@ -248,6 +251,7 @@ public class VideoController {
     // ========== THUMBNAIL ENDPOINTS ==========
 
     @PostMapping("/{id}/thumbnail")
+    @PreAuthorize("hasAuthority('admin-modtube')")  // ← This allows only admin-modtube users
     public ResponseEntity<Map<String, String>> uploadThumbnail(
             @PathVariable String id,
             @RequestParam("file") MultipartFile file,
@@ -258,11 +262,17 @@ public class VideoController {
                 return ResponseEntity.notFound().build();
             }
 
-            // Check by email instead of userId
+            // FIXED: Admin can upload thumbnail for ANY video
             boolean isOwner = video.getUploaderEmail() != null &&
                     video.getUploaderEmail().equals(user.getEmail());
-            if (!isOwner && !user.isAdmin()) {
-                return ResponseEntity.status(403).build();
+            boolean isAdmin = user.hasPermission("admin-modtube");
+
+            // Allow if owner OR admin
+            if (!isOwner && !isAdmin) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "status", "error",
+                        "message", "You don't have permission to upload thumbnail for this video"
+                ));
             }
 
             videoService.uploadCustomThumbnail(id, file);
@@ -274,7 +284,10 @@ public class VideoController {
             ));
         } catch (IOException e) {
             log.error("Error uploading thumbnail", e);
-            return ResponseEntity.internalServerError().build();
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "error",
+                    "message", "Failed to upload thumbnail"
+            ));
         }
     }
 

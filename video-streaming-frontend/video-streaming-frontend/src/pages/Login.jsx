@@ -19,7 +19,7 @@ const Login = () => {
       ...formData,
       [e.target.name]: e.target.value
     });
-    setError(''); // Clear error on input change
+    setError('');
   };
 
   const handleSubmit = async (e) => {
@@ -35,11 +35,7 @@ const Login = () => {
 
     try {
       const response = await api.post('/auth/login', formData);
-      
-      // Login with response data (includes token, role, permissions)
       login(response.data);
-      
-      // Redirect to home
       navigate('/');
     } catch (err) {
       console.error('Login error:', err);
@@ -146,15 +142,6 @@ const Login = () => {
             </p>
           </div>
         </form>
-
-        {/* Test Credentials Info (Remove in production) */}
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-xs text-blue-800 font-semibold mb-2">Test Accounts:</p>
-          <div className="space-y-1 text-xs text-blue-700">
-            <p>👤 Admin: admin@modtube.com / admin123</p>
-            <p>👤 User: user@modtube.com / user123</p>
-          </div>
-        </div>
       </div>
     </div>
   );

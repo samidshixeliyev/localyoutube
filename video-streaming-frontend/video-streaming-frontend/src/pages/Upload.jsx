@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { videoService } from '../services/videoService';
 import Navbar from '../components/Navbar';
-import { Upload, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, X, CheckCircle, AlertCircle, Globe, Lock, Link2, Users } from 'lucide-react';
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
 
@@ -12,11 +12,41 @@ const UploadPage = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [visibility, setVisibility] = useState('public');
+  const [allowedEmails, setAllowedEmails] = useState([]);
+  const [emailInput, setEmailInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [uploadedVideoId, setUploadedVideoId] = useState(null);
+
+  const visibilityOptions = [
+    { 
+      value: 'public', 
+      icon: Globe, 
+      label: 'Public', 
+      description: 'Everyone can see this video' 
+    },
+    { 
+      value: 'unlisted', 
+      icon: Link2, 
+      label: 'Unlisted', 
+      description: 'Anyone with the link can see' 
+    },
+    { 
+      value: 'private', 
+      icon: Lock, 
+      label: 'Private', 
+      description: 'Only admins can see' 
+    },
+    { 
+      value: 'restricted', 
+      icon: Users, 
+      label: 'Restricted', 
+      description: 'Only specific users can see' 
+    }
+  ];
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
@@ -40,6 +70,20 @@ const UploadPage = () => {
       }
       setError('');
     }
+  };
+
+  const addEmail = () => {
+    const email = emailInput.trim().toLowerCase();
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!allowedEmails.includes(email)) {
+        setAllowedEmails([...allowedEmails, email]);
+        setEmailInput('');
+      }
+    }
+  };
+
+  const removeEmail = (email) => {
+    setAllowedEmails(allowedEmails.filter(e => e !== email));
   };
 
   const uploadChunks = async (file) => {
@@ -68,7 +112,7 @@ const UploadPage = () => {
           chunk,
           chunkIndex,
           totalChunks,
-          videoId  // Pass videoId instead of filename
+          videoId
         );
 
         setUploadProgress(Math.round(((chunkIndex + 1) / totalChunks) * 100));
@@ -76,6 +120,14 @@ const UploadPage = () => {
 
       // Complete upload
       await videoService.completeUpload(videoId, totalChunks);
+
+      // Set privacy settings
+      if (visibility !== 'public' || allowedEmails.length > 0) {
+        await videoService.setPrivacy(videoId, {
+          visibility,
+          allowedUserEmails: allowedEmails
+        });
+      }
       
       setSuccess(true);
       setUploading(false);
@@ -100,6 +152,11 @@ const UploadPage = () => {
       return;
     }
 
+    if (visibility === 'restricted' && allowedEmails.length === 0) {
+      setError('Please add at least one email for restricted access');
+      return;
+    }
+
     setUploading(true);
     setError('');
     setUploadProgress(0);
@@ -111,6 +168,9 @@ const UploadPage = () => {
     setSelectedFile(null);
     setTitle('');
     setDescription('');
+    setVisibility('public');
+    setAllowedEmails([]);
+    setEmailInput('');
     setUploadProgress(0);
     setError('');
     setSuccess(false);
@@ -248,6 +308,96 @@ const UploadPage = () => {
                 placeholder="Describe your video"
               />
             </div>
+
+            {/* Privacy Settings */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Privacy Settings
+              </label>
+              <div className="space-y-2">
+                {visibilityOptions.map(option => {
+                  const Icon = option.icon;
+                  return (
+                    <label
+                      key={option.value}
+                      className={`flex items-start space-x-3 p-4 border rounded-lg cursor-pointer transition-all ${
+                        visibility === option.value
+                          ? 'border-primary-500 bg-primary-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      } ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value={option.value}
+                        checked={visibility === option.value}
+                        onChange={(e) => setVisibility(e.target.value)}
+                        disabled={uploading}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <Icon className="h-4 w-4" />
+                          <span className="font-medium text-gray-900">{option.label}</span>
+                        </div>
+                        <p className="text-sm text-gray-600">{option.description}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Restricted Access Email List */}
+            {visibility === 'restricted' && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Allowed Users (by email) *
+                </label>
+                
+                <div className="flex space-x-2 mb-3">
+                  <input
+                    type="email"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
+                    placeholder="user@example.com"
+                    disabled={uploading}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={addEmail}
+                    disabled={uploading}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {allowedEmails.length > 0 ? (
+                  <div className="space-y-2">
+                    {allowedEmails.map(email => (
+                      <div key={email} className="flex items-center justify-between bg-white px-3 py-2 rounded border border-gray-200">
+                        <span className="text-sm text-gray-900">{email}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeEmail(email)}
+                          disabled={uploading}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 text-center py-2">
+                    Add at least one email address for restricted access
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Upload Progress */}
             {uploading && (

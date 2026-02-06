@@ -15,8 +15,9 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [availableQualities, setAvailableQualities] = useState([]);
-  const [currentQuality, setCurrentQuality] = useState(-1); // -1 = Auto
+  const [currentQuality, setCurrentQuality] = useState(-1);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [isSwitchingQuality, setIsSwitchingQuality] = useState(false);
   const controlsTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -36,19 +37,23 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
         backBufferLength: 90,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000, // 60MB
+        maxBufferSize: 60 * 1000 * 1000,
         maxBufferHole: 0.5,
-        liveSyncDuration: 3,
-        liveMaxLatencyDuration: 10,
-        // Faster quality switching
+        // CRITICAL: Smoother quality switching
         abrEwmaFastLive: 3.0,
         abrEwmaSlowLive: 9.0,
         abrEwmaFastVoD: 3.0,
         abrEwmaSlowVoD: 9.0,
         abrBandWidthFactor: 0.95,
         abrBandWidthUpFactor: 0.7,
-        // Manual level selection
-        startLevel: -1, // Auto by default
+        startLevel: -1,
+        // IMPORTANT: Enable smooth quality switch
+        enableSoftwareAES: false,
+        // Ensure we buffer enough before switching
+        nudgeMaxRetry: 3,
+        manifestLoadingTimeOut: 10000,
+        manifestLoadingMaxRetry: 1,
+        levelLoadingTimeOut: 10000,
       });
       
       hlsRef.current = hls;
@@ -57,9 +62,8 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
       
       hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
         setIsLoading(false);
-        console.log('HLS manifest loaded, levels:', data.levels.length);
+        console.log('[VideoPlayer] HLS manifest loaded, levels:', data.levels.length);
         
-        // Extract quality levels
         const levels = data.levels.map((level, index) => ({
           index,
           height: level.height,
@@ -68,35 +72,37 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
         }));
         
         setAvailableQualities(levels);
-        setCurrentQuality(-1); // Start with auto
+        setCurrentQuality(-1);
         
-        console.log('Available qualities:', levels);
+        console.log('[VideoPlayer] Available qualities:', levels);
       });
 
-      // Track quality changes
       hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-        console.log('Quality switched to level:', data.level);
+        console.log('[VideoPlayer] Quality switched to level:', data.level);
+        setIsSwitchingQuality(false);
+        
         if (hls.autoLevelEnabled) {
           const currentLevel = hls.levels[data.level];
-          console.log('Auto quality:', currentLevel.height + 'p');
+          console.log('[VideoPlayer] Auto quality:', currentLevel.height + 'p');
         }
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
-        console.error('HLS error:', data);
+        console.error('[VideoPlayer] HLS error:', data);
+        
         if (data.fatal) {
           setIsLoading(false);
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.error('Network error, trying to recover');
+              console.error('[VideoPlayer] Network error, trying to recover');
               hls.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.error('Media error, trying to recover');
+              console.error('[VideoPlayer] Media error, trying to recover');
               hls.recoverMediaError();
               break;
             default:
-              console.error('Fatal error, destroying HLS');
+              console.error('[VideoPlayer] Fatal error, destroying HLS');
               hls.destroy();
               break;
           }
@@ -159,7 +165,6 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
     };
   }, [onTimeUpdate]);
 
-  // Fullscreen change detection
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -222,7 +227,6 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
 
     try {
       if (!document.fullscreenElement) {
-        // Enter fullscreen
         if (container.requestFullscreen) {
           await container.requestFullscreen();
         } else if (container.webkitRequestFullscreen) {
@@ -233,7 +237,6 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
           await container.msRequestFullscreen();
         }
       } else {
-        // Exit fullscreen
         if (document.exitFullscreen) {
           await document.exitFullscreen();
         } else if (document.webkitExitFullscreen) {
@@ -255,33 +258,43 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
     const hls = hlsRef.current;
     const video = videoRef.current;
     
-    console.log('Changing quality to level:', levelIndex);
+    console.log('[VideoPlayer] Changing quality to level:', levelIndex);
 
-    // Store current time and playing state
+    // Store current state
     const wasPlaying = !video.paused;
     const currentVideoTime = video.currentTime;
 
+    setIsSwitchingQuality(true);
+
     if (levelIndex === -1) {
       // Auto quality
-      hls.currentLevel = -1; // Enable auto level selection
+      hls.currentLevel = -1;
       setCurrentQuality(-1);
-      console.log('Quality set to AUTO');
+      console.log('[VideoPlayer] Quality set to AUTO');
     } else {
       // Manual quality selection
       hls.currentLevel = levelIndex;
       setCurrentQuality(levelIndex);
       
       const selectedLevel = hls.levels[levelIndex];
-      console.log('Quality set to:', selectedLevel.height + 'p');
+      console.log('[VideoPlayer] Quality set to:', selectedLevel.height + 'p');
     }
 
-    // Seek to maintain position after quality switch
-    video.currentTime = currentVideoTime;
-    
-    // Resume playback if it was playing
-    if (wasPlaying) {
-      video.play().catch(err => console.error('Play after quality change error:', err));
-    }
+    // CRITICAL FIX: Wait for level switch before seeking
+    const handleLevelSwitched = () => {
+      // Seek to maintain position
+      video.currentTime = currentVideoTime;
+      
+      // Resume playback if it was playing
+      if (wasPlaying) {
+        video.play().catch(err => console.error('[VideoPlayer] Play after quality change error:', err));
+      }
+      
+      // Remove event listener
+      hls.off(Hls.Events.LEVEL_SWITCHED, handleLevelSwitched);
+    };
+
+    hls.on(Hls.Events.LEVEL_SWITCHED, handleLevelSwitched);
 
     setShowQualityMenu(false);
   };
@@ -290,7 +303,6 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
     if (!hlsRef.current) return 'Auto';
     
     if (currentQuality === -1) {
-      // Show current auto-selected quality
       const hls = hlsRef.current;
       if (hls.autoLevelEnabled && hls.levels[hls.currentLevel]) {
         return `Auto (${hls.levels[hls.currentLevel].height}p)`;
@@ -336,13 +348,18 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
       />
 
       {/* Loading Spinner */}
-      {isLoading && (
+      {(isLoading || isSwitchingQuality) && (
         <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white"></div>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-2"></div>
+            {isSwitchingQuality && (
+              <p className="text-white text-sm">Switching quality...</p>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Play button overlay (center) */}
+      {/* Play button overlay */}
       {!isPlaying && !isLoading && (
         <button
           onClick={togglePlay}
@@ -376,29 +393,19 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
         {/* Control buttons */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            {/* Play/Pause */}
             <button
               onClick={togglePlay}
               className="text-white hover:text-primary-400 transition-colors"
             >
-              {isPlaying ? (
-                <Pause className="h-6 w-6" />
-              ) : (
-                <Play className="h-6 w-6" />
-              )}
+              {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
             </button>
 
-            {/* Volume */}
             <div className="flex items-center space-x-2">
               <button
                 onClick={toggleMute}
                 className="text-white hover:text-primary-400 transition-colors"
               >
-                {isMuted || volume === 0 ? (
-                  <VolumeX className="h-6 w-6" />
-                ) : (
-                  <Volume2 className="h-6 w-6" />
-                )}
+                {isMuted || volume === 0 ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
               </button>
               <input
                 type="range"
@@ -411,7 +418,6 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
               />
             </div>
 
-            {/* Time */}
             <span className="text-white text-sm font-medium">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
@@ -431,7 +437,6 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
                 
                 {showQualityMenu && (
                   <div className="absolute bottom-full right-0 mb-2 bg-black bg-opacity-95 rounded-lg overflow-hidden shadow-xl min-w-[150px]">
-                    {/* Auto option */}
                     <button
                       onClick={() => changeQuality(-1)}
                       className={`block w-full text-left px-4 py-3 text-white hover:bg-primary-600 transition-colors text-sm ${
@@ -441,7 +446,6 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
                       Auto {currentQuality === -1 && '✓'}
                     </button>
                     
-                    {/* Quality options - sorted high to low */}
                     {[...availableQualities]
                       .sort((a, b) => b.height - a.height)
                       .map((quality) => (
@@ -460,16 +464,11 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
               </div>
             )}
 
-            {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}
               className="text-white hover:text-primary-400 transition-colors"
             >
-              {isFullscreen ? (
-                <Minimize className="h-6 w-6" />
-              ) : (
-                <Maximize className="h-6 w-6" />
-              )}
+              {isFullscreen ? <Minimize className="h-6 w-6" /> : <Maximize className="h-6 w-6" />}
             </button>
           </div>
         </div>

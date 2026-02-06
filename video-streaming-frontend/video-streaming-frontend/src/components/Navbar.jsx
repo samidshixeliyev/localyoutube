@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Video, Search, Upload, LogOut, Menu, X, LogIn } from 'lucide-react';
+import { Search, Upload, LogOut, Menu, X, LogIn } from 'lucide-react';
 
 const Navbar = () => {
   const { logout, user, isAuthenticated, hasPermission } = useAuth();
@@ -26,15 +26,16 @@ const Navbar = () => {
     <nav className="bg-white shadow-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
-            <div className="flex items-center text-2xl font-extrabold">
-  <span className="text-black px-1">Mod</span>
-  <span className="px-1 py-1 rounded-md bg-orange-600 text-white">
-    Tube
-  </span>
-</div>
-
+          {/* Logo - FIXED: Removed nested <a> tags and changed class to className */}
+          <Link to="/" className="inline-flex items-center gap-2 select-none group">
+            <div className="flex items-center font-sans text-[2rem] font-black tracking-tight">
+              <span className="text-slate-800 group-hover:text-slate-950 group-hover:drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">
+                Mod
+              </span>
+              <span className="ml-1 rounded-xl bg-gradient-to-br from-amber-600 to-orange-700 px-3 py-1 text-slate-100 shadow-md ring-1 ring-black/10 group-hover:from-amber-500 group-hover:to-orange-600">
+                Tube
+              </span>
+            </div>
           </Link>
 
           {/* Search Bar - Desktop */}
@@ -78,11 +79,13 @@ const Navbar = () => {
                 {/* User Info */}
                 <div className="flex items-center space-x-3 px-4 py-2 bg-gray-100 rounded-lg">
                   <div className="h-8 w-8 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                    {user.name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
+                    {user?.username?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                   </div>
                   <div className="text-sm">
-                    <div className="font-medium text-gray-900">{user.name || user.email}</div>
-                    <div className="text-gray-500 text-xs capitalize">{user.role?.toLowerCase()}</div>
+                    <div className="font-medium text-gray-900">{user?.username || user?.email || 'User'}</div>
+                    {user?.role && (
+                      <div className="text-gray-500 text-xs capitalize">{user.role.toLowerCase()}</div>
+                    )}
                   </div>
                 </div>
 
@@ -141,7 +144,7 @@ const Navbar = () => {
           <div className="px-4 py-3 space-y-2">
             {isAuthenticated ? (
               <>
-                {/* Admin actions - Only show once */}
+                {/* Admin actions */}
                 {hasPermission('admin-modtube') && (
                   <>
                     <Link

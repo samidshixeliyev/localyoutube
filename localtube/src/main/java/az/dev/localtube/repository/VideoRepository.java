@@ -165,17 +165,22 @@ public class VideoRepository {
                                 .must(m -> m.multiMatch(mm -> mm
                                         .query(query)
                                         .fields("title^2", "description", "tags")
-                                        .type(TextQueryType.BestFields)           // or MOST_FIELDS — try both
-                                        .operator(Operator.Or)                     // ← very important for YouTube-like behavior
-                                        .fuzziness("2")                            // fixed edit distance 2
-                                        .prefixLength(1)                           // first char not fuzzy → faster + less garbage
-                                        .maxExpansions(50)                         // safety limit on fuzzy expansions
-                                        .minimumShouldMatch("75%")                 // helps when query has many words
-                                        .fuzzyTranspositions(true)                 // allow ab → ba typos
+                                        .type(TextQueryType.BestFields)
+                                        .operator(Operator.Or)
+                                        .fuzziness("2")
+                                        .prefixLength(1)
+                                        .maxExpansions(50)
+                                        .minimumShouldMatch("75%")
+                                        .fuzzyTranspositions(true)
                                 ))
                                 .filter(f -> f.term(t -> t
                                         .field("status")
                                         .value(VideoStatus.READY.name())
+                                ))
+                                // FIXED: Only search PUBLIC videos
+                                .filter(f -> f.term(t -> t
+                                        .field("visibility")
+                                        .value(VideoVisibility.PUBLIC.name())
                                 ))
                         )),
                 ObjectNode.class
@@ -192,9 +197,8 @@ public class VideoRepository {
                 .sort(so -> so.field(f -> f.field("uploadedAt").order(SortOrder.Desc)))
                 .query(q -> q.bool(b -> b
                         .must(m -> m.term(t -> t.field("status").value(VideoStatus.READY.name())))
-                        .should(sh -> sh.term(t -> t.field("visibility").value(VideoVisibility.PUBLIC.name())))
-                        .should(sh -> sh.term(t -> t.field("visibility").value(VideoVisibility.UNLISTED.name())))
-                        .minimumShouldMatch("1")
+                        // FIXED: Only show PUBLIC videos (not unlisted)
+                        .must(m -> m.term(t -> t.field("visibility").value(VideoVisibility.PUBLIC.name())))
                 )), ObjectNode.class);
 
         return extractVideos(response);
@@ -205,9 +209,8 @@ public class VideoRepository {
                 .index(indexName)
                 .query(q -> q.bool(b -> b
                         .must(m -> m.term(t -> t.field("status").value(VideoStatus.READY.name())))
-                        .should(sh -> sh.term(t -> t.field("visibility").value(VideoVisibility.PUBLIC.name())))
-                        .should(sh -> sh.term(t -> t.field("visibility").value(VideoVisibility.UNLISTED.name())))
-                        .minimumShouldMatch("1")
+                        // FIXED: Only count PUBLIC videos
+                        .must(m -> m.term(t -> t.field("visibility").value(VideoVisibility.PUBLIC.name())))
                 )));
         return response.count();
     }
