@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { videoService } from "../services/videoService";
+import videoService from "../services/videoService";
 import VideoPlayer from "../components/VideoPlayer";
 import ThumbnailUpload from "../components/ThumbnailUpload";
 import VideoDownloadButton from "../components/VideoDownloadButton";

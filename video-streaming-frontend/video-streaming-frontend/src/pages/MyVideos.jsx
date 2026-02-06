@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { videoService } from '../services/videoService';
+import  videoService  from '../services/videoService';
 import VideoCard from '../components/VideoCard';
 import Navbar from '../components/Navbar';
 import { Loader2, Upload as UploadIcon } from 'lucide-react';

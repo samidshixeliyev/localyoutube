@@ -1,59 +1,78 @@
 import api from './api';
 
-export const videoService = {
-  // Get public videos for home page
-  async getPublicVideos(page = 0, size = 12) {
+// Video service for all video-related API calls
+const videoService = {
+  // Get all public videos with pagination
+  getPublicVideos: async (page = 0, size = 12) => {
     try {
-      const response = await api.get(`/videos/public?page=${page}&size=${size}`);
-      return response.data.content || response.data || [];
+      console.log('[VideoService] Fetching public videos:', { page, size });
+      const response = await api.get('/videos/public', {
+        params: { page, size }
+      });
+      
+      // Handle different response formats
+      // Backend might return: { content: [...] } or just [...]
+      const videos = response.data.content || response.data || [];
+      console.log('[VideoService] Public videos loaded:', videos.length);
+      return videos;
     } catch (error) {
-      console.error('[videoService] Failed to load public videos:', error);
+      console.error('[VideoService] Error fetching public videos:', error);
       throw error;
     }
   },
 
   // Get single video by ID
-  async getVideo(id) {
+  getVideoById: async (id) => {
     try {
+      console.log('[VideoService] Fetching video:', id);
       const response = await api.get(`/videos/${id}`);
       return response.data;
     } catch (error) {
-      console.error('[videoService] Failed to load video:', error);
+      console.error('[VideoService] Error fetching video:', error);
+      throw error;
+    }
+  },
+
+  // Get current user's videos
+  getMyVideos: async () => {
+    try {
+      console.log('[VideoService] Fetching my videos');
+      const response = await api.get('/videos/my');
+      const videos = response.data.content || response.data || [];
+      console.log('[VideoService] My videos loaded:', videos.length);
+      return videos;
+    } catch (error) {
+      console.error('[VideoService] Error fetching my videos:', error);
       throw error;
     }
   },
 
   // Search videos
-  async searchVideos(query, page = 0, size = 12) {
+  searchVideos: async (query, page = 0, size = 12) => {
     try {
-      const response = await api.get(`/videos/search?q=${encodeURIComponent(query)}&page=${page}&size=${size}`);
-      return response.data.content || response.data || [];
+      console.log('[VideoService] Searching videos:', { query, page, size });
+      const response = await api.get('/videos/search', {
+        params: { query, page, size }
+      });
+      const videos = response.data.content || response.data || [];
+      console.log('[VideoService] Search results:', videos.length);
+      return videos;
     } catch (error) {
-      console.error('[videoService] Search failed:', error);
+      console.error('[VideoService] Error searching videos:', error);
       throw error;
     }
   },
 
-  // Get user's videos
-  async getMyVideos(page = 0, size = 12) {
+  // Upload new video
+  uploadVideo: async (formData, onProgress) => {
     try {
-      const response = await api.get(`/videos/my?page=${page}&size=${size}`);
-      return response.data.content || response.data || [];
-    } catch (error) {
-      console.error('[videoService] Failed to load my videos:', error);
-      throw error;
-    }
-  },
-
-  // Upload video
-  async uploadVideo(formData, onProgress) {
-    try {
+      console.log('[VideoService] Uploading video');
       const response = await api.post('/videos/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
         onUploadProgress: (progressEvent) => {
-          if (onProgress && progressEvent.total) {
+          if (onProgress) {
             const percentCompleted = Math.round(
               (progressEvent.loaded * 100) / progressEvent.total
             );
@@ -61,96 +80,104 @@ export const videoService = {
           }
         },
       });
+      console.log('[VideoService] Video uploaded successfully');
       return response.data;
     } catch (error) {
-      console.error('[videoService] Upload failed:', error);
+      console.error('[VideoService] Error uploading video:', error);
       throw error;
     }
   },
 
-  // Update video
-  async updateVideo(id, data) {
+  // Update video details
+  updateVideo: async (id, videoData) => {
     try {
-      const response = await api.put(`/videos/${id}`, data);
+      console.log('[VideoService] Updating video:', id, videoData);
+      const response = await api.put(`/videos/${id}`, videoData);
+      console.log('[VideoService] Video updated successfully');
       return response.data;
     } catch (error) {
-      console.error('[videoService] Update failed:', error);
+      console.error('[VideoService] Error updating video:', error);
       throw error;
     }
   },
 
   // Delete video
-  async deleteVideo(id) {
+  deleteVideo: async (id) => {
     try {
+      console.log('[VideoService] Deleting video:', id);
       const response = await api.delete(`/videos/${id}`);
+      console.log('[VideoService] Video deleted successfully');
       return response.data;
     } catch (error) {
-      console.error('[videoService] Delete failed:', error);
+      console.error('[VideoService] Error deleting video:', error);
       throw error;
-    }
-  },
-
-  // Update video privacy
-  async updatePrivacy(id, privacyData) {
-    try {
-      const response = await api.post(`/videos/${id}/privacy`, privacyData);
-      return response.data;
-    } catch (error) {
-      console.error('[videoService] Privacy update failed:', error);
-      throw error;
-    }
-  },
-
-  // Increment view count
-  async incrementView(id) {
-    try {
-      const response = await api.post(`/videos/${id}/view`);
-      return response.data;
-    } catch (error) {
-      console.error('[videoService] View increment failed:', error);
-      // Don't throw - view count is not critical
-      return null;
-    }
-  },
-
-  // Toggle like
-  async toggleLike(id) {
-    try {
-      const response = await api.post(`/videos/${id}/like`);
-      return response.data;
-    } catch (error) {
-      console.error('[videoService] Like toggle failed:', error);
-      throw error;
-    }
-  },
-
-  // Get like status
-  async getLikeStatus(id) {
-    try {
-      const response = await api.get(`/videos/${id}/like-status`);
-      return response.data;
-    } catch (error) {
-      console.error('[videoService] Like status check failed:', error);
-      // Return default if fails
-      return { liked: false };
     }
   },
 
   // Upload thumbnail
-  async uploadThumbnail(id, file) {
+  uploadThumbnail: async (videoId, thumbnailFile) => {
     try {
+      console.log('[VideoService] Uploading thumbnail for video:', videoId);
       const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await api.post(`/videos/${id}/thumbnail`, formData, {
+      formData.append('thumbnail', thumbnailFile);
+      
+      const response = await api.post(`/videos/${videoId}/thumbnail`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
+      console.log('[VideoService] Thumbnail uploaded successfully');
       return response.data;
     } catch (error) {
-      console.error('[videoService] Thumbnail upload failed:', error);
+      console.error('[VideoService] Error uploading thumbnail:', error);
       throw error;
     }
   },
+
+  // Like video
+  likeVideo: async (id) => {
+    try {
+      console.log('[VideoService] Liking video:', id);
+      const response = await api.post(`/videos/${id}/like`);
+      return response.data;
+    } catch (error) {
+      console.error('[VideoService] Error liking video:', error);
+      throw error;
+    }
+  },
+
+  // Unlike video
+  unlikeVideo: async (id) => {
+    try {
+      console.log('[VideoService] Unliking video:', id);
+      const response = await api.delete(`/videos/${id}/like`);
+      return response.data;
+    } catch (error) {
+      console.error('[VideoService] Error unliking video:', error);
+      throw error;
+    }
+  },
+
+  // Get HLS URL for video
+  // With Vite proxy, use relative URL
+  getHlsUrl: (videoId) => {
+    return `/hls/${videoId}/master.m3u8`;
+  },
+
+  // Get thumbnail URL
+  // With Vite proxy, use relative URL
+  getThumbnailUrl: (thumbnailPath) => {
+    if (!thumbnailPath) return null;
+    // If it's already a full URL, return as is
+    if (thumbnailPath.startsWith('http')) return thumbnailPath;
+    // Otherwise, use proxy path
+    return `/thumbnails/${thumbnailPath}`;
+  },
+
+  // Get download URL
+  getDownloadUrl: (videoId, quality = 'original') => {
+    return `/api/videos/${videoId}/download?quality=${quality}`;
+  },
 };
+
+export default videoService;

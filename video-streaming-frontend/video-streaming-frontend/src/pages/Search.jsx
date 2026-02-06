@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { videoService } from '../services/videoService';
+import  videoService  from '../services/videoService';
 import VideoCard from '../components/VideoCard';
 import Navbar from '../components/Navbar';
 import { Search as SearchIcon, Loader2 } from 'lucide-react';

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { videoService } from '../services/videoService';
+import videoService from '../services/videoService';
 import Navbar from '../components/Navbar';
 import { Play, Eye, Clock, Loader2 } from 'lucide-react';
 

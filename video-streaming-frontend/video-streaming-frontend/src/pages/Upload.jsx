@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { videoService } from '../services/videoService';
+import  videoService  from '../services/videoService';
 import Navbar from '../components/Navbar';
 import { Upload, X, CheckCircle, AlertCircle, Globe, Lock, Link2, Users } from 'lucide-react';
 

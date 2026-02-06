@@ -1,14 +1,10 @@
 import axios from 'axios';
 
-// Get frontend IP/hostname dynamically
-const getFrontendHost = () => {
-  // Use current window location to get IP/hostname
-  return `${window.location.protocol}//${window.location.hostname}`;
-};
-
-// FIXED: Backend runs on port 8081
+// Read API URL from environment variable or use Vite proxy default
+// In development: uses '/api' which Vite proxies to http://172.22.111.47:8081/api
+// In production: uses VITE_API_URL from .env file
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || `${getFrontendHost()}:8081/api`,
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },
