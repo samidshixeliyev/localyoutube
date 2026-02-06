@@ -64,7 +64,7 @@ public class UploadController {
     }
 
     @PostMapping("/init")
-    @PreAuthorize("hasAuthority('admin-modtube')")
+    @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<Map<String, String>> initUpload(
             @RequestParam String filename,
             @RequestParam(required = false) String title,
@@ -111,7 +111,7 @@ public class UploadController {
     }
 
     @PostMapping("/chunk")
-    @PreAuthorize("hasAuthority('admin-modtube')")
+    @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<Map<String, Object>> uploadChunk(
             @RequestParam("file") MultipartFile chunk,
             @RequestParam int chunkIndex,
@@ -172,7 +172,7 @@ public class UploadController {
     }
 
     @PostMapping("/complete")
-    @PreAuthorize("hasAuthority('admin-modtube')")
+    @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<Map<String, String>> completeUpload(
             @RequestParam String videoId,
             @AuthenticationPrincipal LocalTubeUserDetails user) {

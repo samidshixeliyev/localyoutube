@@ -283,7 +283,7 @@ public class VideoController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('admin-modtube')")
+    @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<?> deleteVideo(
             @PathVariable String id,
             @AuthenticationPrincipal LocalTubeUserDetails user) {
@@ -311,7 +311,7 @@ public class VideoController {
     }
 
     @PostMapping("/{id}/thumbnail")
-    @PreAuthorize("hasAuthority('admin-modtube')")
+    @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<Map<String, String>> uploadThumbnail(
             @PathVariable String id,
             @RequestParam("file") MultipartFile file,
@@ -478,7 +478,7 @@ public class VideoController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('admin-modtube')")
+    @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<?> updateVideo(
             @PathVariable String id,
             @RequestBody Map<String, Object> updates,
@@ -520,7 +520,7 @@ public class VideoController {
     }
 
     @PostMapping("/{id}/privacy")
-    @PreAuthorize("hasAuthority('admin-modtube')")
+    @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<?> setVideoPrivacy(
             @PathVariable String id,
             @RequestBody Map<String, Object> privacySettings,

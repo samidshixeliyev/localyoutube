@@ -1,14 +1,15 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';      // ← added useAuth here
 import { MiniPlayerProvider } from './context/MiniPlayerContext';
 import MiniPlayer from './components/MiniPlayer';
+import PrivateRoute from './components/PrivateRoute'; // adjust path if needed
 
 // Pages
 import Home from './pages/Home';
 import Login from './pages/Login';
 import VideoDetail from './pages/VideoDetail';
-import Upload from './pages/Upload';
+import UploadPage from './pages/UploadPage';
 import MyVideos from './pages/MyVideos';
 import SearchResults from './pages/SearchResults';
 import ChangePassword from './pages/ChangePassword';
@@ -18,83 +19,104 @@ import UserManagement from './pages/admin/UserManagement';
 import UserForm from './pages/admin/UserForm';
 import RoleManagement from './pages/admin/RoleManagement';
 
-// Protected route component
-function PrivateRoute({ children, requiredPermission }) {
-    const { isAuthenticated, hasPermission } = useAuth();
-
-    if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
-    }
-
-    if (requiredPermission && !hasPermission(requiredPermission)) {
-        return <Navigate to="/" replace />;
-    }
-
-    return children;
-}
-
 function AppContent() {
-    const { isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();     // ← now works
 
-    return (
-        <MiniPlayerProvider>
-            {/* ✅ FIXED: Removed Navbar from here - it's now only in individual pages */}
-            <div className="min-h-screen bg-gray-50">
-                <Routes>
-                    {/* Public */}
-                    <Route path="/" element={<Home />} />
-                    <Route path="/login" element={
-                        isAuthenticated ? <Navigate to="/" replace /> : <Login />
-                    } />
-                    <Route path="/video/:id" element={<VideoDetail />} />
-                    <Route path="/search" element={<SearchResults />} />
+  return (
+    <MiniPlayerProvider>
+      <div className="min-h-screen bg-gray-50">
+        <Routes>
+          {/* Public */}
+          <Route path="/" element={<Home />} />
+          <Route 
+            path="/login" 
+            element={
+              isAuthenticated ? <Navigate to="/" replace /> : <Login />
+            } 
+          />
+          <Route path="/video/:id" element={<VideoDetail />} />
+          <Route path="/search" element={<SearchResults />} />
 
-                    {/* Authenticated */}
-                    <Route path="/change-password" element={
-                        <PrivateRoute><ChangePassword /></PrivateRoute>
-                    } />
+          {/* Authenticated - any logged in user */}
+          <Route 
+            path="/change-password" 
+            element={
+              <PrivateRoute>
+                <ChangePassword />
+              </PrivateRoute>
+            } 
+          />
 
-                    {/* Admin (admin-modtube) */}
-                    <Route path="/upload" element={
-                        <PrivateRoute requiredPermission="admin-modtube"><Upload /></PrivateRoute>
-                    } />
-                    <Route path="/my-videos" element={
-                        <PrivateRoute requiredPermission="admin-modtube"><MyVideos /></PrivateRoute>
-                    } />
+          {/* admin-modtube OR super-admin */}
+          <Route 
+            path="/upload" 
+            element={
+              <PrivateRoute requiredPermission="admin-modtube">
+                <UploadPage />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/my-videos" 
+            element={
+              <PrivateRoute requiredPermission="admin-modtube">
+                <MyVideos />
+              </PrivateRoute>
+            } 
+          />
 
-                    {/* Super Admin Only */}
-                    <Route path="/admin/users" element={
-                        <PrivateRoute requiredPermission="super-admin"><UserManagement /></PrivateRoute>
-                    } />
-                    <Route path="/admin/users/new" element={
-                        <PrivateRoute requiredPermission="super-admin"><UserForm /></PrivateRoute>
-                    } />
-                    <Route path="/admin/users/:id/edit" element={
-                        <PrivateRoute requiredPermission="super-admin"><UserForm /></PrivateRoute>
-                    } />
-                    <Route path="/admin/roles" element={
-                        <PrivateRoute requiredPermission="super-admin"><RoleManagement /></PrivateRoute>
-                    } />
+          {/* Super-admin only */}
+          <Route 
+            path="/admin/users" 
+            element={
+              <PrivateRoute requiredPermission="super-admin">
+                <UserManagement />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/admin/users/new" 
+            element={
+              <PrivateRoute requiredPermission="super-admin">
+                <UserForm />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/admin/users/:id/edit" 
+            element={
+              <PrivateRoute requiredPermission="super-admin">
+                <UserForm />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/admin/roles" 
+            element={
+              <PrivateRoute requiredPermission="super-admin">
+                <RoleManagement />
+              </PrivateRoute>
+            } 
+          />
 
-                    {/* Fallback */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
+          {/* 404 */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
 
-                {/* Global Mini Player */}
-                <MiniPlayer />
-            </div>
-        </MiniPlayerProvider>
-    );
+        <MiniPlayer />
+      </div>
+    </MiniPlayerProvider>
+  );
 }
 
 function App() {
-    return (
-        <BrowserRouter>
-            <AuthProvider>
-                <AppContent />
-            </AuthProvider>
-        </BrowserRouter>
-    );
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
 
 export default App;

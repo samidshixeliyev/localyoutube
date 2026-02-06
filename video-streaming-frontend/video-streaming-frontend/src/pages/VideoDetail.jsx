@@ -4,6 +4,7 @@ import videoService from "../services/videoService";
 import VideoPlayer from "../components/VideoPlayer";
 import ThumbnailUpload from "../components/ThumbnailUpload";
 import CommentSection from "../components/CommentSection";
+import VideoSuggestions from "../components/VideoSuggestion";
 import Navbar from "../components/Navbar";
 import { 
   ThumbsUp, 
@@ -20,7 +21,8 @@ import {
   Save,
   X,
   Check,
-  Plus
+  Plus,
+  Hash
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -75,7 +77,10 @@ const VideoDetail = () => {
           username: decoded.username || decoded.name || userEmail.split("@")[0],
           permissions: userPermissions,
           role: userRole,
-          hasAdminPermission: userPermissions.includes('admin-modtube') || userRole === 'ADMIN'
+          hasAdminPermission: userPermissions.includes('admin-modtube') || 
+                             userPermissions.includes('super-admin') ||
+                             userRole === 'ADMIN' ||
+                             userRole === 'SUPER_ADMIN'
         });
       } catch (err) {
         setCurrentUser(null);
@@ -243,11 +248,15 @@ const VideoDetail = () => {
     }));
   };
 
+  const normalizeTag = (tag) => {
+    return tag.replace(/^#+/, '').trim().toLowerCase();
+  };
+
   const addTag = () => {
-    const tag = tagInput.trim().toLowerCase();
-    if (!tag) return;
+    const normalized = normalizeTag(tagInput);
+    if (!normalized) return;
     
-    if (editForm.tags.includes(tag)) {
+    if (editForm.tags.includes(normalized)) {
       alert('This tag is already added');
       return;
     }
@@ -257,9 +266,14 @@ const VideoDetail = () => {
       return;
     }
     
+    if (!/^[a-z0-9-]+$/.test(normalized)) {
+      alert('Tags can only contain letters, numbers, and hyphens');
+      return;
+    }
+    
     setEditForm(prev => ({
       ...prev,
-      tags: [...prev.tags, tag]
+      tags: [...prev.tags, normalized]
     }));
     setTagInput('');
   };
@@ -269,6 +283,14 @@ const VideoDetail = () => {
       ...prev,
       tags: prev.tags.filter(t => t !== tag)
     }));
+  };
+
+  const handleTagInputChange = (e) => {
+    let value = e.target.value;
+    if (value && !value.startsWith('#')) {
+      value = '#' + value;
+    }
+    setTagInput(value);
   };
 
   const formatDate = (timestamp) => {
@@ -334,10 +356,7 @@ const VideoDetail = () => {
     currentUser.id === video.uploaderEmail
   );
   
-  const isAdmin = currentUser && (
-    currentUser.hasAdminPermission ||
-    (user && hasPermission && hasPermission('admin-modtube'))
-  );
+  const isAdmin = currentUser && currentUser.hasAdminPermission;
   
   const canEdit = isOwner || isAdmin;
 
@@ -352,7 +371,7 @@ const VideoDetail = () => {
           {/* Main content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Video Player */}
-            <div className="bg-black rounded-lg overflow-hidden">
+            <div className="bg-black rounded-lg overflow-hidden shadow-xl">
               {video.hlsUrl && video.status === "ready" ? (
                 <VideoPlayer
                   hlsUrl={video.hlsUrl}
@@ -376,10 +395,9 @@ const VideoDetail = () => {
 
             {/* Video Info Card */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              {/* INLINE EDITING MODE */}
               {isEditing ? (
                 <div className="space-y-4">
-                  {/* Title Input */}
+                  {/* Title */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
                     <input
@@ -390,7 +408,7 @@ const VideoDetail = () => {
                     />
                   </div>
 
-                  {/* Description Input */}
+                  {/* Description */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                     <textarea
@@ -405,23 +423,27 @@ const VideoDetail = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
                     <div className="flex gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                        placeholder="Add tag..."
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="relative flex-1">
+                        <Hash className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                        <input
+                          type="text"
+                          value={tagInput}
+                          onChange={handleTagInputChange}
+                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                          placeholder="#example-tag"
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
                       <button onClick={addTag} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                         <Plus className="h-4 w-4" />
                       </button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {editForm.tags.map(tag => (
-                        <span key={tag} className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-sm">
-                          #{tag}
-                          <button onClick={() => removeTag(tag)} className="text-red-600 hover:text-red-700">
+                        <span key={tag} className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
+                          <Hash className="h-3 w-3" />
+                          {tag}
+                          <button onClick={() => removeTag(tag)} className="text-blue-600 hover:text-blue-800">
                             <X className="h-3 w-3" />
                           </button>
                         </span>
@@ -429,22 +451,20 @@ const VideoDetail = () => {
                     </div>
                   </div>
 
-                  {/* Visibility Radio Buttons */}
+                  {/* Visibility */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Visibility</label>
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { value: 'public', icon: Globe, label: 'Public', color: 'green' },
-                        { value: 'unlisted', icon: Link2, label: 'Unlisted', color: 'yellow' },
-                        { value: 'private', icon: Lock, label: 'Private', color: 'red' },
-                        { value: 'restricted', icon: Users, label: 'Restricted', color: 'purple' }
+                        { value: 'public', icon: Globe, label: 'Public' },
+                        { value: 'unlisted', icon: Link2, label: 'Unlisted' },
+                        { value: 'private', icon: Lock, label: 'Private' },
+                        { value: 'restricted', icon: Users, label: 'Restricted' }
                       ].map(option => {
                         const Icon = option.icon;
                         return (
-                          <label key={option.value} className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                            editForm.visibility === option.value 
-                              ? `border-${option.color}-500 bg-${option.color}-50` 
-                              : 'border-gray-200 hover:border-gray-300'
+                          <label key={option.value} className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer ${
+                            editForm.visibility === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
                           }`}>
                             <input
                               type="radio"
@@ -482,9 +502,9 @@ const VideoDetail = () => {
                       </div>
                       <div className="space-y-2">
                         {editForm.allowedEmails.map(email => (
-                          <div key={email} className="flex items-center justify-between bg-white px-3 py-2 rounded border border-purple-200">
+                          <div key={email} className="flex items-center justify-between bg-white px-3 py-2 rounded border">
                             <span className="text-sm">{email}</span>
-                            <button onClick={() => removeEmail(email)} className="text-red-600 hover:text-red-700">
+                            <button onClick={() => removeEmail(email)} className="text-red-600">
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
@@ -493,7 +513,7 @@ const VideoDetail = () => {
                     </div>
                   )}
 
-                  {/* Save/Cancel Buttons */}
+                  {/* Actions */}
                   <div className="flex gap-3 pt-4 border-t">
                     <button
                       onClick={handleSaveEdit}
@@ -501,21 +521,12 @@ const VideoDetail = () => {
                       className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                     >
                       {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-                      <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                      {saving ? 'Saving...' : 'Save'}
                     </button>
                     <button
-                      onClick={() => {
-                        setIsEditing(false);
-                        setEditForm({
-                          title: video.title || '',
-                          description: video.description || '',
-                          visibility: video.visibility || 'public',
-                          allowedEmails: video.allowedEmails || [],
-                          tags: video.tags || []
-                        });
-                      }}
+                      onClick={() => setIsEditing(false)}
                       disabled={saving}
-                      className="px-6 py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                      className="px-6 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50"
                     >
                       Cancel
                     </button>
@@ -523,7 +534,6 @@ const VideoDetail = () => {
                 </div>
               ) : (
                 <>
-                  {/* VIEW MODE */}
                   <div className="flex items-start justify-between mb-4 gap-4">
                     <h1 className="text-2xl font-bold text-gray-900 flex-1">
                       {video.title}
@@ -534,7 +544,7 @@ const VideoDetail = () => {
                     </span>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-6 text-gray-600 mb-6 pb-6 border-b border-gray-200">
+                  <div className="flex flex-wrap items-center gap-6 text-gray-600 mb-6 pb-6 border-b">
                     <div className="flex items-center space-x-2">
                       <Eye className="h-5 w-5" />
                       <span className="font-medium">{formatViews(video.views)}</span>
@@ -545,14 +555,12 @@ const VideoDetail = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 mb-6 pb-6 border-b border-gray-200">
+                  <div className="flex flex-wrap items-center gap-3 mb-6 pb-6 border-b">
                     <button
                       onClick={handleLike}
                       disabled={isLiking}
                       className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-                        liked
-                          ? "bg-primary-600 text-white shadow-md"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        liked ? "bg-primary-600 text-white shadow-md" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                       } disabled:opacity-50`}
                     >
                       <ThumbsUp className={`h-5 w-5 ${liked ? 'fill-current' : ''}`} />
@@ -589,16 +597,14 @@ const VideoDetail = () => {
                   </div>
 
                   {video.uploaderName && (
-                    <div className="mb-6 pb-6 border-b border-gray-200">
+                    <div className="mb-6 pb-6 border-b">
                       <div className="flex items-center space-x-3">
                         <div className="h-12 w-12 bg-gradient-to-br from-primary-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md">
                           {video.uploaderName.charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <p className="font-semibold text-gray-900 text-lg">
-                            {video.uploaderName}
-                          </p>
-                        </div>
+                        <p className="font-semibold text-gray-900 text-lg">
+                          {video.uploaderName}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -613,7 +619,7 @@ const VideoDetail = () => {
                   )}
 
                   {video.tags && video.tags.length > 0 && (
-                    <div className="mb-6">
+                    <div>
                       <div className="flex flex-wrap gap-2">
                         {video.tags.map((tag, index) => (
                           <span key={index} className="bg-gray-100 px-3 py-1 rounded-full text-sm text-gray-700">
@@ -641,31 +647,30 @@ const VideoDetail = () => {
             />
           </div>
 
-          {/* Sidebar */}
+          {/* Sidebar with Suggestions */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-md p-6 sticky top-24">
-              <h2 className="font-semibold text-gray-900 mb-4">
-                Video Information
-              </h2>
-              
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Status:</span>
-                  <span className={`font-medium px-2 py-1 rounded ${
-                    video.status === 'ready' ? 'bg-green-100 text-green-800' :
-                    video.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {video.status ? video.status.charAt(0).toUpperCase() + video.status.slice(1) : 'Unknown'}
-                  </span>
+            <div className="sticky top-24 space-y-6">
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h2 className="font-semibold text-gray-900 mb-4 text-lg">
+                  Video Info
+                </h2>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Status:</span>
+                    <span className={`font-medium px-2 py-1 rounded ${
+                      video.status === 'ready' ? 'bg-green-100 text-green-800' :
+                      video.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {video.status ? video.status.charAt(0).toUpperCase() + video.status.slice(1) : 'Unknown'}
+                    </span>
+                  </div>
                 </div>
+              </div>
 
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Visibility:</span>
-                  <span className={`font-medium px-2 py-1 rounded text-white ${visibilityInfo.color}`}>
-                    {visibilityInfo.text}
-                  </span>
-                </div>
+              {/* SUGGESTIONS */}
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <VideoSuggestions videoId={id} tags={video.tags || []} />
               </div>
             </div>
           </div>

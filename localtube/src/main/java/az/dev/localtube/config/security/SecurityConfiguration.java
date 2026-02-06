@@ -89,14 +89,16 @@ public class SecurityConfiguration {
                         // SUPER-ADMIN ONLY
                         .requestMatchers("/api/admin/**").hasAuthority("super-admin")
 
-                        // ADMIN-MODTUBE PERMISSION
-                        .requestMatchers("/api/upload/**").hasAuthority("admin-modtube")
-                        .requestMatchers(HttpMethod.PUT, "/api/videos/*").hasAuthority("admin-modtube")
-                        .requestMatchers(HttpMethod.PATCH, "/api/videos/*").hasAuthority("admin-modtube")
-                        .requestMatchers(HttpMethod.DELETE, "/api/videos/*").hasAuthority("admin-modtube")
-                        .requestMatchers(HttpMethod.POST, "/api/videos/*/thumbnail").hasAuthority("admin-modtube")
-                        .requestMatchers(HttpMethod.POST, "/api/videos/*/privacy").hasAuthority("admin-modtube")
-                        .requestMatchers("/actuator/**").hasAuthority("admin-modtube")
+                        .requestMatchers("/api/upload/**").hasAnyAuthority("admin-modtube", "super-admin")
+
+                        .requestMatchers(HttpMethod.PUT, "/api/videos/*").hasAnyAuthority("admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.PATCH, "/api/videos/*").hasAnyAuthority("admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.DELETE, "/api/videos/*").hasAnyAuthority("admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/thumbnail").hasAnyAuthority("admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/privacy").hasAnyAuthority("admin-modtube", "super-admin")
+
+                        // Actuator - admin-modtube OR super-admin
+                        .requestMatchers("/actuator/**").hasAnyAuthority("admin-modtube", "super-admin")
 
                         // Everything else requires authentication
                         .anyRequest().authenticated()

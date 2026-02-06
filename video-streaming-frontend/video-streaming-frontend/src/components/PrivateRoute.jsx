@@ -2,8 +2,12 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const PrivateRoute = ({ children, requireAuth = true }) => {
-  const { isAuthenticated, loading } = useAuth();
+const PrivateRoute = ({ 
+  children, 
+  requiredPermission,          // string e.g. "admin-modtube" or undefined
+  requireAuth = true 
+}) => {
+  const { isAuthenticated, loading, hasPermission } = useAuth();
 
   if (loading) {
     return (
@@ -13,13 +17,27 @@ const PrivateRoute = ({ children, requireAuth = true }) => {
     );
   }
 
-  // If route doesn't require auth, always render
+  // Public routes (no authentication required)
   if (!requireAuth) {
     return children;
   }
 
-  // If route requires auth, check authentication
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
+  // Not logged in → redirect to login
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Super-admin can access EVERY protected route
+  if (hasPermission('super-admin')) {
+    return children;
+  }
+
+  // For regular users → check the specific permission if required
+  if (requiredPermission && !hasPermission(requiredPermission)) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
 };
 
 export default PrivateRoute;
