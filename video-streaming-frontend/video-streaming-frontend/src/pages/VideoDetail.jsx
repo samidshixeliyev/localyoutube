@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import videoService from "../services/videoService";
 import VideoPlayer from "../components/VideoPlayer";
 import ThumbnailUpload from "../components/ThumbnailUpload";
-import VideoDownloadButton from "../components/VideoDownloadButton";
 import CommentSection from "../components/CommentSection";
 import Navbar from "../components/Navbar";
 import { 
@@ -559,8 +558,6 @@ const VideoDetail = () => {
                       <ThumbsUp className={`h-5 w-5 ${liked ? 'fill-current' : ''}`} />
                       <span className="font-medium">{video.likes || 0}</span>
                     </button>
-
-                    <VideoDownloadButton video={video} />
 
                     {canEdit && (
                       <>

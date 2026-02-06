@@ -2,10 +2,10 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import videoService from '../services/videoService';
 import Navbar from '../components/Navbar';
-import { Upload, X, CheckCircle, AlertCircle, Globe, Lock, Link2, Users } from 'lucide-react';
+import { Upload, X, CheckCircle, AlertCircle, Globe, Lock, Link2, Users, Hash, Plus } from 'lucide-react';
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
-const MAX_RETRIES = 3; // Maximum retries per chunk
+const MAX_RETRIES = 3;
 
 const UploadPage = () => {
   const navigate = useNavigate();
@@ -16,6 +16,11 @@ const UploadPage = () => {
   const [visibility, setVisibility] = useState('public');
   const [allowedEmails, setAllowedEmails] = useState([]);
   const [emailInput, setEmailInput] = useState('');
+  
+  // ✅ NEW: Tag state
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState('');
+  
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
@@ -25,43 +30,21 @@ const UploadPage = () => {
   const [totalChunks, setTotalChunks] = useState(0);
 
   const visibilityOptions = [
-    { 
-      value: 'public', 
-      icon: Globe, 
-      label: 'Public', 
-      description: 'Everyone can see this video' 
-    },
-    { 
-      value: 'unlisted', 
-      icon: Link2, 
-      label: 'Unlisted', 
-      description: 'Anyone with the link can see' 
-    },
-    { 
-      value: 'private', 
-      icon: Lock, 
-      label: 'Private', 
-      description: 'Only admins can see' 
-    },
-    { 
-      value: 'restricted', 
-      icon: Users, 
-      label: 'Restricted', 
-      description: 'Only specific users can see' 
-    }
+    { value: 'public', icon: Globe, label: 'Public', description: 'Everyone can see this video' },
+    { value: 'unlisted', icon: Link2, label: 'Unlisted', description: 'Anyone with the link can see' },
+    { value: 'private', icon: Lock, label: 'Private', description: 'Only admins can see' },
+    { value: 'restricted', icon: Users, label: 'Restricted', description: 'Only specific users can see' }
   ];
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validate file type
       if (!file.type.startsWith('video/')) {
         setError('Please select a valid video file');
         return;
       }
 
-      // Validate file size (max 10GB)
-      const maxSize = 10 * 1024 * 1024 * 1024; // 10GB
+      const maxSize = 10 * 1024 * 1024 * 1024;
       if (file.size > maxSize) {
         setError('File size exceeds 10GB limit');
         return;
@@ -72,6 +55,59 @@ const UploadPage = () => {
         setTitle(file.name.replace(/\.[^/.]+$/, ''));
       }
       setError('');
+    }
+  };
+
+  // ✅ NEW: Tag handling with # prefix
+  const normalizeTag = (tag) => {
+    // Remove # if present, trim, lowercase
+    return tag.replace(/^#+/, '').trim().toLowerCase();
+  };
+
+  const addTag = () => {
+    const normalized = normalizeTag(tagInput);
+    if (!normalized) return;
+    
+    if (tags.includes(normalized)) {
+      setError('This tag is already added');
+      return;
+    }
+    
+    if (tags.length >= 10) {
+      setError('Maximum 10 tags allowed');
+      return;
+    }
+    
+    // Validate tag format (alphanumeric and hyphens)
+    if (!/^[a-z0-9-]+$/.test(normalized)) {
+      setError('Tags can only contain letters, numbers, and hyphens');
+      return;
+    }
+    
+    setTags([...tags, normalized]);
+    setTagInput('');
+    setError('');
+  };
+
+  const removeTag = (tag) => {
+    setTags(tags.filter(t => t !== tag));
+  };
+
+  const handleTagInputChange = (e) => {
+    let value = e.target.value;
+    
+    // Auto-add # prefix if user starts typing without it
+    if (value && !value.startsWith('#')) {
+      value = '#' + value;
+    }
+    
+    setTagInput(value);
+  };
+
+  const handleTagKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTag();
     }
   };
 
@@ -99,7 +135,7 @@ const UploadPage = () => {
     while (retries < MAX_RETRIES) {
       try {
         await videoService.uploadChunk(chunk, chunkIndex, totalChunks, videoId);
-        return; // Success, exit retry loop
+        return;
       } catch (err) {
         retries++;
         console.warn(`[Upload] Chunk ${chunkIndex} failed, retry ${retries}/${MAX_RETRIES}`);
@@ -108,7 +144,6 @@ const UploadPage = () => {
           throw new Error(`Failed to upload chunk ${chunkIndex + 1} after ${MAX_RETRIES} attempts`);
         }
         
-        // Exponential backoff: wait 1s, 2s, 4s...
         await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries - 1)));
       }
     }
@@ -119,7 +154,6 @@ const UploadPage = () => {
     setTotalChunks(chunks);
     
     try {
-      // Initialize upload
       const initResponse = await videoService.initUpload(
         file.name,
         title,
@@ -131,7 +165,6 @@ const UploadPage = () => {
       const videoId = initResponse.videoId;
       setUploadedVideoId(videoId);
 
-      // Upload chunks with retry logic
       for (let chunkIndex = 0; chunkIndex < chunks; chunkIndex++) {
         setCurrentChunk(chunkIndex + 1);
         
@@ -140,19 +173,24 @@ const UploadPage = () => {
         const chunk = file.slice(start, end);
 
         await uploadChunkWithRetry(chunk, chunkIndex, chunks, videoId);
-
         setUploadProgress(Math.round(((chunkIndex + 1) / chunks) * 100));
       }
 
-      // Complete upload
       await videoService.completeUpload(videoId, chunks);
 
-      // Set privacy settings if needed
-      if (visibility !== 'public' || allowedEmails.length > 0) {
-        await videoService.setPrivacy(videoId, {
-          visibility,
-          allowedUserEmails: allowedEmails
-        });
+      // ✅ UPDATED: Set privacy AND tags
+      const updates = {
+        visibility,
+        allowedUserEmails: allowedEmails
+      };
+      
+      if (visibility !== 'public' || allowedEmails.length > 0 || tags.length > 0) {
+        await videoService.setPrivacy(videoId, updates);
+        
+        // Also update with tags
+        if (tags.length > 0) {
+          await videoService.updateVideo(videoId, { tags });
+        }
       }
       
       setSuccess(true);
@@ -199,6 +237,8 @@ const UploadPage = () => {
     setVisibility('public');
     setAllowedEmails([]);
     setEmailInput('');
+    setTags([]);
+    setTagInput('');
     setUploadProgress(0);
     setCurrentChunk(0);
     setTotalChunks(0);
@@ -341,6 +381,65 @@ const UploadPage = () => {
                 placeholder="Describe your video"
               />
               <p className="text-xs text-gray-500 mt-1">{description.length}/5000 characters</p>
+            </div>
+
+            {/* ✅ NEW: Tags Section */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Tags (Optional)
+              </label>
+              <div className="flex space-x-2 mb-3">
+                <div className="relative flex-1">
+                  <Hash className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={handleTagInputChange}
+                    onKeyPress={handleTagKeyPress}
+                    disabled={uploading}
+                    maxLength={30}
+                    placeholder="#example-tag"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={addTag}
+                  disabled={uploading || tags.length >= 10}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add
+                </button>
+              </div>
+
+              {/* Tag display */}
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {tags.map(tag => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium"
+                    >
+                      <Hash className="h-3 w-3" />
+                      {tag}
+                      {!uploading && (
+                        <button
+                          type="button"
+                          onClick={() => removeTag(tag)}
+                          className="text-blue-600 hover:text-blue-800 ml-1"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              <p className="text-xs text-gray-500">
+                {tags.length}/10 tags • Tags help people find your video
+              </p>
             </div>
 
             {/* Privacy Settings */}

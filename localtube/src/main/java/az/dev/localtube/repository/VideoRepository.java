@@ -152,71 +152,187 @@ public class VideoRepository {
         return response.count();
     }
 
+    // FIXED: Search with user email context for visibility filtering
     public List<Video> search(String query) throws IOException {
-        return search(query, 0, 20);
+        return search(query, 0, 20, null);
     }
 
     public List<Video> search(String query, int page, int size) throws IOException {
+        return search(query, page, size, null);
+    }
+
+    /**
+     * Search videos with visibility filtering based on user email
+     * @param query Search query
+     * @param page Page number
+     * @param size Page size
+     * @param userEmail Current user's email (null for guests)
+     * @return List of videos visible to the user
+     */
+    public List<Video> search(String query, int page, int size, String userEmail) throws IOException {
         SearchResponse<ObjectNode> response = client.search(s -> s
                         .index(indexName)
                         .from(page * size)
                         .size(size)
-                        .query(q -> q.bool(b -> b
-                                .must(m -> m.multiMatch(mm -> mm
-                                        .query(query)
-                                        .fields("title^2", "description", "tags")
-                                        .type(TextQueryType.BestFields)
-                                        .operator(Operator.Or)
-                                        .fuzziness("2")
-                                        .prefixLength(1)
-                                        .maxExpansions(50)
-                                        .minimumShouldMatch("75%")
-                                        .fuzzyTranspositions(true)
-                                ))
-                                .filter(f -> f.term(t -> t
-                                        .field("status")
-                                        .value(VideoStatus.READY.name())
-                                ))
-                                // FIXED: Only search PUBLIC videos
-                                .filter(f -> f.term(t -> t
+                        .query(q -> q.bool(b -> {
+                            var boolQuery = b
+                                    .must(m -> m.multiMatch(mm -> mm
+                                            .query(query)
+                                            .fields("title^2", "description", "tags^1.5")
+                                            .type(TextQueryType.BestFields)
+                                            .operator(Operator.Or)
+                                            .fuzziness("AUTO")
+                                            .prefixLength(0)
+                                            .maxExpansions(50)
+                                            .minimumShouldMatch("50%")
+                                            .fuzzyTranspositions(true)
+                                    ))
+                                    .filter(f -> f.term(t -> t
+                                            .field("status")
+                                            .value(VideoStatus.READY.name())
+                                    ));
+
+                            // Visibility filter based on user email
+                            if (userEmail != null) {
+                                String normalizedEmail = userEmail.toLowerCase().trim();
+                                boolQuery.filter(f -> f.bool(visFilter -> visFilter
+                                        // Public videos
+                                        .should(sh -> sh.term(t -> t
+                                                .field("visibility")
+                                                .value(VideoVisibility.PUBLIC.name())
+                                        ))
+                                        // Unlisted videos (anyone with link)
+                                        .should(sh -> sh.term(t -> t
+                                                .field("visibility")
+                                                .value(VideoVisibility.UNLISTED.name())
+                                        ))
+                                        // Restricted videos where user is in allowedEmails
+                                        .should(sh -> sh.bool(restrictedBool -> restrictedBool
+                                                .must(m -> m.term(t -> t
+                                                        .field("visibility")
+                                                        .value(VideoVisibility.RESTRICTED.name())
+                                                ))
+                                                .must(m -> m.term(t -> t
+                                                        .field("allowedEmails")
+                                                        .value(normalizedEmail)
+                                                ))
+                                        ))
+                                        .minimumShouldMatch("1")
+                                ));
+                            } else {
+                                // Guest users: only PUBLIC videos
+                                boolQuery.filter(f -> f.term(t -> t
                                         .field("visibility")
                                         .value(VideoVisibility.PUBLIC.name())
-                                ))
-                        )),
+                                ));
+                            }
+
+                            return boolQuery;
+                        })),
                 ObjectNode.class
         );
 
         return extractVideos(response);
     }
 
+    // FIXED: Find public videos with user email context
     public List<Video> findPublicVideos(int page, int size) throws IOException {
+        return findPublicVideos(page, size, null);
+    }
+
+    /**
+     * Find videos visible to user (public + restricted if user is allowed)
+     * @param page Page number
+     * @param size Page size
+     * @param userEmail Current user's email (null for guests)
+     * @return List of videos visible to the user
+     */
+    public List<Video> findPublicVideos(int page, int size, String userEmail) throws IOException {
         SearchResponse<ObjectNode> response = client.search(s -> s
                 .index(indexName)
                 .from(page * size)
                 .size(size)
                 .sort(so -> so.field(f -> f.field("uploadedAt").order(SortOrder.Desc)))
-                .query(q -> q.bool(b -> b
-                        .must(m -> m.term(t -> t.field("status").value(VideoStatus.READY.name())))
-                        // FIXED: Only show PUBLIC videos (not unlisted)
-                        .must(m -> m.term(t -> t.field("visibility").value(VideoVisibility.PUBLIC.name())))
-                )), ObjectNode.class);
+                .query(q -> q.bool(b -> {
+                    var boolQuery = b.must(m -> m.term(t -> t.field("status").value(VideoStatus.READY.name())));
+
+                    if (userEmail != null) {
+                        String normalizedEmail = userEmail.toLowerCase().trim();
+                        boolQuery.filter(f -> f.bool(visFilter -> visFilter
+                                // Public videos
+                                .should(sh -> sh.term(t -> t
+                                        .field("visibility")
+                                        .value(VideoVisibility.PUBLIC.name())
+                                ))
+                                // Restricted videos where user is in allowedEmails
+                                .should(sh -> sh.bool(restrictedBool -> restrictedBool
+                                        .must(m -> m.term(t -> t
+                                                .field("visibility")
+                                                .value(VideoVisibility.RESTRICTED.name())
+                                        ))
+                                        .must(m -> m.term(t -> t
+                                                .field("allowedEmails")
+                                                .value(normalizedEmail)
+                                        ))
+                                ))
+                                .minimumShouldMatch("1")
+                        ));
+                    } else {
+                        // Guest users: only PUBLIC videos
+                        boolQuery.filter(f -> f.term(t -> t
+                                .field("visibility")
+                                .value(VideoVisibility.PUBLIC.name())
+                        ));
+                    }
+
+                    return boolQuery;
+                })), ObjectNode.class);
 
         return extractVideos(response);
     }
 
     public long countPublicVideos() throws IOException {
+        return countPublicVideos(null);
+    }
+
+    public long countPublicVideos(String userEmail) throws IOException {
         CountResponse response = client.count(c -> c
                 .index(indexName)
-                .query(q -> q.bool(b -> b
-                        .must(m -> m.term(t -> t.field("status").value(VideoStatus.READY.name())))
-                        // FIXED: Only count PUBLIC videos
-                        .must(m -> m.term(t -> t.field("visibility").value(VideoVisibility.PUBLIC.name())))
-                )));
+                .query(q -> q.bool(b -> {
+                    var boolQuery = b.must(m -> m.term(t -> t.field("status").value(VideoStatus.READY.name())));
+
+                    if (userEmail != null) {
+                        String normalizedEmail = userEmail.toLowerCase().trim();
+                        boolQuery.filter(f -> f.bool(visFilter -> visFilter
+                                .should(sh -> sh.term(t -> t
+                                        .field("visibility")
+                                        .value(VideoVisibility.PUBLIC.name())
+                                ))
+                                .should(sh -> sh.bool(restrictedBool -> restrictedBool
+                                        .must(m -> m.term(t -> t
+                                                .field("visibility")
+                                                .value(VideoVisibility.RESTRICTED.name())
+                                        ))
+                                        .must(m -> m.term(t -> t
+                                                .field("allowedEmails")
+                                                .value(normalizedEmail)
+                                        ))
+                                ))
+                                .minimumShouldMatch("1")
+                        ));
+                    } else {
+                        boolQuery.filter(f -> f.term(t -> t
+                                .field("visibility")
+                                .value(VideoVisibility.PUBLIC.name())
+                        ));
+                    }
+
+                    return boolQuery;
+                })));
         return response.count();
     }
 
     public void updateStatus(String id, VideoStatus status) throws IOException {
-        // Use upsert to handle the case where document doesn't exist yet
         try {
             Optional<Video> videoOpt = findById(id);
             if (videoOpt.isPresent()) {
@@ -267,8 +383,8 @@ public class VideoRepository {
                             .properties("uploaderName", p -> p.keyword(k -> k))
                             .properties("uploaderEmail", p -> p.keyword(k -> k))
                             .properties("status", p -> p.keyword(k -> k))
-                            .properties("visibility", p -> p.keyword(k -> k))  // NEW
-                            .properties("allowedUserIds", p -> p.long_(l -> l))  // NEW
+                            .properties("visibility", p -> p.keyword(k -> k))
+                            .properties("allowedEmails", p -> p.keyword(k -> k))  // Array of emails
                             .properties("tags", p -> p.keyword(k -> k))
                             .properties("availableQualities", p -> p.keyword(k -> k))
                             .properties("uploadedAt", p -> p.date(d -> d))

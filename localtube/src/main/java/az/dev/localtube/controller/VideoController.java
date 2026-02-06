@@ -36,13 +36,15 @@ public class VideoController {
             @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal LocalTubeUserDetails user) {
         try {
-            List<Video> allVideos = videoService.getPublicVideos(page, size);
+            // FIXED: Pass user email for visibility filtering
+            String userEmail = user != null ? user.getEmail() : null;
+            List<Video> allVideos = videoService.getPublicVideos(page, size, userEmail);
 
             List<Video> visibleVideos = allVideos.stream()
                     .filter(video -> canViewVideo(video, user))
                     .collect(Collectors.toList());
 
-            long total = videoService.countPublicVideos();
+            long total = videoService.countPublicVideos(userEmail);
 
             return ResponseEntity.ok(Map.of(
                     "videos", visibleVideos.stream()
@@ -66,11 +68,14 @@ public class VideoController {
             @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal LocalTubeUserDetails user) {
         try {
+            // FIXED: Pass user email for visibility filtering
+            String userEmail = user != null ? user.getEmail() : null;
+
             List<Video> videos;
             if (query != null && !query.isBlank()) {
-                videos = videoService.searchVideos(query, page, size);
+                videos = videoService.searchVideos(query, page, size, userEmail);
             } else {
-                videos = videoService.getPublicVideos(page, size);
+                videos = videoService.getPublicVideos(page, size, userEmail);
             }
 
             List<Video> visibleVideos = videos.stream()
@@ -128,14 +133,12 @@ public class VideoController {
                 return user != null && user.hasPermission("admin-modtube");
 
             case UNLISTED:
-                return true;  // Anyone with direct link can view
+                return true;
 
             case RESTRICTED:
                 if (user == null) return false;
 
                 String userEmail = user.getEmail();
-
-                // FIXED: Check email in allowedEmails list (case-insensitive)
                 boolean isAdmin = user.hasPermission("admin-modtube");
                 boolean isInAllowedList = video.getAllowedEmails() != null &&
                         video.getAllowedEmails().stream()
@@ -159,7 +162,6 @@ public class VideoController {
         }
     }
 
-    // ========== FIXED: Use email instead of userId for likes ==========
     @PostMapping("/{id}/like")
     public ResponseEntity<Map<String, Object>> likeVideo(
             @PathVariable String id,
@@ -169,7 +171,6 @@ public class VideoController {
                 return ResponseEntity.status(401).body(Map.of("error", "Please login to like videos"));
             }
 
-            // Use email instead of userId
             String userEmail = user.getEmail();
             boolean success = videoService.toggleLike(id, userEmail);
             var video = videoService.getVideo(id).orElseThrow();
@@ -193,7 +194,6 @@ public class VideoController {
                 return ResponseEntity.ok(Map.of("liked", false));
             }
 
-            // Use email instead of userId
             boolean liked = videoService.isLikedByUser(id, user.getEmail());
             return ResponseEntity.ok(Map.of("liked", liked));
         } catch (IOException e) {
@@ -248,10 +248,8 @@ public class VideoController {
         }
     }
 
-    // ========== THUMBNAIL ENDPOINTS ==========
-
     @PostMapping("/{id}/thumbnail")
-    @PreAuthorize("hasAuthority('admin-modtube')")  // ← This allows only admin-modtube users
+    @PreAuthorize("hasAuthority('admin-modtube')")
     public ResponseEntity<Map<String, String>> uploadThumbnail(
             @PathVariable String id,
             @RequestParam("file") MultipartFile file,
@@ -262,12 +260,10 @@ public class VideoController {
                 return ResponseEntity.notFound().build();
             }
 
-            // FIXED: Admin can upload thumbnail for ANY video
             boolean isOwner = video.getUploaderEmail() != null &&
                     video.getUploaderEmail().equals(user.getEmail());
             boolean isAdmin = user.hasPermission("admin-modtube");
 
-            // Allow if owner OR admin
             if (!isOwner && !isAdmin) {
                 return ResponseEntity.status(403).body(Map.of(
                         "status", "error",
@@ -290,8 +286,6 @@ public class VideoController {
             ));
         }
     }
-
-    // ========== COMMENT ENDPOINTS ==========
 
     @GetMapping("/{id}/comments")
     public ResponseEntity<Map<String, Object>> getComments(
@@ -363,7 +357,6 @@ public class VideoController {
                 return ResponseEntity.notFound().build();
             }
 
-            // Compare using email
             boolean isOwner = comment.getUserId().equals(user.getEmail());
             boolean isAdmin = user.hasPermission("admin-modtube");
 
@@ -402,6 +395,7 @@ public class VideoController {
         map.put("tags", video.getTags());
         map.put("uploadedAt", video.getUploadedAt());
         map.put("processedAt", video.getProcessedAt());
+        map.put("allowedEmails", video.getAllowedEmails());
 
         if (user != null) {
             try {
@@ -438,7 +432,9 @@ public class VideoController {
                 video.setDescription((String) updates.get("description"));
             }
             if (updates.containsKey("tags")) {
-                video.setTags((List<String>) updates.get("tags"));
+                @SuppressWarnings("unchecked")
+                List<String> tags = (List<String>) updates.get("tags");
+                video.setTags(tags);
             }
 
             videoService.updateVideo(video);
@@ -468,7 +464,9 @@ public class VideoController {
             }
 
             if (privacySettings.containsKey("allowedUserEmails")) {
-                video.setAllowedEmails((List<String>) privacySettings.get("allowedUserEmails"));
+                @SuppressWarnings("unchecked")
+                List<String> emails = (List<String>) privacySettings.get("allowedUserEmails");
+                video.setAllowedEmails(emails);
             }
 
             if (privacySettings.containsKey("restrictionNote")) {
