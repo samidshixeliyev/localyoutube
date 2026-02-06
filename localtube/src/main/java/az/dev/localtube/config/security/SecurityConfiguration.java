@@ -18,6 +18,12 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -31,17 +37,19 @@ public class SecurityConfiguration {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                // ✅ CRITICAL: CORS MUST BE FIRST!!!
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
+                // ✅ Disable CSRF
                 .csrf(AbstractHttpConfigurer::disable)
+
+                // ✅ Disable CSP
+                .headers(AbstractHttpConfigurer::disable)
+
                 .authorizeHttpRequests(auth -> auth
-                        // ═══════════════════════════════════════════════════════════════
-                        // AUTHENTICATION ENDPOINTS - Public
-                        // ═══════════════════════════════════════════════════════════════
+                        // AUTHENTICATION - Public
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/refresh").permitAll()
-
-                        // ═══════════════════════════════════════════════════════════════
-                        // PUBLIC ACCESS - No authentication required
-                        // ═══════════════════════════════════════════════════════════════
 
                         // Swagger/OpenAPI - Public
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
@@ -49,11 +57,11 @@ public class SecurityConfiguration {
                         // Health check - Public
                         .requestMatchers("/actuator/health").permitAll()
 
-                        // Video streaming - Public (HLS and thumbnails)
+                        // Video streaming - Public
                         .requestMatchers("/hls/**").permitAll()
                         .requestMatchers("/thumbnails/**").permitAll()
 
-                        // Video viewing - PUBLIC (all GET requests)
+                        // Video viewing - PUBLIC
                         .requestMatchers(HttpMethod.GET, "/api/videos").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/videos/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/comments").permitAll()
@@ -63,51 +71,31 @@ public class SecurityConfiguration {
                         // Share endpoints - PUBLIC
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/share").permitAll()
 
-                        // View increment - PUBLIC (for analytics)
+                        // View increment - PUBLIC
                         .requestMatchers(HttpMethod.POST, "/api/videos/*/view").permitAll()
 
-                        // ═══════════════════════════════════════════════════════════════
-                        // AUTHENTICATED USER ACCESS - Require login
-                        // ═══════════════════════════════════════════════════════════════
-
-                        // Password change - any authenticated user
+                        // Password change - authenticated
                         .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
-                        // Comments - Authenticated users can create
+                        // Comments - Authenticated
                         .requestMatchers(HttpMethod.POST, "/api/videos/*/comments").authenticated()
-
-                        // Delete own comments - Authenticated users
                         .requestMatchers(HttpMethod.DELETE, "/api/videos/*/comments/*").authenticated()
 
-                        // Likes - Authenticated users only
+                        // Likes - Authenticated
                         .requestMatchers(HttpMethod.POST, "/api/videos/*/like").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/videos/*/like").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/like-status").authenticated()
 
-                        // ═══════════════════════════════════════════════════════════════
-                        // SUPER-ADMIN ONLY - User management, system settings
-                        // ═══════════════════════════════════════════════════════════════
+                        // SUPER-ADMIN ONLY
                         .requestMatchers("/api/admin/**").hasAuthority("super-admin")
 
-                        // ═══════════════════════════════════════════════════════════════
-                        // ADMIN-MODTUBE PERMISSION REQUIRED
-                        // ═══════════════════════════════════════════════════════════════
-
-                        // Video upload
+                        // ADMIN-MODTUBE PERMISSION
                         .requestMatchers("/api/upload/**").hasAuthority("admin-modtube")
-
-                        // Video management (ownership checked in controller)
                         .requestMatchers(HttpMethod.PUT, "/api/videos/*").hasAuthority("admin-modtube")
                         .requestMatchers(HttpMethod.PATCH, "/api/videos/*").hasAuthority("admin-modtube")
                         .requestMatchers(HttpMethod.DELETE, "/api/videos/*").hasAuthority("admin-modtube")
-
-                        // Thumbnail management
                         .requestMatchers(HttpMethod.POST, "/api/videos/*/thumbnail").hasAuthority("admin-modtube")
-
-                        // Video privacy/visibility settings
                         .requestMatchers(HttpMethod.POST, "/api/videos/*/privacy").hasAuthority("admin-modtube")
-
-                        // Admin metrics
                         .requestMatchers("/actuator/**").hasAuthority("admin-modtube")
 
                         // Everything else requires authentication
@@ -120,6 +108,35 @@ public class SecurityConfiguration {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    // ✅ NUCLEAR CORS CONFIGURATION - THIS WILL WORK
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        // Allow ALL origins
+        configuration.setAllowedOriginPatterns(List.of("*"));
+
+        // Allow ALL methods
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"));
+
+        // Allow ALL headers
+        configuration.setAllowedHeaders(List.of("*"));
+
+        // Expose ALL headers
+        configuration.setExposedHeaders(List.of("*"));
+
+        // NO credentials with wildcard
+        configuration.setAllowCredentials(false);
+
+        // Cache preflight 1 hour
+        configuration.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+
+        return source;
     }
 
     @Bean

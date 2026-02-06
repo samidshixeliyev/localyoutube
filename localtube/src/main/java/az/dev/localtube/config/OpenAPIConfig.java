@@ -28,7 +28,7 @@ public class OpenAPIConfig {
                                 .name("Apache 2.0")
                                 .url("https://www.apache.org/licenses/LICENSE-2.0.html")))
                 .servers(List.of(
-                        new Server().url("http://localhost:8081").description("Local Development"),
+                        new Server().url("http://172.22.111.47:8081").description("Local Development"),
                         new Server().url("https://api.yourproduction.com").description("Production")
                 ));
     }
