@@ -1,22 +1,27 @@
 package az.dev.localtube.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(schema = "dbo", name = "users")
+@Table(name = "users")
+@NoArgsConstructor
+@AllArgsConstructor
 public class User {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
+    @Column
     private String surname;
 
     @Column(nullable = false, unique = true)
@@ -26,7 +31,7 @@ public class User {
     private String password;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "role_id", nullable = false)
+    @JoinColumn(name = "role_id")
     private Role role;
 
     @Column(name = "created_at")
@@ -36,6 +41,9 @@ public class User {
     private LocalDateTime updatedAt;
 
     public String getFullName() {
-        return name + " " + surname;
+        if (surname != null && !surname.isBlank()) {
+            return name + " " + surname;
+        }
+        return name;
     }
 }

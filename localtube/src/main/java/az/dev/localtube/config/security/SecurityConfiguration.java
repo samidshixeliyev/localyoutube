@@ -58,6 +58,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/videos/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/comments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/videos/search").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/videos/*/suggestions").permitAll()
 
                         // Share endpoints - PUBLIC
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/share").permitAll()
@@ -68,6 +69,9 @@ public class SecurityConfiguration {
                         // ═══════════════════════════════════════════════════════════════
                         // AUTHENTICATED USER ACCESS - Require login
                         // ═══════════════════════════════════════════════════════════════
+
+                        // Password change - any authenticated user
+                        .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
 
                         // Comments - Authenticated users can create
                         .requestMatchers(HttpMethod.POST, "/api/videos/*/comments").authenticated()
@@ -81,13 +85,18 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/like-status").authenticated()
 
                         // ═══════════════════════════════════════════════════════════════
+                        // SUPER-ADMIN ONLY - User management, system settings
+                        // ═══════════════════════════════════════════════════════════════
+                        .requestMatchers("/api/admin/**").hasAuthority("super-admin")
+
+                        // ═══════════════════════════════════════════════════════════════
                         // ADMIN-MODTUBE PERMISSION REQUIRED
                         // ═══════════════════════════════════════════════════════════════
 
                         // Video upload
                         .requestMatchers("/api/upload/**").hasAuthority("admin-modtube")
 
-                        // Video management
+                        // Video management (ownership checked in controller)
                         .requestMatchers(HttpMethod.PUT, "/api/videos/*").hasAuthority("admin-modtube")
                         .requestMatchers(HttpMethod.PATCH, "/api/videos/*").hasAuthority("admin-modtube")
                         .requestMatchers(HttpMethod.DELETE, "/api/videos/*").hasAuthority("admin-modtube")

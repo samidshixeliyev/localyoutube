@@ -49,8 +49,7 @@ public class LocalTubeUserDetails implements UserDetails {
 
     @Override
     public String getPassword() {
-        // No password for JWT-based auth
-        return "";
+        return user.getPassword();
     }
 
     @Override
@@ -98,6 +97,10 @@ public class LocalTubeUserDetails implements UserDetails {
     }
 
     public boolean isAdmin() {
-        return hasRole("ADMIN");
+        return hasRole("ADMIN") || hasPermission("admin-modtube");
+    }
+
+    public boolean isSuperAdmin() {
+        return hasPermission("super-admin");
     }
 }

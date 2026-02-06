@@ -15,32 +15,27 @@ const Home = () => {
     loadVideos();
   }, [page]);
 
- const loadVideos = async () => {
-  try {
-    setLoading(true);
-    
-    const data = await videoService.getPublicVideos(page, 12);
+  const loadVideos = async () => {
+    try {
+      setLoading(true);
+      
+      const data = await videoService.getPublicVideos(page, 12);
 
-    // No manual visibility filtering here anymore
-    // Backend already returns only videos the current user is allowed to see
+      if (page === 0) {
+        setVideos(data);
+      } else {
+        setVideos(prev => [...prev, ...data]);
+      }
 
-    if (page === 0) {
-      setVideos(data);
-    } else {
-      setVideos(prev => [...prev, ...data]);
+      setHasMore(data.length === 12);
+      setError('');
+    } catch (err) {
+      console.error("Failed to load videos:", err);
+      setError('Failed to load videos. Please try again later.');
+    } finally {
+      setLoading(false);
     }
-
-    // If we got fewer items than the page size → no more content
-    setHasMore(data.length === 12);
-    
-    setError('');
-  } catch (err) {
-    console.error("Failed to load videos:", err);
-    setError('Failed to load videos. Please try again later.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const formatViews = (views) => {
     if (!views) return '0 views';
@@ -172,7 +167,6 @@ const Home = () => {
               ))}
             </div>
 
-            {/* Load More Button */}
             {hasMore && (
               <div className="text-center mt-8">
                 <button
@@ -181,7 +175,7 @@ const Home = () => {
                   className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {loading ? (
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-2 justify-center">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       Loading...
                     </span>

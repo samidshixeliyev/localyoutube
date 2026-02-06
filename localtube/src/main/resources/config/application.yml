@@ -57,9 +57,9 @@ localtube:
     scheme: ${ELASTICSEARCH_SCHEME:http}
     username: ${ELASTICSEARCH_USERNAME:}
     password: ${ELASTICSEARCH_PASSWORD:}
-    video-index: ${ELASTICSEARCH_INDEX:videos}
-    comment-index: ${ELASTICSEARCH_INDEX:comments}
-    like-index: ${ELASTICSEARCH_INDEX:likes}
+    video-index: ${ELASTICSEARCH_VIDEO_INDEX:videos}
+    comment-index: ${ELASTICSEARCH_COMMENT_INDEX:comments}
+    like-index: ${ELASTICSEARCH_LIKE_INDEX:likes}
 
 logging:
   level:

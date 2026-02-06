@@ -2,14 +2,13 @@ package az.dev.localtube.repository;
 
 import az.dev.localtube.domain.Comment;
 import az.dev.localtube.metrics.LocalTubeMetrics;
+import az.dev.localtube.service.ElasticsearchIndexManager;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.Result;
 import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch._types.mapping.Property;
 import co.elastic.clients.elasticsearch.core.*;
 import co.elastic.clients.elasticsearch.core.search.Hit;
-import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
-import co.elastic.clients.elasticsearch.indices.ExistsRequest;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,10 +18,6 @@ import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.util.*;
 
-/**
- * Comment repository using Elasticsearch
- * FIXED: userId mapped as keyword (string) not long
- */
 @Slf4j
 @Repository
 public class CommentRepository {
@@ -30,32 +25,42 @@ public class CommentRepository {
     private final ElasticsearchClient client;
     private final ObjectMapper objectMapper;
     private final LocalTubeMetrics metrics;
+    private final ElasticsearchIndexManager indexManager;
     private final String indexName;
 
     public CommentRepository(
             ElasticsearchClient client,
             ObjectMapper objectMapper,
             LocalTubeMetrics metrics,
+            ElasticsearchIndexManager indexManager,
             @Value("${localtube.elasticsearch.comment-index}") String indexName
     ) {
         this.client = client;
         this.objectMapper = objectMapper;
         this.metrics = metrics;
+        this.indexManager = indexManager;
         this.indexName = indexName;
     }
 
     @PostConstruct
     public void init() {
         try {
-            ensureIndexExists();
+            Map<String, Property> fields = new LinkedHashMap<>();
+            fields.put("id", Property.of(p -> p.keyword(k -> k)));
+            fields.put("videoId", Property.of(p -> p.keyword(k -> k)));
+            fields.put("userId", Property.of(p -> p.keyword(k -> k)));
+            fields.put("username", Property.of(p -> p.text(t -> t)));
+            fields.put("text", Property.of(p -> p.text(t -> t.analyzer("standard"))));
+            fields.put("likes", Property.of(p -> p.long_(l -> l)));
+            fields.put("createdAt", Property.of(p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis"))));
+            fields.put("updatedAt", Property.of(p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis"))));
+
+            indexManager.ensureIndexMapping(indexName, fields);
         } catch (IOException e) {
             log.error("Failed to initialize comment index", e);
         }
     }
 
-    /**
-     * Save comment
-     */
     public Comment save(Comment comment) throws IOException {
         if (comment.getId() == null) {
             comment.setId(generateId());
@@ -78,9 +83,6 @@ public class CommentRepository {
         throw new IOException("Failed to save comment: " + response.result());
     }
 
-    /**
-     * Find comment by ID
-     */
     public Optional<Comment> findById(String id) throws IOException {
         GetResponse<Comment> response = client.get(g -> g
                         .index(indexName)
@@ -94,9 +96,6 @@ public class CommentRepository {
         return Optional.empty();
     }
 
-    /**
-     * Find comments by video ID with pagination
-     */
     public List<Comment> findByVideoId(String videoId, int page, int size) throws IOException {
         SearchResponse<Comment> response = client.search(s -> s
                         .index(indexName)
@@ -112,9 +111,6 @@ public class CommentRepository {
         return extractHits(response);
     }
 
-    /**
-     * Count comments for a video
-     */
     public long countByVideoId(String videoId) throws IOException {
         CountResponse response = client.count(c -> c
                 .index(indexName)
@@ -123,9 +119,6 @@ public class CommentRepository {
         return response.count();
     }
 
-    /**
-     * Delete comment
-     */
     public void delete(String id) throws IOException {
         client.delete(d -> d
                 .index(indexName)
@@ -134,45 +127,12 @@ public class CommentRepository {
         log.info("Deleted comment: {}", id);
     }
 
-    /**
-     * Delete all comments for a video
-     */
     public void deleteByVideoId(String videoId) throws IOException {
         client.deleteByQuery(d -> d
                 .index(indexName)
                 .query(q -> q.term(t -> t.field("videoId").value(videoId)))
         );
         log.info("Deleted all comments for video: {}", videoId);
-    }
-
-    /**
-     * Ensure index exists
-     * FIXED: userId mapped as keyword (email string) not long
-     */
-    private void ensureIndexExists() throws IOException {
-        boolean exists = client.indices().exists(ExistsRequest.of(e -> e.index(indexName))).value();
-
-        if (!exists) {
-            client.indices().create(CreateIndexRequest.of(c -> c
-                    .index(indexName)
-                    .mappings(m -> m
-                            .properties("id", p -> p.keyword(k -> k))
-                            .properties("videoId", p -> p.keyword(k -> k))
-                            .properties("userId", p -> p.keyword(k -> k))
-                            .properties("username", p -> p.text(t -> t))
-                            .properties("text", p -> p.text(t -> t.analyzer("standard")))
-                            .properties("likes", p -> p.long_(l -> l))
-                            .properties("createdAt", p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis")))
-                            .properties("updatedAt", p -> p.date(d -> d.format("strict_date_optional_time||epoch_millis")))
-                    )
-                    .settings(s -> s
-                            .numberOfShards("1")
-                            .numberOfReplicas("0")
-                            .refreshInterval(time -> time.time("1s"))  // Near real-time
-                    )
-            ));
-            log.info("Created Elasticsearch index: {} with userId as keyword", indexName);
-        }
     }
 
     private List<Comment> extractHits(SearchResponse<Comment> response) {

@@ -36,7 +36,23 @@ public class VideoController {
             @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal LocalTubeUserDetails user) {
         try {
-            // FIXED: Pass user email for visibility filtering
+            // Super-admin sees ALL videos (including private/restricted)
+            if (user != null && user.isSuperAdmin()) {
+                List<Video> allVideos = videoService.getAllReadyVideos(page, size);
+                long total = videoService.countAllReadyVideos();
+
+                return ResponseEntity.ok(Map.of(
+                        "videos", allVideos.stream()
+                                .map(v -> toResponse(v, user))
+                                .collect(Collectors.toList()),
+                        "totalElements", total,
+                        "totalPages", (int) Math.ceil((double) total / size),
+                        "currentPage", page,
+                        "pageSize", size
+                ));
+            }
+
+            // Regular users see filtered videos
             String userEmail = user != null ? user.getEmail() : null;
             List<Video> allVideos = videoService.getPublicVideos(page, size, userEmail);
 
@@ -68,7 +84,6 @@ public class VideoController {
             @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal LocalTubeUserDetails user) {
         try {
-            // FIXED: Pass user email for visibility filtering
             String userEmail = user != null ? user.getEmail() : null;
 
             List<Video> videos;
@@ -107,6 +122,11 @@ public class VideoController {
 
             Video video = videoOpt.get();
 
+            // Super-admin can view everything
+            if (user != null && user.isSuperAdmin()) {
+                return ResponseEntity.ok(toResponse(video, user));
+            }
+
             if (!canViewVideo(video, user)) {
                 return ResponseEntity.status(403).body(Map.of(
                         "error", "You don't have permission to view this video"
@@ -120,8 +140,41 @@ public class VideoController {
         }
     }
 
+    /**
+     * Tag-based video suggestions
+     */
+    @GetMapping("/{id}/suggestions")
+    public ResponseEntity<Map<String, Object>> getSuggestions(
+            @PathVariable String id,
+            @RequestParam(defaultValue = "10") int size) {
+        try {
+            var videoOpt = videoService.getVideo(id);
+            if (videoOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Video video = videoOpt.get();
+            List<Video> suggestions = videoService.getSuggestionsByTags(
+                    video.getTags(), id, size);
+
+            return ResponseEntity.ok(Map.of(
+                    "videos", suggestions.stream()
+                            .map(v -> toResponse(v, null))
+                            .collect(Collectors.toList())
+            ));
+        } catch (IOException e) {
+            log.error("Error getting suggestions", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
     private boolean canViewVideo(Video video, LocalTubeUserDetails user) {
         if (video.getVisibility() == null) {
+            return true;
+        }
+
+        // Super-admin sees everything
+        if (user != null && user.isSuperAdmin()) {
             return true;
         }
 
@@ -130,7 +183,7 @@ public class VideoController {
                 return true;
 
             case PRIVATE:
-                return user != null && user.hasPermission("admin-modtube");
+                return user != null && (user.hasPermission("admin-modtube") || user.isSuperAdmin());
 
             case UNLISTED:
                 return true;
@@ -231,13 +284,22 @@ public class VideoController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('admin-modtube')")
-    public ResponseEntity<Void> deleteVideo(
+    public ResponseEntity<?> deleteVideo(
             @PathVariable String id,
             @AuthenticationPrincipal LocalTubeUserDetails user) {
         try {
             var video = videoService.getVideo(id).orElse(null);
             if (video == null) {
                 return ResponseEntity.notFound().build();
+            }
+
+            // Ownership check: only owner or super-admin
+            boolean isOwner = video.getUploaderEmail() != null
+                    && video.getUploaderEmail().equalsIgnoreCase(user.getEmail());
+            if (!isOwner && !user.isSuperAdmin()) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "error", "You can only delete your own videos"
+                ));
             }
 
             videoService.deleteVideo(id);
@@ -261,13 +323,12 @@ public class VideoController {
             }
 
             boolean isOwner = video.getUploaderEmail() != null &&
-                    video.getUploaderEmail().equals(user.getEmail());
-            boolean isAdmin = user.hasPermission("admin-modtube");
+                    video.getUploaderEmail().equalsIgnoreCase(user.getEmail());
 
-            if (!isOwner && !isAdmin) {
+            if (!isOwner && !user.isSuperAdmin()) {
                 return ResponseEntity.status(403).body(Map.of(
                         "status", "error",
-                        "message", "You don't have permission to upload thumbnail for this video"
+                        "message", "You can only upload thumbnails for your own videos"
                 ));
             }
 
@@ -358,7 +419,7 @@ public class VideoController {
             }
 
             boolean isOwner = comment.getUserId().equals(user.getEmail());
-            boolean isAdmin = user.hasPermission("admin-modtube");
+            boolean isAdmin = user.hasPermission("admin-modtube") || user.isSuperAdmin();
 
             if (!isOwner && !isAdmin) {
                 return ResponseEntity.status(403).build();
@@ -403,8 +464,11 @@ public class VideoController {
             } catch (IOException e) {
                 map.put("isLikedByCurrentUser", false);
             }
-            map.put("canEdit", user.hasPermission("admin-modtube") ||
-                    (video.getUploaderEmail() != null && video.getUploaderEmail().equals(user.getEmail())));
+
+            boolean isOwner = video.getUploaderEmail() != null
+                    && video.getUploaderEmail().equalsIgnoreCase(user.getEmail());
+            // canEdit: super-admin always, admin only own videos
+            map.put("canEdit", user.isSuperAdmin() || (user.hasPermission("admin-modtube") && isOwner));
         } else {
             map.put("isLikedByCurrentUser", false);
             map.put("canEdit", false);
@@ -415,7 +479,7 @@ public class VideoController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('admin-modtube')")
-    public ResponseEntity<Map<String, Object>> updateVideo(
+    public ResponseEntity<?> updateVideo(
             @PathVariable String id,
             @RequestBody Map<String, Object> updates,
             @AuthenticationPrincipal LocalTubeUserDetails user) {
@@ -423,6 +487,15 @@ public class VideoController {
             var video = videoService.getVideo(id).orElse(null);
             if (video == null) {
                 return ResponseEntity.notFound().build();
+            }
+
+            // Ownership check: only owner or super-admin
+            boolean isOwner = video.getUploaderEmail() != null
+                    && video.getUploaderEmail().equalsIgnoreCase(user.getEmail());
+            if (!isOwner && !user.isSuperAdmin()) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "error", "You can only edit your own videos"
+                ));
             }
 
             if (updates.containsKey("title")) {
@@ -448,7 +521,7 @@ public class VideoController {
 
     @PostMapping("/{id}/privacy")
     @PreAuthorize("hasAuthority('admin-modtube')")
-    public ResponseEntity<Map<String, Object>> setVideoPrivacy(
+    public ResponseEntity<?> setVideoPrivacy(
             @PathVariable String id,
             @RequestBody Map<String, Object> privacySettings,
             @AuthenticationPrincipal LocalTubeUserDetails user) {
@@ -456,6 +529,15 @@ public class VideoController {
             var video = videoService.getVideo(id).orElse(null);
             if (video == null) {
                 return ResponseEntity.notFound().build();
+            }
+
+            // Ownership check
+            boolean isOwner = video.getUploaderEmail() != null
+                    && video.getUploaderEmail().equalsIgnoreCase(user.getEmail());
+            if (!isOwner && !user.isSuperAdmin()) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "error", "You can only change privacy settings for your own videos"
+                ));
             }
 
             String visibility = (String) privacySettings.get("visibility");

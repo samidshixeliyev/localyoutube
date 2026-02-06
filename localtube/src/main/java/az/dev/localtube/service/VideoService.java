@@ -53,6 +53,12 @@ public class VideoService {
 
     public Video createVideo(String title, String filename, String description,
                              List<String> tags, Long uploaderId, String uploaderName) throws IOException {
+        return createVideo(title, filename, description, tags, uploaderId, uploaderName, null);
+    }
+
+    public Video createVideo(String title, String filename, String description,
+                             List<String> tags, Long uploaderId, String uploaderName,
+                             String uploaderEmail) throws IOException {
         String videoId = UUID.randomUUID().toString().replace("-", "");
 
         Video video = Video.builder()
@@ -64,6 +70,7 @@ public class VideoService {
                 .tags(tags != null ? tags : List.of())
                 .uploaderId(uploaderId)
                 .uploaderName(uploaderName)
+                .uploaderEmail(uploaderEmail)
                 .status(VideoStatus.UPLOADING)
                 .uploadPath(uploadDir.resolve(videoId).toString())
                 .hlsPath(hlsDir.resolve(videoId).toString())
@@ -83,7 +90,7 @@ public class VideoService {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Read - FIXED: Added userEmail parameter
+    // Read
     // ═══════════════════════════════════════════════════════════════════════════
 
     public Optional<Video> getVideo(String id) throws IOException {
@@ -110,7 +117,6 @@ public class VideoService {
         return videoRepository.findByStatus(status);
     }
 
-    // FIXED: Added userEmail parameter for visibility filtering
     public List<Video> searchVideos(String query) throws IOException {
         return searchVideos(query, 0, 20, null);
     }
@@ -123,7 +129,6 @@ public class VideoService {
         return videoRepository.search(query, page, size, userEmail);
     }
 
-    // FIXED: Added userEmail parameter for visibility filtering
     public List<Video> getPublicVideos(int page, int size) throws IOException {
         return getPublicVideos(page, size, null);
     }
@@ -138,6 +143,24 @@ public class VideoService {
 
     public long countPublicVideos(String userEmail) throws IOException {
         return videoRepository.countPublicVideos(userEmail);
+    }
+
+    /**
+     * For super-admin: all ready videos regardless of visibility
+     */
+    public List<Video> getAllReadyVideos(int page, int size) throws IOException {
+        return videoRepository.findAllReadyVideos(page, size);
+    }
+
+    public long countAllReadyVideos() throws IOException {
+        return videoRepository.countAllReadyVideos();
+    }
+
+    /**
+     * Tag-based video suggestions
+     */
+    public List<Video> getSuggestionsByTags(List<String> tags, String excludeVideoId, int size) throws IOException {
+        return videoRepository.findByTags(tags, excludeVideoId, size);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -252,11 +275,9 @@ public class VideoService {
             if (video.getUploadPath() != null) {
                 deleteDirectoryRecursive(Paths.get(video.getUploadPath()));
             }
-
             if (video.getHlsPath() != null) {
                 deleteDirectoryRecursive(Paths.get(video.getHlsPath()));
             }
-
             if (video.getThumbnailPath() != null) {
                 deleteDirectoryRecursive(Paths.get(video.getThumbnailPath()));
             }
@@ -292,7 +313,7 @@ public class VideoService {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // FIXED: Email-based like methods with proper transaction handling
+    // Like methods
     // ═══════════════════════════════════════════════════════════════════════════
 
     public synchronized boolean toggleLike(String videoId, String userEmail) throws IOException {
@@ -309,7 +330,6 @@ public class VideoService {
         }
 
         boolean alreadyLiked = videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
-        log.info("Current like status: {}", alreadyLiked);
 
         if (alreadyLiked) {
             videoLikeRepository.deleteByEmail(videoId, normalizedEmail);
@@ -341,12 +361,8 @@ public class VideoService {
         if (videoId == null || userEmail == null) {
             return false;
         }
-
         String normalizedEmail = userEmail.toLowerCase().trim();
-        boolean liked = videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
-
-        log.debug("Check like status: videoId={}, userEmail={}, liked={}", videoId, normalizedEmail, liked);
-        return liked;
+        return videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
     }
 
     public void removeLike(String videoId, String userEmail) throws IOException {
