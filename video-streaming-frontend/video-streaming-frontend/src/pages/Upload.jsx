@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import  videoService  from '../services/videoService';
+import videoService from '../services/videoService';
 import Navbar from '../components/Navbar';
 import { Upload, X, CheckCircle, AlertCircle, Globe, Lock, Link2, Users } from 'lucide-react';
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+const MAX_RETRIES = 3; // Maximum retries per chunk
 
 const UploadPage = () => {
   const navigate = useNavigate();
@@ -20,6 +21,8 @@ const UploadPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [uploadedVideoId, setUploadedVideoId] = useState(null);
+  const [currentChunk, setCurrentChunk] = useState(0);
+  const [totalChunks, setTotalChunks] = useState(0);
 
   const visibilityOptions = [
     { 
@@ -78,7 +81,11 @@ const UploadPage = () => {
       if (!allowedEmails.includes(email)) {
         setAllowedEmails([...allowedEmails, email]);
         setEmailInput('');
+      } else {
+        setError('This email is already added');
       }
+    } else if (email) {
+      setError('Please enter a valid email address');
     }
   };
 
@@ -86,8 +93,30 @@ const UploadPage = () => {
     setAllowedEmails(allowedEmails.filter(e => e !== email));
   };
 
+  const uploadChunkWithRetry = async (chunk, chunkIndex, totalChunks, videoId) => {
+    let retries = 0;
+    
+    while (retries < MAX_RETRIES) {
+      try {
+        await videoService.uploadChunk(chunk, chunkIndex, totalChunks, videoId);
+        return; // Success, exit retry loop
+      } catch (err) {
+        retries++;
+        console.warn(`[Upload] Chunk ${chunkIndex} failed, retry ${retries}/${MAX_RETRIES}`);
+        
+        if (retries === MAX_RETRIES) {
+          throw new Error(`Failed to upload chunk ${chunkIndex + 1} after ${MAX_RETRIES} attempts`);
+        }
+        
+        // Exponential backoff: wait 1s, 2s, 4s...
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries - 1)));
+      }
+    }
+  };
+
   const uploadChunks = async (file) => {
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const chunks = Math.ceil(file.size / CHUNK_SIZE);
+    setTotalChunks(chunks);
     
     try {
       // Initialize upload
@@ -96,32 +125,29 @@ const UploadPage = () => {
         title,
         description,
         file.size,
-        totalChunks
+        chunks
       );
 
       const videoId = initResponse.videoId;
       setUploadedVideoId(videoId);
 
-      // Upload chunks
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      // Upload chunks with retry logic
+      for (let chunkIndex = 0; chunkIndex < chunks; chunkIndex++) {
+        setCurrentChunk(chunkIndex + 1);
+        
         const start = chunkIndex * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
 
-        await videoService.uploadChunk(
-          chunk,
-          chunkIndex,
-          totalChunks,
-          videoId
-        );
+        await uploadChunkWithRetry(chunk, chunkIndex, chunks, videoId);
 
-        setUploadProgress(Math.round(((chunkIndex + 1) / totalChunks) * 100));
+        setUploadProgress(Math.round(((chunkIndex + 1) / chunks) * 100));
       }
 
       // Complete upload
-      await videoService.completeUpload(videoId, totalChunks);
+      await videoService.completeUpload(videoId, chunks);
 
-      // Set privacy settings
+      // Set privacy settings if needed
       if (visibility !== 'public' || allowedEmails.length > 0) {
         await videoService.setPrivacy(videoId, {
           visibility,
@@ -133,9 +159,10 @@ const UploadPage = () => {
       setUploading(false);
     } catch (err) {
       console.error('Upload error:', err);
-      setError(err.response?.data?.message || 'Upload failed. Please try again.');
+      setError(err.response?.data?.message || err.message || 'Upload failed. Please try again.');
       setUploading(false);
       setUploadProgress(0);
+      setCurrentChunk(0);
     }
   };
 
@@ -160,6 +187,7 @@ const UploadPage = () => {
     setUploading(true);
     setError('');
     setUploadProgress(0);
+    setCurrentChunk(0);
 
     await uploadChunks(selectedFile);
   };
@@ -172,6 +200,8 @@ const UploadPage = () => {
     setAllowedEmails([]);
     setEmailInput('');
     setUploadProgress(0);
+    setCurrentChunk(0);
+    setTotalChunks(0);
     setError('');
     setSuccess(false);
     setUploadedVideoId(null);
@@ -287,10 +317,12 @@ const UploadPage = () => {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={uploading}
+                maxLength={100}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100"
                 placeholder="Enter video title"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">{title.length}/100 characters</p>
             </div>
 
             {/* Description */}
@@ -303,10 +335,12 @@ const UploadPage = () => {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={uploading}
+                maxLength={5000}
                 rows={4}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 resize-none"
                 placeholder="Describe your video"
               />
+              <p className="text-xs text-gray-500 mt-1">{description.length}/5000 characters</p>
             </div>
 
             {/* Privacy Settings */}
@@ -350,8 +384,8 @@ const UploadPage = () => {
 
             {/* Restricted Access Email List */}
             {visibility === 'restricted' && (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+                <label className="block text-sm font-medium text-purple-900 mb-2">
                   Allowed Users (by email) *
                 </label>
                 
@@ -360,25 +394,30 @@ const UploadPage = () => {
                     type="email"
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addEmail();
+                      }
+                    }}
                     placeholder="user@example.com"
                     disabled={uploading}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+                    className="flex-1 px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-100"
                   />
                   <button
                     type="button"
                     onClick={addEmail}
                     disabled={uploading}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
                   >
                     Add
                   </button>
                 </div>
 
                 {allowedEmails.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
                     {allowedEmails.map(email => (
-                      <div key={email} className="flex items-center justify-between bg-white px-3 py-2 rounded border border-gray-200">
+                      <div key={email} className="flex items-center justify-between bg-white px-3 py-2 rounded border border-purple-200">
                         <span className="text-sm text-gray-900">{email}</span>
                         <button
                           type="button"
@@ -392,7 +431,7 @@ const UploadPage = () => {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 text-center py-2">
+                  <p className="text-sm text-purple-600 text-center py-4 bg-white rounded border-2 border-dashed border-purple-200">
                     Add at least one email address for restricted access
                   </p>
                 )}
@@ -401,17 +440,22 @@ const UploadPage = () => {
 
             {/* Upload Progress */}
             {uploading && (
-              <div>
-                <div className="flex justify-between text-sm text-gray-600 mb-2">
-                  <span>Uploading...</span>
-                  <span>{uploadProgress}%</span>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex justify-between text-sm text-gray-700 mb-2">
+                  <span className="font-medium">Uploading...</span>
+                  <span className="font-bold">{uploadProgress}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-2 overflow-hidden">
                   <div
-                    className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-gradient-to-r from-primary-600 to-orange-600 h-3 rounded-full transition-all duration-300 shadow-inner"
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
+                {totalChunks > 0 && (
+                  <p className="text-xs text-gray-600 text-center">
+                    Chunk {currentChunk} of {totalChunks}
+                  </p>
+                )}
               </div>
             )}
 
@@ -420,7 +464,7 @@ const UploadPage = () => {
               <button
                 type="submit"
                 disabled={uploading || !selectedFile}
-                className="flex-1 py-3 px-6 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                className="flex-1 py-3 px-6 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-md"
               >
                 {uploading ? 'Uploading...' : 'Upload Video'}
               </button>

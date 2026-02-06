@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import  videoService  from '../services/videoService';
+import videoService from '../services/videoService';
 import VideoCard from '../components/VideoCard';
 import Navbar from '../components/Navbar';
 import { Search as SearchIcon, Loader2 } from 'lucide-react';
@@ -15,6 +15,8 @@ const Search = () => {
   useEffect(() => {
     if (query) {
       searchVideos();
+    } else {
+      setVideos([]);
     }
   }, [query]);
 
@@ -22,11 +24,23 @@ const Search = () => {
     try {
       setLoading(true);
       setError('');
+      
       const data = await videoService.searchVideos(query);
-      setVideos(data.videos || []);
+      
+      // Handle both array response and object response
+      if (Array.isArray(data)) {
+        setVideos(data);
+      } else if (data.videos) {
+        setVideos(data.videos);
+      } else {
+        setVideos([]);
+      }
     } catch (err) {
       console.error('Error searching videos:', err);
-      setError('Failed to search videos. Please try again.');
+      const errorMessage = err.response?.data?.message || 
+                          err.message || 
+                          'Failed to search videos. Please try again.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -64,8 +78,12 @@ const Search = () => {
         ) : videos.length === 0 ? (
           <div className="text-center py-12">
             <SearchIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg mb-2">No videos found</p>
-            <p className="text-gray-400">Try searching with different keywords</p>
+            <p className="text-gray-500 text-lg mb-2">
+              {query ? 'No videos found' : 'Enter a search query'}
+            </p>
+            {query && (
+              <p className="text-gray-400">Try searching with different keywords</p>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

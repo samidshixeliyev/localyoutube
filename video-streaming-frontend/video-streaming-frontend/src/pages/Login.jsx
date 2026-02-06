@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Video, Mail, Lock, AlertCircle } from 'lucide-react';
-import api from '../services/api';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -34,9 +33,14 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/auth/login', formData);
-      login(response.data);
-      navigate('/');
+      // FIXED: Call login with email and password as separate parameters
+      const result = await login(formData.email, formData.password);
+      
+      if (result.success) {
+        navigate('/');
+      } else {
+        setError(result.message || 'Login failed');
+      }
     } catch (err) {
       console.error('Login error:', err);
       setError(err.response?.data?.message || 'Invalid email or password');

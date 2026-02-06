@@ -15,30 +15,32 @@ const Home = () => {
     loadVideos();
   }, [page]);
 
-  const loadVideos = async () => {
-    try {
-      setLoading(true);
-      const data = await videoService.getPublicVideos(page, 12);
-      
-      // CRITICAL: Filter out unlisted videos on frontend as backup
-      const publicOnly = data.filter(video => 
-        !video.visibility || video.visibility === 'public'
-      );
-      
-      if (page === 0) {
-        setVideos(publicOnly);
-      } else {
-        setVideos(prev => [...prev, ...publicOnly]);
-      }
-      
-      setHasMore(publicOnly.length === 12);
-      setError('');
-    } catch (err) {
-      setError('Failed to load videos');
-    } finally {
-      setLoading(false);
+ const loadVideos = async () => {
+  try {
+    setLoading(true);
+    
+    const data = await videoService.getPublicVideos(page, 12);
+
+    // No manual visibility filtering here anymore
+    // Backend already returns only videos the current user is allowed to see
+
+    if (page === 0) {
+      setVideos(data);
+    } else {
+      setVideos(prev => [...prev, ...data]);
     }
-  };
+
+    // If we got fewer items than the page size → no more content
+    setHasMore(data.length === 12);
+    
+    setError('');
+  } catch (err) {
+    console.error("Failed to load videos:", err);
+    setError('Failed to load videos. Please try again later.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const formatViews = (views) => {
     if (!views) return '0 views';

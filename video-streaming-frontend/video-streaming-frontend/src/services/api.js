@@ -1,13 +1,22 @@
 import axios from 'axios';
 
+// Determine base URL based on environment
+const getBaseURL = () => {
+  // Production: use env var or construct from window.location
+  if (import.meta.env.PROD) {
+    return import.meta.env.VITE_API_URL || `${window.location.origin}/api`;
+  }
+  // Development: use Vite proxy
+  return '/api';
+};
+
 // Read API URL from environment variable or use Vite proxy default
-// In development: uses '/api' which Vite proxies to http://172.22.111.47:8081/api
-// In production: uses VITE_API_URL from .env file
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30 second timeout for normal requests
 });
 
 // Request interceptor to add auth token
@@ -17,6 +26,12 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Increase timeout for file uploads
+    if (config.headers['Content-Type'] === 'multipart/form-data') {
+      config.timeout = 300000; // 5 minutes for uploads
+    }
+    
     return config;
   },
   (error) => {
@@ -30,13 +45,16 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Log error for debugging
-    console.error('[API] Response error:', {
-      url: error.config?.url,
-      status: error.response?.status,
-      message: error.response?.data?.message || error.message,
-      hasRetried: error.config?._retry
-    });
+    // Log error for debugging (only in development)
+    if (import.meta.env.DEV) {
+      console.error('[API] Response error:', {
+        url: error.config?.url,
+        method: error.config?.method,
+        status: error.response?.status,
+        message: error.response?.data?.message || error.message,
+        hasRetried: error.config?._retry
+      });
+    }
 
     // Handle 401 Unauthorized - token expired or invalid
     if (error.response?.status === 401 && !error.config?._retry) {
@@ -50,6 +68,15 @@ api.interceptors.response.use(
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
+    }
+
+    // Handle network errors (CORS, connection refused, etc.)
+    if (error.code === 'ERR_NETWORK' || !error.response) {
+      const enhancedError = new Error(
+        'Unable to connect to server. Please check your internet connection or try again later.'
+      );
+      enhancedError.originalError = error;
+      return Promise.reject(enhancedError);
     }
 
     return Promise.reject(error);
