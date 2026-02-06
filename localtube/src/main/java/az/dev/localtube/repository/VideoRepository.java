@@ -6,6 +6,8 @@ import az.dev.localtube.domain.VideoVisibility;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.Result;
 import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch._types.query_dsl.Operator;
+import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import co.elastic.clients.elasticsearch.core.CountResponse;
 import co.elastic.clients.elasticsearch.core.GetResponse;
 import co.elastic.clients.elasticsearch.core.IndexResponse;
@@ -156,13 +158,28 @@ public class VideoRepository {
 
     public List<Video> search(String query, int page, int size) throws IOException {
         SearchResponse<ObjectNode> response = client.search(s -> s
-                .index(indexName)
-                .from(page * size)
-                .size(size)
-                .query(q -> q.bool(b -> b
-                        .must(m -> m.multiMatch(mm -> mm.query(query).fields("title^2", "description", "tags")))
-                        .filter(f -> f.term(t -> t.field("status").value(VideoStatus.READY.name())))
-                )), ObjectNode.class);
+                        .index(indexName)
+                        .from(page * size)
+                        .size(size)
+                        .query(q -> q.bool(b -> b
+                                .must(m -> m.multiMatch(mm -> mm
+                                        .query(query)
+                                        .fields("title^2", "description", "tags")
+                                        .type(TextQueryType.BestFields)           // or MOST_FIELDS — try both
+                                        .operator(Operator.Or)                     // ← very important for YouTube-like behavior
+                                        .fuzziness("2")                            // fixed edit distance 2
+                                        .prefixLength(1)                           // first char not fuzzy → faster + less garbage
+                                        .maxExpansions(50)                         // safety limit on fuzzy expansions
+                                        .minimumShouldMatch("75%")                 // helps when query has many words
+                                        .fuzzyTranspositions(true)                 // allow ab → ba typos
+                                ))
+                                .filter(f -> f.term(t -> t
+                                        .field("status")
+                                        .value(VideoStatus.READY.name())
+                                ))
+                        )),
+                ObjectNode.class
+        );
 
         return extractVideos(response);
     }

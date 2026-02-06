@@ -28,13 +28,10 @@ const Navbar = () => {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
-            <div className="bg-primary-600 p-2 rounded-lg">
-              <Video className="h-6 w-6 text-white" />
-            </div>
             <div className="flex items-center text-2xl font-extrabold">
   <span className="text-black px-1">Mod</span>
   <span className="px-1 py-1 rounded-md bg-orange-600 text-white">
-    THube
+    Tube
   </span>
 </div>
 

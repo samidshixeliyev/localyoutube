@@ -25,7 +25,31 @@ export const videoService = {
     return response.data;
   },
 
-  // Like video
+  // Get like status for current user
+  getLikeStatus: async (id) => {
+    try {
+      const response = await api.get(`/videos/${id}/like-status`);
+      return response.data;
+    } catch (err) {
+      console.error('[videoService] Error getting like status:', err);
+      return { liked: false };
+    }
+  },
+
+  // Toggle like - returns new state
+  toggleLike: async (id) => {
+    try {
+      console.log('[videoService] Toggling like for video:', id);
+      const response = await api.post(`/videos/${id}/like`);
+      console.log('[videoService] Like toggle response:', response.data);
+      return response.data;
+    } catch (err) {
+      console.error('[videoService] Error toggling like:', err);
+      throw err;
+    }
+  },
+
+  // Like video (deprecated - use toggleLike)
   likeVideo: async (id) => {
     const response = await api.post(`/videos/${id}/like`);
     return response.data;

@@ -21,6 +21,7 @@ import java.util.*;
 
 /**
  * Comment repository using Elasticsearch
+ * FIXED: userId mapped as keyword (string) not long
  */
 @Slf4j
 @Repository
@@ -82,8 +83,8 @@ public class CommentRepository {
      */
     public Optional<Comment> findById(String id) throws IOException {
         GetResponse<Comment> response = client.get(g -> g
-                .index(indexName)
-                .id(id),
+                        .index(indexName)
+                        .id(id),
                 Comment.class
         );
 
@@ -98,13 +99,13 @@ public class CommentRepository {
      */
     public List<Comment> findByVideoId(String videoId, int page, int size) throws IOException {
         SearchResponse<Comment> response = client.search(s -> s
-                .index(indexName)
-                .from(page * size)
-                .size(size)
-                .query(q -> q
-                        .term(t -> t.field("videoId").value(videoId))
-                )
-                .sort(so -> so.field(f -> f.field("createdAt").order(SortOrder.Desc))),
+                        .index(indexName)
+                        .from(page * size)
+                        .size(size)
+                        .query(q -> q
+                                .term(t -> t.field("videoId").value(videoId))
+                        )
+                        .sort(so -> so.field(f -> f.field("createdAt").order(SortOrder.Desc))),
                 Comment.class
         );
 
@@ -146,6 +147,7 @@ public class CommentRepository {
 
     /**
      * Ensure index exists
+     * FIXED: userId mapped as keyword (email string) not long
      */
     private void ensureIndexExists() throws IOException {
         boolean exists = client.indices().exists(ExistsRequest.of(e -> e.index(indexName))).value();
@@ -156,8 +158,7 @@ public class CommentRepository {
                     .mappings(m -> m
                             .properties("id", p -> p.keyword(k -> k))
                             .properties("videoId", p -> p.keyword(k -> k))
-                            .properties("userId", p -> p.long_(l -> l))
-                            .properties("userEmail", p -> p.keyword(k -> k))
+                            .properties("userId", p -> p.keyword(k -> k))
                             .properties("username", p -> p.text(t -> t))
                             .properties("text", p -> p.text(t -> t.analyzer("standard")))
                             .properties("likes", p -> p.long_(l -> l))
@@ -167,9 +168,10 @@ public class CommentRepository {
                     .settings(s -> s
                             .numberOfShards("1")
                             .numberOfReplicas("0")
+                            .refreshInterval(time -> time.time("1s"))  // Near real-time
                     )
             ));
-            log.info("Created Elasticsearch index: {}", indexName);
+            log.info("Created Elasticsearch index: {} with userId as keyword", indexName);
         }
     }
 

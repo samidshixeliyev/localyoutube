@@ -20,40 +20,40 @@ const VideoDetail = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [showThumbnailUpload, setShowThumbnailUpload] = useState(false);
 
-useEffect(() => {
-  // Decode JWT token to get email (only if logged in)
-  const token = localStorage.getItem('jwt_token');
-  if (token) {
-    try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      
-      const decoded = JSON.parse(jsonPayload);
-      
-      // EMAIL is the primary identifier
-      const userEmail = decoded.email || decoded.sub || decoded.username;
-      
-      setCurrentUser({
-        id: userEmail,
-        email: userEmail,
-        username: decoded.username || decoded.name || userEmail.split('@')[0]
-      });
-      
-      console.log('Current user email:', userEmail);
-    } catch (err) {
-      console.error('Error decoding token:', err);
-      setCurrentUser(null);
+  useEffect(() => {
+    // Decode JWT token to get email (only if logged in)
+    const token = localStorage.getItem("jwt_token");
+    if (token) {
+      try {
+        const base64Url = token.split(".")[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split("")
+            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+            .join(""),
+        );
+
+        const decoded = JSON.parse(jsonPayload);
+
+        // EMAIL is the primary identifier
+        const userEmail = decoded.email || decoded.sub || decoded.username;
+
+        setCurrentUser({
+          id: userEmail,
+          email: userEmail,
+          username: decoded.username || decoded.name || userEmail.split("@")[0],
+        });
+
+        console.log("Current user email:", userEmail);
+      } catch (err) {
+        console.error("Error decoding token:", err);
+        setCurrentUser(null);
+      }
+    } else {
+      setCurrentUser(null); // No token = guest user
     }
-  } else {
-    setCurrentUser(null); // No token = guest user
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     loadVideo();
@@ -91,32 +91,68 @@ useEffect(() => {
     }
   };
 
-const handleLike = async () => {
-  // Check if user is logged in
-  if (!currentUser) {
-    alert('Please login to like videos');
-    navigate('/login');
-    return;
-  }
-  
-  try {
-    if (liked) {
-      await videoService.unlikeVideo(id);
-      setLiked(false);
-      setVideo(prev => ({ ...prev, likes: Math.max(0, (prev.likes || 0) - 1) }));
-    } else {
-      await videoService.likeVideo(id);
-      setLiked(true);
-      setVideo(prev => ({ ...prev, likes: (prev.likes || 0) + 1 }));
+  // Add this useEffect in VideoDetail.jsx to check like status on mount
+
+  useEffect(() => {
+    const checkLikeStatus = async () => {
+      if (!currentUser || !id) return;
+
+      try {
+        const response = await videoService.getLikeStatus(id);
+        setLiked(response.liked);
+        console.log("[VideoDetail] Like status loaded:", response.liked);
+      } catch (err) {
+        console.error("[VideoDetail] Error checking like status:", err);
+        // If error, default to not liked
+        setLiked(false);
+      }
+    };
+
+    checkLikeStatus();
+  }, [id, currentUser]);
+
+  // Updated handleLike function with better state management
+  const handleLike = async () => {
+    // Check if user is logged in
+    if (!currentUser) {
+      alert("Please login to like videos");
+      navigate("/login");
+      return;
     }
-  } catch (err) {
-    console.error('Error toggling like:', err);
-    if (err.response?.status === 401) {
-      alert('Please login to like videos');
-      navigate('/login');
+
+    // Prevent double-clicking
+    if (isLiking) return;
+    setIsLiking(true);
+
+    try {
+      console.log("[VideoDetail] Toggling like, current state:", liked);
+
+      const response = await videoService.toggleLike(id);
+      const newLikedState = response.liked;
+
+      console.log(
+        "[VideoDetail] Like toggled successfully, new state:",
+        newLikedState,
+      );
+
+      // Update state based on server response
+      setLiked(newLikedState);
+      setVideo((prev) => ({
+        ...prev,
+        likes: response.likes,
+      }));
+    } catch (err) {
+      console.error("[VideoDetail] Error toggling like:", err);
+      if (err.response?.status === 401) {
+        alert("Please login to like videos");
+        navigate("/login");
+      } else {
+        alert("Failed to like video. Please try again.");
+      }
+    } finally {
+      setIsLiking(false);
     }
-  }
-};
+  };
 
   const handleDelete = async () => {
     if (!window.confirm("Are you sure you want to delete this video?")) {
@@ -182,10 +218,10 @@ const handleLike = async () => {
     );
   }
 
-const canEdit = currentUser && (
-  currentUser.email === video.uploaderEmail ||
-  currentUser.id === video.uploaderEmail  // Email-based check
-);
+  const canEdit =
+    currentUser &&
+    (currentUser.email === video.uploaderEmail ||
+      currentUser.id === video.uploaderEmail); // Email-based check
 
   return (
     <>

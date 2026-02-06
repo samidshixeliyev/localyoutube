@@ -13,7 +13,7 @@ public class VideoLike {
 
     private String id;
     private String videoId;
-    private String userEmail;  // Changed from Long userId to String userEmail
+    private String userEmail;  // Primary field - email-based identification
     private Long createdAt;
 
     // Legacy field - keep for backward compatibility during migration
@@ -22,10 +22,25 @@ public class VideoLike {
 
     /**
      * Generate a unique ID for the like using videoId and userEmail
+     * IMPORTANT: This must be consistent and deterministic
      */
     public static String generateId(String videoId, String userEmail) {
-        // Create a deterministic ID from videoId and userEmail
-        return videoId + "_" + userEmail.replace("@", "_at_").replace(".", "_");
+        if (videoId == null || userEmail == null) {
+            throw new IllegalArgumentException("videoId and userEmail cannot be null");
+        }
+
+        // Normalize email to lowercase for consistency
+        String normalizedEmail = userEmail.toLowerCase().trim();
+
+        // Create a deterministic ID from videoId and normalized email
+        // Replace special characters that might cause issues
+        String sanitizedEmail = normalizedEmail
+                .replace("@", "_at_")
+                .replace(".", "_dot_")
+                .replace("+", "_plus_")
+                .replace("-", "_dash_");
+
+        return videoId + "_" + sanitizedEmail;
     }
 
     /**
@@ -33,6 +48,9 @@ public class VideoLike {
      */
     @Deprecated
     public static String generateId(String videoId, Long userId) {
-        return videoId + "_" + userId;
+        if (videoId == null || userId == null) {
+            throw new IllegalArgumentException("videoId and userId cannot be null");
+        }
+        return videoId + "_user_" + userId;
     }
 }

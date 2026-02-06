@@ -101,8 +101,6 @@ public class VideoService {
         return videoRepository.findAll(page, size);
     }
 
-
-
     public List<Video> getVideosByUploader(Long uploaderId, int page, int size) throws IOException {
         return videoRepository.findByUploaderId(uploaderId, page, size);
     }
@@ -286,28 +284,46 @@ public class VideoService {
         return videoRepository.countPublicVideos();
     }
 
-    public boolean toggleLike(String videoId, Long userId) throws IOException {
-        Optional<Video> videoOpt = videoRepository.findById(videoId);
-        if (videoOpt.isEmpty()) {
-            throw new IOException("Video not found");
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FIXED: Email-based like methods with proper transaction handling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Toggle like - FIXED to prevent double-liking
+     */
+    public synchronized boolean toggleLike(String videoId, String userEmail) throws IOException {
+        if (videoId == null || userEmail == null) {
+            throw new IllegalArgumentException("videoId and userEmail cannot be null");
         }
 
-        // Check if user already liked
-        boolean alreadyLiked = videoLikeRepository.existsByVideoIdAndUserId(videoId, userId);
+        // Normalize email
+        String normalizedEmail = userEmail.toLowerCase().trim();
+
+        log.info("Toggle like: videoId={}, userEmail={}", videoId, normalizedEmail);
+
+        Optional<Video> videoOpt = videoRepository.findById(videoId);
+        if (videoOpt.isEmpty()) {
+            throw new IOException("Video not found: " + videoId);
+        }
+
+        // Check current like status
+        boolean alreadyLiked = videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
+        log.info("Current like status: {}", alreadyLiked);
 
         if (alreadyLiked) {
             // Unlike
-            videoLikeRepository.delete(videoId, userId);
+            videoLikeRepository.deleteByEmail(videoId, normalizedEmail);
             Video video = videoOpt.get();
             video.decrementLikes();
             videoRepository.save(video);
+            log.info("Unliked video {} by user {}", videoId, normalizedEmail);
             return false;
         } else {
             // Like
             VideoLike like = VideoLike.builder()
-                    .id(VideoLike.generateId(videoId, userId))
+                    .id(VideoLike.generateId(videoId, normalizedEmail))
                     .videoId(videoId)
-                    .userId(userId)
+                    .userEmail(normalizedEmail)
                     .createdAt(System.currentTimeMillis())
                     .build();
 
@@ -316,12 +332,42 @@ public class VideoService {
             Video video = videoOpt.get();
             video.incrementLikes();
             videoRepository.save(video);
+
+            log.info("Liked video {} by user {}", videoId, normalizedEmail);
             return true;
         }
     }
 
-    public boolean isLikedByUser(String videoId, Long userId) throws IOException {
-        return videoLikeRepository.existsByVideoIdAndUserId(videoId, userId);
+    /**
+     * Check if user has liked a video
+     */
+    public boolean isLikedByUser(String videoId, String userEmail) throws IOException {
+        if (videoId == null || userEmail == null) {
+            return false;
+        }
+
+        String normalizedEmail = userEmail.toLowerCase().trim();
+        boolean liked = videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
+
+        log.debug("Check like status: videoId={}, userEmail={}, liked={}", videoId, normalizedEmail, liked);
+        return liked;
     }
 
+    /**
+     * Remove like
+     */
+    public void removeLike(String videoId, String userEmail) throws IOException {
+        if (videoId == null || userEmail == null) {
+            throw new IllegalArgumentException("videoId and userEmail cannot be null");
+        }
+
+        String normalizedEmail = userEmail.toLowerCase().trim();
+
+        boolean wasLiked = videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
+        if (wasLiked) {
+            videoLikeRepository.deleteByEmail(videoId, normalizedEmail);
+            decrementLikes(videoId);
+            log.info("Removed like: videoId={}, userEmail={}", videoId, normalizedEmail);
+        }
+    }
 }

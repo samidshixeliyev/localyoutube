@@ -43,9 +43,18 @@ const isTokenExpiringSoon = (token) => {
     
     // Check if token expires in less than 5 minutes
     const timeUntilExpiration = exp - now;
-    return timeUntilExpiration < 5 * 60 * 1000; // 5 minutes
+    const isExpiring = timeUntilExpiration < 5 * 60 * 1000; // 5 minutes
+    
+    if (isExpiring) {
+      console.log('[API] Token expiring soon:', {
+        expiresAt: new Date(exp),
+        timeLeft: Math.floor(timeUntilExpiration / 1000) + ' seconds'
+      });
+    }
+    
+    return isExpiring;
   } catch (err) {
-    console.error('Error checking token expiration:', err);
+    console.error('[API] Error checking token expiration:', err);
     return true; // If we can't decode, assume expired
   }
 };
@@ -56,6 +65,8 @@ const refreshToken = async () => {
   if (!token) {
     throw new Error('No token available');
   }
+
+  console.log('[API] Refreshing token...');
 
   try {
     const response = await axios.post('/api/auth/refresh', {}, {
@@ -78,8 +89,10 @@ const refreshToken = async () => {
     };
     localStorage.setItem('user_data', JSON.stringify(userData));
     
+    console.log('[API] Token refreshed successfully');
     return newToken;
   } catch (err) {
+    console.error('[API] Token refresh failed:', err.response?.data || err.message);
     // If refresh fails, logout
     localStorage.removeItem('jwt_token');
     localStorage.removeItem('user_data');
@@ -93,10 +106,15 @@ api.interceptors.request.use(
   async (config) => {
     const token = localStorage.getItem('jwt_token');
     
+    console.log('[API] Request:', config.method?.toUpperCase(), config.url, {
+      hasToken: !!token,
+      headers: config.headers
+    });
+    
     if (token) {
       // Check if token is expiring soon
       if (isTokenExpiringSoon(token)) {
-        console.log('Token expiring soon, refreshing...');
+        console.log('[API] Token expiring soon, refreshing...');
         
         if (!isRefreshing) {
           isRefreshing = true;
@@ -126,30 +144,49 @@ api.interceptors.request.use(
       } else {
         // Token is still valid, use it
         config.headers.Authorization = `Bearer ${token}`;
+        console.log('[API] Using existing token');
       }
+    } else {
+      console.log('[API] No token found in localStorage');
     }
     
     return config;
   },
   (error) => {
+    console.error('[API] Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor - Handle 401 errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('[API] Response:', response.config.method?.toUpperCase(), response.config.url, {
+      status: response.status
+    });
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     
+    console.error('[API] Response error:', {
+      url: originalRequest?.url,
+      status: error.response?.status,
+      message: error.response?.data?.message || error.message,
+      hasRetried: originalRequest?._retry
+    });
+    
     if (error.response?.status === 401 && !originalRequest._retry) {
+      console.log('[API] Got 401, attempting token refresh...');
       originalRequest._retry = true;
       
       try {
         const newToken = await refreshToken();
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        console.log('[API] Retrying request with new token');
         return api(originalRequest);
       } catch (err) {
+        console.error('[API] Token refresh failed, redirecting to login');
         // Refresh failed, redirect to login
         return Promise.reject(err);
       }

@@ -31,6 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         final String authorizationHeader = request.getHeader("Authorization");
+        final String requestUri = request.getRequestURI();
 
         String username = null;
         String jwt = null;
@@ -39,14 +40,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             jwt = authorizationHeader.substring(7);
             try {
                 username = jwtUtil.extractUsername(jwt);
+                log.debug("JWT extracted username: {} for request: {}", username, requestUri);
             } catch (Exception e) {
-                log.warn("Failed to extract username from JWT: {}", e.getMessage());
+                log.warn("Failed to extract username from JWT for {}: {}", requestUri, e.getMessage());
             }
+        } else {
+            log.debug("No Authorization header found for request: {}", requestUri);
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
+                log.debug("Loaded UserDetails: class={}, username={}, authorities={}",
+                        userDetails.getClass().getSimpleName(),
+                        userDetails.getUsername(),
+                        userDetails.getAuthorities());
 
                 if (jwtUtil.validateToken(jwt, userDetails)) {
                     UsernamePasswordAuthenticationToken authenticationToken =
@@ -57,12 +66,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             );
                     authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+
+                    log.debug("Authentication successful for user: {} on path: {}", username, requestUri);
+                } else {
+                    log.warn("Token validation failed for user: {} on path: {}", username, requestUri);
                 }
             } catch (Exception e) {
-                log.warn("Failed to authenticate user: {}", e.getMessage());
+                log.error("Failed to authenticate user {} on path {}: {}", username, requestUri, e.getMessage());
             }
         }
-        
+
         filterChain.doFilter(request, response);
     }
 }
