@@ -5,6 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LocalTube - Video Streaming Platform</title>
+        <!-- Your original CSP (kept as requested) -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'inline-speculation-rules';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src 'self' https://fonts.gstatic.com;
+        img-src 'self' data:;
+        connect-src 'self' https://172.22.111.47:8081;
+      "
+    />
   </head>
   <body>
     <div id="root"></div>

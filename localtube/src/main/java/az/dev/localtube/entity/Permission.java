@@ -24,7 +24,7 @@ public class Permission {
     @Column
     private String description;
 
-    @Column(name = "permission_type")
+    @Column(name = "type")
     private String permissionType;
 
     @Column(name = "created_at")

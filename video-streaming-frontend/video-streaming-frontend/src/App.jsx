@@ -2,7 +2,6 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { MiniPlayerProvider } from './context/MiniPlayerContext';
-import Navbar from './components/Navbar';
 import MiniPlayer from './components/MiniPlayer';
 
 // Pages
@@ -35,13 +34,12 @@ function PrivateRoute({ children, requiredPermission }) {
 }
 
 function AppContent() {
-    const { user, isAuthenticated, logout } = useAuth();
+    const { isAuthenticated } = useAuth();
 
     return (
         <MiniPlayerProvider>
+            {/* ✅ FIXED: Removed Navbar from here - it's now only in individual pages */}
             <div className="min-h-screen bg-gray-50">
-                <Navbar user={user} onLogout={logout} />
-
                 <Routes>
                     {/* Public */}
                     <Route path="/" element={<Home />} />

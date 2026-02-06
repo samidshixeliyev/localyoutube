@@ -2,17 +2,18 @@ import api from './api';
 
 const videoService = {
   // Get all videos with pagination
-getPublicVideos: async (page = 0, size = 12) => {
-  try {
-    const response = await api.get('/videos', {
-      params: { page, size }
-    });
-    return response.data.videos || [];
-  } catch (error) {
-    console.error('[VideoService] Error fetching videos:', error);
-    throw error;
-  }
-},
+  getPublicVideos: async (page = 0, size = 12) => {
+    try {
+      // ✅ FIXED: Correct endpoint with  prefix
+      const response = await api.get('/videos', {
+        params: { page, size }
+      });
+      return response.data.videos || [];
+    } catch (error) {
+      console.error('[VideoService] Error fetching videos:', error);
+      throw error;
+    }
+  },
 
   getVideoById: async (id) => {
     try {
@@ -28,10 +29,10 @@ getPublicVideos: async (page = 0, size = 12) => {
     return await videoService.getVideoById(id);
   },
 
-  // Get my videos - backend doesn't have this, use /upload/videos
+  // Get my videos
   getMyVideos: async () => {
     try {
-      const response = await api.get('/upload/videos');  // ✅ Changed
+      const response = await api.get('/upload/videos');
       return response.data || [];
     } catch (error) {
       console.error('[VideoService] Error fetching my videos:', error);
@@ -52,7 +53,7 @@ getPublicVideos: async (page = 0, size = 12) => {
     }
   },
 
-  // ✅ FIXED: Use /upload endpoints with query params
+  // ✅ FIXED: Use correct endpoints with  prefix
   initUpload: async (filename, title, description, fileSize, totalChunks) => {
     try {
       const response = await api.post('/upload/init', null, {
@@ -60,7 +61,7 @@ getPublicVideos: async (page = 0, size = 12) => {
           filename, 
           title, 
           description, 
-          totalSize: fileSize,  // ✅ Changed from fileSize
+          totalSize: fileSize,
           totalChunks 
         }
       });
@@ -71,14 +72,13 @@ getPublicVideos: async (page = 0, size = 12) => {
     }
   },
 
-  // ✅ FIXED: Use /upload/chunk with query params
   uploadChunk: async (chunk, chunkIndex, totalChunks, videoId) => {
     try {
       const formData = new FormData();
-      formData.append('file', chunk);  // ✅ Changed from 'chunk'
+      formData.append('file', chunk);
       
       const response = await api.post('/upload/chunk', formData, {
-        params: { chunkIndex, totalChunks, videoId },  // ✅ As query params
+        params: { chunkIndex, totalChunks, videoId },
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60000,
       });
@@ -89,11 +89,10 @@ getPublicVideos: async (page = 0, size = 12) => {
     }
   },
 
-  // ✅ FIXED: Use /upload/complete with query params
   completeUpload: async (videoId, totalChunks) => {
     try {
       const response = await api.post('/upload/complete', null, {
-        params: { videoId, totalChunks }  // ✅ As query params
+        params: { videoId }
       });
       return response.data;
     } catch (error) {
@@ -135,7 +134,7 @@ getPublicVideos: async (page = 0, size = 12) => {
   uploadThumbnail: async (videoId, thumbnailFile) => {
     try {
       const formData = new FormData();
-      formData.append('file', thumbnailFile);  // ✅ Changed from 'thumbnail'
+      formData.append('file', thumbnailFile);
       
       const response = await api.post(`/videos/${videoId}/thumbnail`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -156,7 +155,6 @@ getPublicVideos: async (page = 0, size = 12) => {
     }
   },
 
-  // ✅ FIXED: Backend doesn't have toggle, manually implement
   toggleLike: async (id) => {
     try {
       const status = await videoService.getLikeStatus(id);
@@ -173,10 +171,9 @@ getPublicVideos: async (page = 0, size = 12) => {
     }
   },
 
-  // ✅ FIXED: Correct endpoint name
   getLikeStatus: async (id) => {
     try {
-      const response = await api.get(`/videos/${id}/like-status`);  // ✅ Changed
+      const response = await api.get(`/videos/${id}/like-status`);
       return response.data;
     } catch (error) {
       return { liked: false };
@@ -209,7 +206,7 @@ getPublicVideos: async (page = 0, size = 12) => {
     if (thumbnailPath.startsWith('http')) return thumbnailPath;
     return `/thumbnails/${thumbnailPath}`;
   },
-  getDownloadUrl: (videoId, quality = 'original') => `/api/videos/${videoId}/download?quality=${quality}`,
+  getDownloadUrl: (videoId, quality = 'original') => `/videos/${videoId}/download?quality=${quality}`,
 };
 
 export default videoService;

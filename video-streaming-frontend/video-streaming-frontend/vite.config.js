@@ -3,46 +3,46 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  
+
   server: {
+    // Your preferred port + accessible from network
     port: 3000,
     host: '0.0.0.0',
-    
+
     proxy: {
-      '/api': {
-        target: 'http://172.22.111.47:8081',
-        changeOrigin: true,
-        secure: false,
-        configure: (proxy, _options) => {
-          proxy.on('error', (err, _req, _res) => {
-            console.log('[Proxy Error]', err.message);
-          });
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // FIX: Show target correctly
-            console.log('[Proxy] →', req.url, '→ http://172.22.111.47:8081' + req.url);
-          });
-          proxy.on('proxyRes', (proxyRes, req, _res) => {
-            console.log('[Proxy] ←', proxyRes.statusCode, req.url);
-          });
-        },
-      },
-      
+      // HLS streaming (video segments & playlists)
       '/hls': {
         target: 'http://172.22.111.47:8081',
         changeOrigin: true,
         secure: false,
       },
-      
+
+      // Thumbnails / preview images
       '/thumbnails': {
         target: 'http://172.22.111.47:8081',
         changeOrigin: true,
         secure: false,
-      }
-    }
+      },
+
+      // User uploads, avatars, etc.
+      '/uploads': {
+        target: 'http://172.22.111.47:8081',
+        changeOrigin: true,
+        secure: false,
+      },
+
+      // Optional: if you ever want to proxy API calls too (uncomment if needed)
+      // '/api': {
+      //   target: 'http://172.22.111.47:8081',
+      //   changeOrigin: true,
+      //   secure: false,
+      //   // rewrite: (path) => path.replace(/^\/api/, '')   // only if backend paths don't start with /api
+      // },
+    },
   },
 
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    sourcemap: false,           // smaller production builds
   },
 })
