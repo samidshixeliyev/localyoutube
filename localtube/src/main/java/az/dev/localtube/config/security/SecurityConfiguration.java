@@ -60,6 +60,9 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/auth/refresh").permitAll()
                         .requestMatchers("/api/auth/idp/**").permitAll()
 
+                        // App config (public upload/feature settings)
+                        .requestMatchers("/api/config/**").permitAll()
+
                         // Swagger/OpenAPI - Public
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 

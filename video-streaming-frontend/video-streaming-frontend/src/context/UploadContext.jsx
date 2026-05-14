@@ -4,9 +4,22 @@ import videoService from '../services/videoService';
 const UploadContext = createContext(null);
 export const useUpload = () => useContext(UploadContext);
 
-const CHUNK_SIZE  = 20 * 1024 * 1024; // 20 MB
-const MAX_RETRIES = 3;
-const CONCURRENCY = 2;
+const CHUNK_SIZE        = 20 * 1024 * 1024; // 20 MB
+const MAX_RETRIES       = 3;
+const DEFAULT_CONCURRENCY = 2;
+
+/** Fetches the admin-configured max parallel upload chunks. Falls back to DEFAULT_CONCURRENCY. */
+async function fetchConcurrency() {
+  try {
+    const res = await fetch('/api/config/upload');
+    if (!res.ok) return DEFAULT_CONCURRENCY;
+    const cfg = await res.json();
+    const n = parseInt(cfg.maxParallelUploads, 10);
+    return Number.isFinite(n) ? Math.max(1, Math.min(10, n)) : DEFAULT_CONCURRENCY;
+  } catch {
+    return DEFAULT_CONCURRENCY;
+  }
+}
 
 const IDLE = {
   active: false, minimized: false,
@@ -73,6 +86,9 @@ export const UploadProvider = ({ children }) => {
 
     patch({ ...IDLE, active: true, title: title || file.name, phase: 'uploading' });
 
+    // Resolve concurrency from admin setting before starting
+    const concurrency = await fetchConcurrency();
+
     const chunks = Math.ceil(file.size / CHUNK_SIZE);
     startRef.current = Date.now();
     bytesRef.current = 0;
@@ -105,7 +121,7 @@ export const UploadProvider = ({ children }) => {
         }
       };
 
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, chunks) }, worker));
+      await Promise.all(Array.from({ length: Math.min(concurrency, chunks) }, worker));
       await videoService.completeUpload(videoId);
 
       if (visibility !== 'public' || allowedEmails.length > 0)

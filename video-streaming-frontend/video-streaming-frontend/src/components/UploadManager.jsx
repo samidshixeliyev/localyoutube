@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUpload } from '../context/UploadContext';
+import { useAuth } from '../context/AuthContext';
 import { X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Upload, Cpu } from 'lucide-react';
 
 const fmt = {
@@ -10,7 +11,16 @@ const fmt = {
 
 export default function UploadManager() {
   const { state, dismiss, minimize, expand } = useUpload();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  // Clear the upload mini-window when the user logs out
+  useEffect(() => {
+    if (!isAuthenticated && state.active) {
+      dismiss();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   if (!state.active) return null;
 

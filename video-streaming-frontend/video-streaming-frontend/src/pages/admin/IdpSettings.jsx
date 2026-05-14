@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle, ToggleLeft, ToggleRight, Upload } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import { adminGetSettings, adminUpdateSettings } from '../../services/api';
 
@@ -253,6 +253,36 @@ const IdpSettings = () => {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Upload Settings */}
+          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 divide-y divide-gray-100">
+            <div className="px-6 py-4 flex items-center gap-2">
+              <Upload className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-700">Upload Settings</h2>
+            </div>
+            <div className="px-6 py-5">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Max parallel chunk uploads
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min="1" max="10" step="1"
+                  value={values['upload.max-parallel'] || '2'}
+                  onChange={e => handleChange('upload.max-parallel', e.target.value)}
+                  className="flex-1 h-2 accent-primary-600 cursor-pointer"
+                />
+                <span className="w-8 text-center text-sm font-semibold text-gray-900">
+                  {values['upload.max-parallel'] || '2'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Number of file chunks sent simultaneously per upload (1 = sequential, 10 = maximum parallelism).
+                Higher values speed up uploads on fast connections but use more server bandwidth.
+                Default: 2.
+              </p>
+            </div>
           </div>
 
           {/* Actions */}
