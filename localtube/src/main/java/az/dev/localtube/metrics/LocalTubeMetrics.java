@@ -30,7 +30,7 @@ public class LocalTubeMetrics {
     private final Counter transcodingSuccess;
     private final Counter transcodingFailed;
 
-    // Elasticsearch metrics
+    // Search metrics
     private final Counter esOperationsTotal;
     private final Timer esLatency;
 
@@ -86,16 +86,16 @@ public class LocalTubeMetrics {
                 .register(registry);
 
         // ═══════════════════════════════════════════════════════════════════════
-        // Elasticsearch Metrics
+        // Search Metrics
         // ═══════════════════════════════════════════════════════════════════════
-        this.esOperationsTotal = Counter.builder("localtube_elasticsearch_operations_total")
-                .description("Total Elasticsearch operations")
+        this.esOperationsTotal = Counter.builder("localtube_search_operations_total")
+                .description("Total search operations")
                 .tag("operation", "all")
                 .tag("status", "all")
                 .register(registry);
 
-        this.esLatency = Timer.builder("localtube_elasticsearch_latency_seconds")
-                .description("Elasticsearch operation latency")
+        this.esLatency = Timer.builder("localtube_search_latency_seconds")
+                .description("Search operation latency")
                 .publishPercentiles(0.5, 0.9, 0.99)
                 .register(registry);
 
@@ -177,8 +177,8 @@ public class LocalTubeMetrics {
     // ═══════════════════════════════════════════════════════════════════════════════
     
     public void recordElasticsearchOperation(String operation, String status) {
-        Counter.builder("localtube_elasticsearch_operations_total")
-                .description("Total Elasticsearch operations")
+        Counter.builder("localtube_search_operations_total")
+                .description("Total search operations")
                 .tag("operation", operation)
                 .tag("status", status)
                 .register(registry)

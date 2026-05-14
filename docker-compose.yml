@@ -1,0 +1,54 @@
+services:
+  localyoutube:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: localyoutube:latest
+    container_name: localyoutube
+    restart: unless-stopped
+    ports:
+      - "4000:8080"   # Spring Boot — frontend + API
+      - "3000:3000"   # Grafana
+    environment:
+      # PostgreSQL (internal)
+      PGDATA: /var/lib/postgresql/data
+      PGUSER: postgres
+      PGDB: localtube
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/localtube
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ""
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production-min-32-chars}
+      # LocalTube admin seed
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@localtube.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      # AO IDP
+      IDP_BASE_URL: ${IDP_BASE_URL:-https://51.20.12.6}
+      IDP_CLIENT_ID: ${IDP_CLIENT_ID:-EFxbQK-ekDX1OkWov51cjg}
+      IDP_REDIRECT_URI: ${IDP_REDIRECT_URI:-http://51.20.12.6:4000/}
+      IDP_LOGOUT_REDIRECT_URI: ${IDP_LOGOUT_REDIRECT_URI:-http://51.20.12.6:4000/logged_out}
+      IDP_JWKS_URI: ${IDP_JWKS_URI:-https://51.20.12.6/jwks}
+      IDP_ISSUER: ${IDP_ISSUER:-https://auth.ao.az}
+      IDP_SKIP_SSL: ${IDP_SKIP_SSL:-true}
+      # Grafana
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_PORT: "3000"
+    volumes:
+      - localyoutube_data:/data
+      - localyoutube_pgdata:/var/lib/postgresql/data
+      - localyoutube_grafana:/var/lib/grafana
+      - localyoutube_prometheus:/var/lib/prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]  # internal port stays 8080
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  localyoutube_data:
+  localyoutube_pgdata:
+  localyoutube_grafana:
+  localyoutube_prometheus:

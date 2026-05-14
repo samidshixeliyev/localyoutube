@@ -1,0 +1,59 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 13.61.159.58
+          username: ubuntu
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          command_timeout: 25m
+          script: |
+            set -e
+
+            DEPLOY_DIR=/opt/localyoutube
+
+            echo "=== Pulling latest code ==="
+            if [ -d "$DEPLOY_DIR/.git" ]; then
+              cd "$DEPLOY_DIR"
+              git fetch origin
+              git reset --hard origin/master
+            else
+              sudo rm -rf "$DEPLOY_DIR"
+              sudo mkdir -p "$DEPLOY_DIR"
+              sudo chown ubuntu:ubuntu "$DEPLOY_DIR"
+              git clone https://github.com/samidshixeliyev/localyoutube.git "$DEPLOY_DIR"
+              cd "$DEPLOY_DIR"
+            fi
+
+            echo "=== Rebuilding Docker image ==="
+            docker compose down --remove-orphans 2>/dev/null || true
+            docker compose up --build -d
+
+            echo "=== Waiting for health check ==="
+            for i in $(seq 1 24); do
+              STATUS=$(curl -sf http://localhost:4000/actuator/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status',''))" 2>/dev/null || echo "")
+              if [ "$STATUS" = "UP" ]; then
+                echo "✅ App is UP"
+                break
+              fi
+              echo "  waiting... ($i/24)"
+              sleep 5
+            done
+
+            echo "=== Done ==="
+            docker ps --filter name=localyoutube --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"

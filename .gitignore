@@ -1,0 +1,30 @@
+# ── Gradle ────────────────────────────────────────────────────────────────────
+localtube/build/
+localtube/.gradle/
+localtube/out/
+*.class
+*.jar
+!localtube/gradle/wrapper/gradle-wrapper.jar
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+video-streaming-frontend/**/node_modules/
+video-streaming-frontend/**/dist/
+video-streaming-frontend/**/.vite/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# ── Secrets / env ─────────────────────────────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+
+# ── Docker build artefacts ────────────────────────────────────────────────────
+*.zip

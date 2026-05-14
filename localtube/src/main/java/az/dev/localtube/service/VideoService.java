@@ -9,6 +9,7 @@ import az.dev.localtube.repository.VideoRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -47,18 +49,21 @@ public class VideoService {
     // Create
     // ═══════════════════════════════════════════════════════════════════════════
 
-    public Video createVideo(String title, String filename, String description) throws IOException {
+    @Transactional
+    public Video createVideo(String title, String filename, String description) {
         return createVideo(title, filename, description, null, null, null);
     }
 
+    @Transactional
     public Video createVideo(String title, String filename, String description,
-                             List<String> tags, Long uploaderId, String uploaderName) throws IOException {
+                             List<String> tags, Long uploaderId, String uploaderName) {
         return createVideo(title, filename, description, tags, uploaderId, uploaderName, null);
     }
 
+    @Transactional
     public Video createVideo(String title, String filename, String description,
                              List<String> tags, Long uploaderId, String uploaderName,
-                             String uploaderEmail) throws IOException {
+                             String uploaderEmail) {
         String videoId = UUID.randomUUID().toString().replace("-", "");
 
         Video video = Video.builder()
@@ -67,7 +72,7 @@ public class VideoService {
                 .filename(filename)
                 .originalFilename(filename)
                 .description(description != null ? description : "")
-                .tags(tags != null ? tags : List.of())
+                .tags(tags != null ? new ArrayList<>(tags) : new ArrayList<>())
                 .uploaderId(uploaderId)
                 .uploaderName(uploaderName)
                 .uploaderEmail(uploaderEmail)
@@ -83,9 +88,9 @@ public class VideoService {
                 .build();
 
         video.setUploadedAtDateTime(LocalDateTime.now());
+        video.markAsNew();
         video = videoRepository.save(video);
         log.info("Created video with UUID: {}, filename: {}", videoId, filename);
-
         return video;
     }
 
@@ -93,73 +98,67 @@ public class VideoService {
     // Read
     // ═══════════════════════════════════════════════════════════════════════════
 
-    public Optional<Video> getVideo(String id) throws IOException {
+    public Optional<Video> getVideo(String id) {
         return videoRepository.findById(id);
     }
 
-    public List<Video> getAllVideos() throws IOException {
-        return videoRepository.findAll();
+    public List<Video> getAllVideos() {
+        return videoRepository.findAllOrdered();
     }
 
-    public List<Video> getAllVideos(int page, int size) throws IOException {
+    public List<Video> getAllVideos(int page, int size) {
         return videoRepository.findAll(page, size);
     }
 
-    public List<Video> getVideosByUploader(Long uploaderId, int page, int size) throws IOException {
+    public List<Video> getVideosByUploader(Long uploaderId, int page, int size) {
         return videoRepository.findByUploaderId(uploaderId, page, size);
     }
 
-    public long countVideosByUploader(Long uploaderId) throws IOException {
+    public long countVideosByUploader(Long uploaderId) {
         return videoRepository.countByUploaderId(uploaderId);
     }
 
-    public List<Video> getVideosByStatus(VideoStatus status) throws IOException {
+    public List<Video> getVideosByStatus(VideoStatus status) {
         return videoRepository.findByStatus(status);
     }
 
-    public List<Video> searchVideos(String query) throws IOException {
+    public List<Video> searchVideos(String query) {
         return searchVideos(query, 0, 20, null);
     }
 
-    public List<Video> searchVideos(String query, int page, int size) throws IOException {
+    public List<Video> searchVideos(String query, int page, int size) {
         return searchVideos(query, page, size, null);
     }
 
-    public List<Video> searchVideos(String query, int page, int size, String userEmail) throws IOException {
+    public List<Video> searchVideos(String query, int page, int size, String userEmail) {
         return videoRepository.search(query, page, size, userEmail);
     }
 
-    public List<Video> getPublicVideos(int page, int size) throws IOException {
+    public List<Video> getPublicVideos(int page, int size) {
         return getPublicVideos(page, size, null);
     }
 
-    public List<Video> getPublicVideos(int page, int size, String userEmail) throws IOException {
+    public List<Video> getPublicVideos(int page, int size, String userEmail) {
         return videoRepository.findPublicVideos(page, size, userEmail);
     }
 
-    public long countPublicVideos() throws IOException {
+    public long countPublicVideos() {
         return countPublicVideos(null);
     }
 
-    public long countPublicVideos(String userEmail) throws IOException {
+    public long countPublicVideos(String userEmail) {
         return videoRepository.countPublicVideos(userEmail);
     }
 
-    /**
-     * For super-admin: all ready videos regardless of visibility
-     */
-    public List<Video> getAllReadyVideos(int page, int size) throws IOException {
+    public List<Video> getAllReadyVideos(int page, int size) {
         return videoRepository.findAllReadyVideos(page, size);
     }
 
-    public long countAllReadyVideos() throws IOException {
+    public long countAllReadyVideos() {
         return videoRepository.countAllReadyVideos();
     }
 
-    /**
-     * Tag-based video suggestions
-     */
-    public List<Video> getSuggestionsByTags(List<String> tags, String excludeVideoId, int size) throws IOException {
+    public List<Video> getSuggestionsByTags(List<String> tags, String excludeVideoId, int size) {
         return videoRepository.findByTags(tags, excludeVideoId, size);
     }
 
@@ -167,79 +166,71 @@ public class VideoService {
     // Update
     // ═══════════════════════════════════════════════════════════════════════════
 
-    public Video updateVideo(Video video) throws IOException {
+    @Transactional
+    public Video updateVideo(Video video) {
         video.setUpdatedAtDateTime(LocalDateTime.now());
         return videoRepository.save(video);
     }
 
-    public void updateVideoStatus(String id, VideoStatus status) throws IOException {
+    @Transactional
+    public void updateVideoStatus(String id, VideoStatus status) {
         videoRepository.updateStatus(id, status);
-
         if (status == VideoStatus.READY) {
-            Optional<Video> videoOpt = videoRepository.findById(id);
-            if (videoOpt.isPresent()) {
-                Video video = videoOpt.get();
+            videoRepository.findById(id).ifPresent(video -> {
                 video.setProcessedAtDateTime(LocalDateTime.now());
                 videoRepository.save(video);
-            }
+            });
         }
     }
 
-    public void addQualityToVideo(String id, String quality) throws IOException {
-        Optional<Video> videoOpt = videoRepository.findById(id);
-        if (videoOpt.isPresent()) {
-            Video video = videoOpt.get();
+    @Transactional
+    public void addQualityToVideo(String id, String quality) {
+        videoRepository.findById(id).ifPresent(video -> {
             video.addQuality(quality);
             videoRepository.save(video);
             log.debug("Added quality {} to video {}", quality, id);
-        }
+        });
     }
 
+    @Transactional
     public void updateVideoMetadata(String id, Integer width, Integer height,
-                                    Integer duration, Long fileSize) throws IOException {
-        Optional<Video> videoOpt = videoRepository.findById(id);
-        if (videoOpt.isPresent()) {
-            Video video = videoOpt.get();
+                                    Integer duration, Long fileSize) {
+        videoRepository.findById(id).ifPresent(video -> {
             video.setWidth(width);
             video.setHeight(height);
             video.setDurationSeconds(duration);
             video.setFileSize(fileSize);
             videoRepository.save(video);
-        }
+        });
     }
 
-    public void incrementViews(String id) throws IOException {
-        Optional<Video> videoOpt = videoRepository.findById(id);
-        if (videoOpt.isPresent()) {
-            Video video = videoOpt.get();
+    @Transactional
+    public void incrementViews(String id) {
+        videoRepository.findById(id).ifPresent(video -> {
             video.incrementViews();
             videoRepository.save(video);
-        }
+        });
     }
 
-    public void incrementLikes(String id) throws IOException {
-        Optional<Video> videoOpt = videoRepository.findById(id);
-        if (videoOpt.isPresent()) {
-            Video video = videoOpt.get();
+    @Transactional
+    public void incrementLikes(String id) {
+        videoRepository.findById(id).ifPresent(video -> {
             video.incrementLikes();
             videoRepository.save(video);
-        }
+        });
     }
 
-    public void decrementLikes(String id) throws IOException {
-        Optional<Video> videoOpt = videoRepository.findById(id);
-        if (videoOpt.isPresent()) {
-            Video video = videoOpt.get();
+    @Transactional
+    public void decrementLikes(String id) {
+        videoRepository.findById(id).ifPresent(video -> {
             video.decrementLikes();
             videoRepository.save(video);
-        }
+        });
     }
 
     public void uploadCustomThumbnail(String videoId, MultipartFile file) throws IOException {
-        Optional<Video> videoOpt = videoRepository.findById(videoId);
-        if (videoOpt.isEmpty()) {
-            throw new BadRequestException("Video not found: " + videoId);
-        }
+        Video video = videoRepository.findById(videoId)
+                .orElseThrow(() -> new BadRequestException("Video not found: " + videoId));
 
         String contentType = file.getContentType();
         if (contentType == null || !contentType.startsWith("image/")) {
@@ -256,10 +247,8 @@ public class VideoService {
             Files.copy(in, customThumbnail, StandardCopyOption.REPLACE_EXISTING);
         }
 
-        Video video = videoOpt.get();
         video.setThumbnailUrl("/thumbnails/" + videoId + "/custom." + extension);
         videoRepository.save(video);
-
         log.info("Custom thumbnail uploaded for video: {}", videoId);
     }
 
@@ -267,6 +256,7 @@ public class VideoService {
     // Delete
     // ═══════════════════════════════════════════════════════════════════════════
 
+    @Transactional
     public void deleteVideo(String id) throws IOException {
         Optional<Video> videoOpt = videoRepository.findById(id);
         if (videoOpt.isPresent()) {
@@ -282,41 +272,18 @@ public class VideoService {
                 deleteDirectoryRecursive(Paths.get(video.getThumbnailPath()));
             }
 
-            videoRepository.delete(id);
+            videoLikeRepository.deleteByVideoId(id);
+            videoRepository.deleteById(id);
             log.info("Deleted video and files: {}", id);
         }
-    }
-
-    private void deleteDirectoryRecursive(Path dir) {
-        try {
-            if (Files.exists(dir)) {
-                Files.walk(dir)
-                        .sorted((a, b) -> b.compareTo(a))
-                        .forEach(p -> {
-                            try {
-                                Files.deleteIfExists(p);
-                            } catch (IOException e) {
-                                log.warn("Cannot delete: {}", p);
-                            }
-                        });
-            }
-        } catch (IOException e) {
-            log.warn("Delete failed: {}", dir);
-        }
-    }
-
-    private String getFileExtension(String filename) {
-        if (filename == null || !filename.contains(".")) {
-            return "jpg";
-        }
-        return filename.substring(filename.lastIndexOf('.') + 1);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Like methods
     // ═══════════════════════════════════════════════════════════════════════════
 
-    public synchronized boolean toggleLike(String videoId, String userEmail) throws IOException {
+    @Transactional
+    public synchronized boolean toggleLike(String videoId, String userEmail) {
         if (videoId == null || userEmail == null) {
             throw new IllegalArgumentException("videoId and userEmail cannot be null");
         }
@@ -324,16 +291,13 @@ public class VideoService {
         String normalizedEmail = userEmail.toLowerCase().trim();
         log.info("Toggle like: videoId={}, userEmail={}", videoId, normalizedEmail);
 
-        Optional<Video> videoOpt = videoRepository.findById(videoId);
-        if (videoOpt.isEmpty()) {
-            throw new IOException("Video not found: " + videoId);
-        }
+        Video video = videoRepository.findById(videoId)
+                .orElseThrow(() -> new RuntimeException("Video not found: " + videoId));
 
         boolean alreadyLiked = videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
 
         if (alreadyLiked) {
             videoLikeRepository.deleteByEmail(videoId, normalizedEmail);
-            Video video = videoOpt.get();
             video.decrementLikes();
             videoRepository.save(video);
             log.info("Unliked video {} by user {}", videoId, normalizedEmail);
@@ -345,38 +309,53 @@ public class VideoService {
                     .userEmail(normalizedEmail)
                     .createdAt(System.currentTimeMillis())
                     .build();
-
             videoLikeRepository.save(like);
-
-            Video video = videoOpt.get();
             video.incrementLikes();
             videoRepository.save(video);
-
             log.info("Liked video {} by user {}", videoId, normalizedEmail);
             return true;
         }
     }
 
-    public boolean isLikedByUser(String videoId, String userEmail) throws IOException {
-        if (videoId == null || userEmail == null) {
-            return false;
-        }
-        String normalizedEmail = userEmail.toLowerCase().trim();
-        return videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
+    public boolean isLikedByUser(String videoId, String userEmail) {
+        if (videoId == null || userEmail == null) return false;
+        return videoLikeRepository.existsByVideoIdAndUserEmail(videoId, userEmail.toLowerCase().trim());
     }
 
-    public void removeLike(String videoId, String userEmail) throws IOException {
+    @Transactional
+    public void removeLike(String videoId, String userEmail) {
         if (videoId == null || userEmail == null) {
             throw new IllegalArgumentException("videoId and userEmail cannot be null");
         }
-
         String normalizedEmail = userEmail.toLowerCase().trim();
-
         boolean wasLiked = videoLikeRepository.existsByVideoIdAndUserEmail(videoId, normalizedEmail);
         if (wasLiked) {
             videoLikeRepository.deleteByEmail(videoId, normalizedEmail);
             decrementLikes(videoId);
             log.info("Removed like: videoId={}, userEmail={}", videoId, normalizedEmail);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Helpers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private void deleteDirectoryRecursive(Path dir) {
+        try {
+            if (Files.exists(dir)) {
+                Files.walk(dir)
+                        .sorted((a, b) -> b.compareTo(a))
+                        .forEach(p -> {
+                            try { Files.deleteIfExists(p); } catch (IOException e) { log.warn("Cannot delete: {}", p); }
+                        });
+            }
+        } catch (IOException e) {
+            log.warn("Delete failed: {}", dir);
+        }
+    }
+
+    private String getFileExtension(String filename) {
+        if (filename == null || !filename.contains(".")) return "jpg";
+        return filename.substring(filename.lastIndexOf('.') + 1);
     }
 }

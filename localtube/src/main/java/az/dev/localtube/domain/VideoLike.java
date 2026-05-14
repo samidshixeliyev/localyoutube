@@ -1,5 +1,6 @@
 package az.dev.localtube.domain;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,48 +10,33 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Entity
+@Table(name = "video_likes")
 public class VideoLike {
 
+    @Id
+    @Column(name = "id", length = 255)
     private String id;
+
+    @Column(name = "video_id", length = 64, nullable = false)
     private String videoId;
-    private String userEmail;  // Primary field - email-based identification
+
+    @Column(name = "user_email", length = 255, nullable = false)
+    private String userEmail;
+
+    @Column(name = "created_at")
     private Long createdAt;
 
-    // Legacy field - keep for backward compatibility during migration
-    @Deprecated
-    private Long userId;
-
-    /**
-     * Generate a unique ID for the like using videoId and userEmail
-     * IMPORTANT: This must be consistent and deterministic
-     */
     public static String generateId(String videoId, String userEmail) {
         if (videoId == null || userEmail == null) {
             throw new IllegalArgumentException("videoId and userEmail cannot be null");
         }
-
-        // Normalize email to lowercase for consistency
         String normalizedEmail = userEmail.toLowerCase().trim();
-
-        // Create a deterministic ID from videoId and normalized email
-        // Replace special characters that might cause issues
         String sanitizedEmail = normalizedEmail
                 .replace("@", "_at_")
                 .replace(".", "_dot_")
                 .replace("+", "_plus_")
                 .replace("-", "_dash_");
-
         return videoId + "_" + sanitizedEmail;
-    }
-
-    /**
-     * Legacy method for backward compatibility
-     */
-    @Deprecated
-    public static String generateId(String videoId, Long userId) {
-        if (videoId == null || userId == null) {
-            throw new IllegalArgumentException("videoId and userId cannot be null");
-        }
-        return videoId + "_user_" + userId;
     }
 }

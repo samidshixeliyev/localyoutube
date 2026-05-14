@@ -1,6 +1,21 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import api from '../services/api';
 
+function generateRandomString(length) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  return Array.from(crypto.getRandomValues(new Uint8Array(length)))
+    .map(b => chars[b % chars.length])
+    .join('');
+}
+
+async function sha256Base64url(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(hash)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
 const AuthContext = createContext();
 
 export const useAuth = () => {
@@ -87,6 +102,68 @@ export const AuthProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, []);
 
+  // ── IDP (PKCE) auth ──────────────────────────────────────────────────────
+
+  const initiateIdpLogin = async () => {
+    const config = await fetch('/api/auth/idp/config').then(r => r.json());
+
+    const verifier = generateRandomString(64);
+    const challenge = await sha256Base64url(verifier);
+    const state = generateRandomString(32);
+
+    sessionStorage.setItem('pkce_verifier', verifier);
+    sessionStorage.setItem('pkce_state', state);
+    sessionStorage.setItem('idp_config', JSON.stringify(config));
+
+    // Use the server-registered redirect URI exactly
+    const redirectUri = config.redirectUri || window.location.origin + '/';
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: config.clientId,
+      redirect_uri: redirectUri,
+      scope: config.scope,
+      state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+    });
+
+    window.location.href = config.authorizationEndpoint + '?' + params.toString();
+  };
+
+  const logoutWithIdp = async () => {
+    const idToken = localStorage.getItem('jwt_token');
+    setUser(null);
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('user');
+
+    try {
+      const config = await fetch('/api/auth/idp/config').then(r => r.json());
+      const logoutUri = config.endSessionEndpoint;
+      const params = new URLSearchParams({
+        post_logout_redirect_uri: config.logoutRedirectUri || window.location.origin + '/logged_out',
+      });
+      if (idToken) params.set('id_token_hint', idToken);
+      window.location.href = logoutUri + '?' + params.toString();
+    } catch {
+      window.location.href = '/';
+    }
+  };
+
+  const loginWithIdp = (token, idpUser) => {
+    localStorage.setItem('jwt_token', token);
+    const userData = {
+      email: idpUser.email || idpUser.sub,
+      username: idpUser.display_name || idpUser.ldap_username || idpUser.email?.split('@')[0],
+      permissions: [],
+      role: 'USER',
+      isIdpUser: true,
+    };
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+  };
+
+  // ── Local admin login ────────────────────────────────────────────────────
+
   const login = async (email, password) => {
     try {
       const response = await api.post('/auth/login', { email, password });
@@ -169,7 +246,10 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     login,
+    loginWithIdp,
+    initiateIdpLogin,
     logout,
+    logoutWithIdp,
     register,
     hasPermission,
     isAuthenticated,

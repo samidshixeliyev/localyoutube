@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-// ✅ CRITICAL FIX: Use the backend server URL directly
-// This ensures all API requests go to the correct backend server
-const API_BASE = 'http://172.22.111.47:8081/api';
+const API_BASE = '/api';
 
 const api = axios.create({
     baseURL: API_BASE,

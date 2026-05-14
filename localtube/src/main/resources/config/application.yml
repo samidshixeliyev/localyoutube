@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8081}
+  port: ${SERVER_PORT:8080}
   address: 0.0.0.0
   tomcat:
     max-swallow-size: 100MB
@@ -9,10 +9,10 @@ spring:
     name: localtube
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://555-PTSVBZ:65388;instanceName=SQLEXPRESS;databaseName=test_portal;encrypt=true;trustServerCertificate=true}
-    username: ${SPRING_DATASOURCE_USERNAME:sa}
-    password: ${SPRING_DATASOURCE_PASSWORD:123}
-    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/localtube}
+    username: ${SPRING_DATASOURCE_USERNAME:localtube}
+    password: ${SPRING_DATASOURCE_PASSWORD:localtube123}
+    driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -24,8 +24,12 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.SQLServerDialect
-        default_schema: dbo
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
 
   servlet:
     multipart:
@@ -39,27 +43,30 @@ jwt:
 
 localtube:
   storage:
-    upload-dir: ${UPLOAD_DIR:${user.dir}/modtube/uploads}
-    hls-dir: ${HLS_DIR:${user.dir}/modtube/hls}
-    temp-dir: ${TEMP_DIR:${user.dir}/modtube/temp}
-    thumbnail-dir: ${THUMBNAIL_DIR:${user.dir}/modtube/thumbnails}
+    upload-dir: ${UPLOAD_DIR:/data/uploads}
+    hls-dir: ${HLS_DIR:/data/hls}
+    temp-dir: ${TEMP_DIR:/data/temp}
+    thumbnail-dir: ${THUMBNAIL_DIR:/data/thumbnails}
     max-file-size: 53687091200
     min-disk-free: 5368709120
     allowed-extensions: mp4,mkv,avi,mov,wmv,flv,webm
 
   transcoding:
     segment-duration: 6
-    qualities: 480p,720p,1080p,2160p
+    qualities: 480p,720p,1080p
 
-  elasticsearch:
-    host: ${ELASTICSEARCH_HOST:localhost}
-    port: ${ELASTICSEARCH_PORT:9200}
-    scheme: ${ELASTICSEARCH_SCHEME:http}
-    username: ${ELASTICSEARCH_USERNAME:}
-    password: ${ELASTICSEARCH_PASSWORD:}
-    video-index: ${ELASTICSEARCH_VIDEO_INDEX:videos}
-    comment-index: ${ELASTICSEARCH_COMMENT_INDEX:comments}
-    like-index: ${ELASTICSEARCH_LIKE_INDEX:likes}
+  idp:
+    base-url: ${IDP_BASE_URL:https://51.20.12.6}
+    client-id: ${IDP_CLIENT_ID:EFxbQK-ekDX1OkWov51cjg}
+    jwks-uri: ${IDP_JWKS_URI:https://51.20.12.6/jwks}
+    issuer: ${IDP_ISSUER:https://auth.ao.az}
+    skip-ssl-verify: ${IDP_SKIP_SSL:true}
+    redirect-uri: ${IDP_REDIRECT_URI:http://51.20.12.6:4000/}
+    logout-redirect-uri: ${IDP_LOGOUT_REDIRECT_URI:http://51.20.12.6:4000/logged_out}
+
+  admin:
+    email: ${ADMIN_EMAIL:admin@localtube.local}
+    password: ${ADMIN_PASSWORD:changeme}
 
 logging:
   level:

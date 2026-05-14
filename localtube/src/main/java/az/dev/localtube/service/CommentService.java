@@ -6,11 +6,12 @@ import az.dev.localtube.repository.VideoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -20,13 +21,12 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final VideoRepository videoRepository;
 
-    /**
-     * Add comment - userId parameter now expects EMAIL from JWT
-     */
-    public Comment addComment(String videoId, String userEmail, String username, String text) throws IOException {
+    @Transactional
+    public Comment addComment(String videoId, String userEmail, String username, String text) {
         Comment comment = new Comment();
+        comment.setId(UUID.randomUUID().toString().replace("-", ""));
         comment.setVideoId(videoId);
-        comment.setUserId(userEmail);  // Store email as userId for consistency
+        comment.setUserId(userEmail);
         comment.setUsername(username);
         comment.setText(text);
         comment.setCreatedAtDateTime(LocalDateTime.now());
@@ -34,45 +34,41 @@ public class CommentService {
 
         comment = commentRepository.save(comment);
 
-        // Increment video comment count
-        var video = videoRepository.findById(videoId);
-        if (video.isPresent()) {
-            var v = video.get();
+        videoRepository.findById(videoId).ifPresent(v -> {
             v.incrementCommentCount();
             videoRepository.save(v);
-        }
+        });
 
         log.info("Comment added to video {} by {}: {}", videoId, userEmail, comment.getId());
         return comment;
     }
 
-    public Optional<Comment> getComment(String commentId) throws IOException {
+    public Optional<Comment> getComment(String commentId) {
         return commentRepository.findById(commentId);
     }
 
-    public List<Comment> getVideoComments(String videoId, int page, int size) throws IOException {
+    public List<Comment> getVideoComments(String videoId, int page, int size) {
         return commentRepository.findByVideoId(videoId, page, size);
     }
 
-    public long countVideoComments(String videoId) throws IOException {
+    public long countVideoComments(String videoId) {
         return commentRepository.countByVideoId(videoId);
     }
 
-    public void deleteComment(String commentId, String videoId) throws IOException {
-        commentRepository.delete(commentId);
+    @Transactional
+    public void deleteComment(String commentId, String videoId) {
+        commentRepository.deleteById(commentId);
 
-        // Decrement video comment count
-        var video = videoRepository.findById(videoId);
-        if (video.isPresent()) {
-            var v = video.get();
+        videoRepository.findById(videoId).ifPresent(v -> {
             v.decrementCommentCount();
             videoRepository.save(v);
-        }
+        });
 
         log.info("Comment deleted: {}", commentId);
     }
 
-    public void deleteVideoComments(String videoId) throws IOException {
+    @Transactional
+    public void deleteVideoComments(String videoId) {
         commentRepository.deleteByVideoId(videoId);
         log.info("All comments deleted for video: {}", videoId);
     }

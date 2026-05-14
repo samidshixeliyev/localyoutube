@@ -32,20 +32,21 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // OAuth2 Resource Server (for RS256 JWKS validation)
+    implementation 'org.springframework.security:spring-security-oauth2-jose'
+
     // Metrics
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
-    // Elasticsearch
-    implementation 'org.elasticsearch.client:elasticsearch-rest-client:8.11.0'
+    // API Docs
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
     implementation 'org.webjars:webjars-locator-core:0.59'
-    implementation 'co.elastic.clients:elasticsearch-java:8.11.0'
 
     // Jackson
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 
-    // JWT
+    // JWT (HMAC for local admin tokens)
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
@@ -57,8 +58,10 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
-    // Database
-    runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc'
+    // Database - PostgreSQL + Flyway
+    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
 
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

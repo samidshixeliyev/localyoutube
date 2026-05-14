@@ -50,6 +50,7 @@ public class SecurityConfiguration {
                         // AUTHENTICATION - Public
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/refresh").permitAll()
+                        .requestMatchers("/api/auth/idp/**").permitAll()
 
                         // Swagger/OpenAPI - Public
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()

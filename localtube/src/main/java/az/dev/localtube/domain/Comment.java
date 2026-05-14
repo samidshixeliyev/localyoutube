@@ -1,6 +1,7 @@
 package az.dev.localtube.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,35 +15,59 @@ import java.time.ZoneId;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Entity
+@Table(name = "comments")
 public class Comment {
 
+    @Id
+    @Column(name = "id", length = 64)
     private String id;
+
+    @Column(name = "video_id", length = 64)
     private String videoId;
+
+    @Column(name = "user_id", length = 255)
     private String userId;
+
+    @Column(name = "username", length = 255)
     private String username;
+
+    @Column(name = "text", columnDefinition = "TEXT")
     private String text;
 
-    // Stored as Long (epoch milliseconds) in Elasticsearch
-    private Long createdAt;
-    private Long updatedAt;
-    private Long likes;
+    @Builder.Default
+    @Column(name = "likes")
+    private Long likes = 0L;
 
-    // Helper methods for date conversion
+    @Column(name = "created_at")
+    private Long createdAt;
+
+    @Column(name = "updated_at")
+    private Long updatedAt;
+
     @JsonIgnore
     public LocalDateTime getCreatedAtDateTime() {
-        return createdAt != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(createdAt), ZoneId.systemDefault()) : null;
+        return createdAt != null
+                ? LocalDateTime.ofInstant(Instant.ofEpochMilli(createdAt), ZoneId.systemDefault())
+                : null;
     }
 
     public void setCreatedAtDateTime(LocalDateTime dateTime) {
-        this.createdAt = dateTime != null ? dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : null;
+        this.createdAt = dateTime != null
+                ? dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                : null;
     }
 
     @JsonIgnore
     public LocalDateTime getUpdatedAtDateTime() {
-        return updatedAt != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(updatedAt), ZoneId.systemDefault()) : null;
+        return updatedAt != null
+                ? LocalDateTime.ofInstant(Instant.ofEpochMilli(updatedAt), ZoneId.systemDefault())
+                : null;
     }
 
     public void setUpdatedAtDateTime(LocalDateTime dateTime) {
-        this.updatedAt = dateTime != null ? dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : null;
+        this.updatedAt = dateTime != null
+                ? dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                : null;
     }
 }

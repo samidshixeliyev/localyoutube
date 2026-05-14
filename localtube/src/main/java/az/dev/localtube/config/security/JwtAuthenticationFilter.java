@@ -9,13 +9,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 @Slf4j
 @Component
@@ -24,6 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final UserDetailsService userDetailsService;
+    private final IdpJwtValidator idpJwtValidator;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -33,49 +36,81 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String authorizationHeader = request.getHeader("Authorization");
         final String requestUri = request.getRequestURI();
 
-        String username = null;
-        String jwt = null;
-
-        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
-            jwt = authorizationHeader.substring(7);
-            try {
-                username = jwtUtil.extractUsername(jwt);
-                log.debug("JWT extracted username: {} for request: {}", username, requestUri);
-            } catch (Exception e) {
-                log.warn("Failed to extract username from JWT for {}: {}", requestUri, e.getMessage());
-            }
-        } else {
-            log.debug("No Authorization header found for request: {}", requestUri);
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            log.debug("No Bearer token for: {}", requestUri);
+            filterChain.doFilter(request, response);
+            return;
         }
 
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            try {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        String jwt = authorizationHeader.substring(7);
 
-                log.debug("Loaded UserDetails: class={}, username={}, authorities={}",
-                        userDetails.getClass().getSimpleName(),
-                        userDetails.getUsername(),
-                        userDetails.getAuthorities());
+        if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
-                if (jwtUtil.validateToken(jwt, userDetails)) {
-                    UsernamePasswordAuthenticationToken authenticationToken =
-                            new UsernamePasswordAuthenticationToken(
-                                    userDetails,
-                                    null,
-                                    userDetails.getAuthorities()
-                            );
-                    authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-
-                    log.debug("Authentication successful for user: {} on path: {}", username, requestUri);
-                } else {
-                    log.warn("Token validation failed for user: {} on path: {}", username, requestUri);
-                }
-            } catch (Exception e) {
-                log.error("Failed to authenticate user {} on path {}: {}", username, requestUri, e.getMessage());
+        try {
+            if (isRS256(jwt)) {
+                authenticateWithIdp(jwt, request, requestUri);
+            } else {
+                authenticateWithLocalJwt(jwt, request, requestUri);
             }
+        } catch (Exception e) {
+            log.warn("Authentication failed for {}: {}", requestUri, e.getMessage());
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isRS256(String jwt) {
+        try {
+            String[] parts = jwt.split("\\.");
+            if (parts.length < 2) return false;
+            String headerJson = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+            return headerJson.contains("\"RS256\"") || headerJson.contains("\"rs256\"");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void authenticateWithIdp(String jwt, HttpServletRequest request, String requestUri) {
+        Jwt decoded = idpJwtValidator.validate(jwt);
+        if (decoded == null) {
+            log.warn("IDP JWT validation failed for: {}", requestUri);
+            return;
+        }
+        OidcUserDetails userDetails = idpJwtValidator.toUserDetails(decoded);
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                userDetails, null, userDetails.getAuthorities());
+        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+        log.debug("IDP auth successful: {} on {}", userDetails.getEmail(), requestUri);
+    }
+
+    private void authenticateWithLocalJwt(String jwt, HttpServletRequest request, String requestUri) {
+        String username;
+        try {
+            username = jwtUtil.extractUsername(jwt);
+        } catch (Exception e) {
+            log.warn("Failed to extract username from local JWT for {}: {}", requestUri, e.getMessage());
+            return;
+        }
+
+        if (username == null) return;
+
+        try {
+            var userDetails = userDetailsService.loadUserByUsername(username);
+            if (jwtUtil.validateToken(jwt, userDetails)) {
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities());
+                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(auth);
+                log.debug("Local auth successful: {} on {}", username, requestUri);
+            } else {
+                log.warn("Local JWT validation failed for: {} on {}", username, requestUri);
+            }
+        } catch (Exception e) {
+            log.error("Failed to authenticate local user {} on {}: {}", username, requestUri, e.getMessage());
+        }
     }
 }

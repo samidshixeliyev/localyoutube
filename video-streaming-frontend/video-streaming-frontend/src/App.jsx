@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';      // ← added useAuth here
 import { MiniPlayerProvider } from './context/MiniPlayerContext';
 import MiniPlayer from './components/MiniPlayer';
@@ -13,6 +13,20 @@ import UploadPage from './pages/UploadPage';
 import MyVideos from './pages/MyVideos';
 import SearchResults from './pages/SearchResults';
 import ChangePassword from './pages/ChangePassword';
+import LoggedOut from './pages/LoggedOut';
+
+import OAuthCallback from './pages/OAuthCallback';
+
+// Root wrapper: if IDP redirected here with ?code=, handle OAuth2 callback;
+// otherwise render the normal Home page.
+function RootRoute() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  if (params.has('code') || params.has('error')) {
+    return <OAuthCallback />;
+  }
+  return <Home />;
+}
 
 // Admin Pages
 import UserManagement from './pages/admin/UserManagement';
@@ -27,15 +41,19 @@ function AppContent() {
       <div className="min-h-screen bg-gray-50">
         <Routes>
           {/* Public */}
-          <Route path="/" element={<Home />} />
-          <Route 
-            path="/login" 
+          {/* Root doubles as OAuth2 callback — IDP redirects to http://host:4000/?code=... */}
+          <Route path="/" element={<RootRoute />} />
+          <Route
+            path="/login"
             element={
               isAuthenticated ? <Navigate to="/" replace /> : <Login />
-            } 
+            }
           />
           <Route path="/video/:id" element={<VideoDetail />} />
           <Route path="/search" element={<SearchResults />} />
+          {/* Legacy /callback kept for safety; root is the real IDP redirect target */}
+          <Route path="/callback" element={<OAuthCallback />} />
+          <Route path="/logged_out" element={<LoggedOut />} />
 
           {/* Authenticated - any logged in user */}
           <Route 

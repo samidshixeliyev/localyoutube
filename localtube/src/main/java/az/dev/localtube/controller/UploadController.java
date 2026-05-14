@@ -1,5 +1,6 @@
 package az.dev.localtube.controller;
 
+import az.dev.localtube.config.security.LocalTubePrincipal;
 import az.dev.localtube.config.security.LocalTubeUserDetails;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
@@ -57,7 +58,7 @@ public class UploadController {
                     .map(this::videoToMap)
                     .collect(Collectors.toList());
             return ResponseEntity.ok(result);
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("Error listing videos", e);
             return ResponseEntity.internalServerError().build();
         }
@@ -117,7 +118,7 @@ public class UploadController {
             @RequestParam int chunkIndex,
             @RequestParam int totalChunks,
             @RequestParam String videoId,
-            @AuthenticationPrincipal LocalTubeUserDetails user) {
+            @AuthenticationPrincipal LocalTubePrincipal user) {
 
         try {
             if (chunk.getSize() > MAX_CHUNK_SIZE) {
@@ -175,7 +176,7 @@ public class UploadController {
     @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<Map<String, String>> completeUpload(
             @RequestParam String videoId,
-            @AuthenticationPrincipal LocalTubeUserDetails user) {
+            @AuthenticationPrincipal LocalTubePrincipal user) {
         try {
             Video video = videoService.getVideo(videoId).orElse(null);
             if (video == null) {
@@ -240,7 +241,7 @@ public class UploadController {
             }
 
             return ResponseEntity.ok(status);
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("Error getting upload status for {}", videoId, e);
             return ResponseEntity.internalServerError().build();
         }
