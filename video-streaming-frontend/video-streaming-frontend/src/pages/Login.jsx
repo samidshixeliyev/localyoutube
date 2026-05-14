@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -8,8 +8,24 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
   const [showAdminForm, setShowAdminForm] = useState(false);
+  // null = still loading, true/false = resolved
+  const [idpEnabled, setIdpEnabled] = useState(null);
   const { login, initiateIdpLogin } = useAuth();
   const navigate = useNavigate();
+
+  // Fetch IDP config once on mount to know whether to show the SSO button.
+  // Falls back to showing the button if the request fails (safe default).
+  // When SSO is disabled, auto-expand the admin form so users aren't stuck.
+  useEffect(() => {
+    fetch('/api/auth/idp/config')
+      .then(r => r.json())
+      .then(cfg => {
+        const enabled = cfg.idpEnabled !== 'false';
+        setIdpEnabled(enabled);
+        if (!enabled) setShowAdminForm(true); // auto-open admin login
+      })
+      .catch(() => setIdpEnabled(true));
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -87,36 +103,40 @@ const Login = () => {
             </div>
           )}
 
-          {/* Primary: SSO */}
-          <button
-            type="button"
-            onClick={handleSso}
-            disabled={ssoLoading || loading}
-            className="w-full flex items-center justify-center gap-2.5 px-4 py-3 bg-gradient-to-r from-primary-600 to-orange-500 text-white font-semibold rounded-xl shadow-sm hover:from-primary-700 hover:to-orange-600 hover:-translate-y-px active:translate-y-0 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            {ssoLoading ? (
-              <svg className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" viewBox="0 0 24 24"/>
-            ) : (
-              <span className="w-6 h-6 bg-white/15 rounded-md flex items-center justify-center flex-shrink-0">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                  stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-              </span>
-            )}
-            {ssoLoading ? 'Yönləndirilir…' : 'AO ID ilə daxil ol'}
-          </button>
+          {/* Primary: SSO — hidden when IDP is disabled in admin settings */}
+          {idpEnabled && (
+            <>
+              <button
+                type="button"
+                onClick={handleSso}
+                disabled={ssoLoading || loading}
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-3 bg-gradient-to-r from-primary-600 to-orange-500 text-white font-semibold rounded-xl shadow-sm hover:from-primary-700 hover:to-orange-600 hover:-translate-y-px active:translate-y-0 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+              >
+                {ssoLoading ? (
+                  <svg className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" viewBox="0 0 24 24"/>
+                ) : (
+                  <span className="w-6 h-6 bg-white/15 rounded-md flex items-center justify-center flex-shrink-0">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                      stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                      <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                  </span>
+                )}
+                {ssoLoading ? 'Yönləndirilir…' : 'AO ID ilə daxil ol'}
+              </button>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
-            <hr className="flex-1 border-gray-200"/>
-            <span className="text-xs text-gray-400">və ya</span>
-            <hr className="flex-1 border-gray-200"/>
-          </div>
+              {/* Divider — only shown when SSO button is visible */}
+              <div className="flex items-center gap-3 my-5">
+                <hr className="flex-1 border-gray-200"/>
+                <span className="text-xs text-gray-400">və ya</span>
+                <hr className="flex-1 border-gray-200"/>
+              </div>
+            </>
+          )}
 
-          {/* Admin toggle */}
-          <button
+          {/* Admin toggle — hidden when SSO is disabled (form is already open) */}
+          {idpEnabled && <button
             type="button"
             onClick={() => { setShowAdminForm(v => !v); setError(''); }}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-gray-500 text-sm font-medium hover:border-gray-300 hover:text-gray-700 hover:bg-gray-50 transition-all"
@@ -132,7 +152,7 @@ const Login = () => {
               style={{ marginLeft: 'auto', transform: showAdminForm ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
               <polyline points="6 9 12 15 18 9"/>
             </svg>
-          </button>
+          </button>}
 
           {/* Admin form (collapsible) */}
           {showAdminForm && (
