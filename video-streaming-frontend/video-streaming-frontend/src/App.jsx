@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { MiniPlayerProvider } from './context/MiniPlayerContext';
 import { UploadProvider } from './context/UploadContext';
+import { ThemeProvider } from './context/ThemeContext';
 import MiniPlayer from './components/MiniPlayer';
 import UploadManager from './components/UploadManager';
 import PrivateRoute from './components/PrivateRoute';
@@ -25,6 +26,7 @@ const UserForm       = lazy(() => import('./pages/admin/UserForm'));
 const RoleManagement = lazy(() => import('./pages/admin/RoleManagement'));
 const IdpSettings    = lazy(() => import('./pages/admin/IdpSettings'));
 const Metrics        = lazy(() => import('./pages/admin/Metrics'));
+const Embed          = lazy(() => import('./pages/Embed'));
 
 // Minimal full-page spinner shown while a lazy chunk loads
 const PageLoader = () => (
@@ -53,7 +55,7 @@ function AppContent() {
   return (
     <UploadProvider>
     <MiniPlayerProvider>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
         <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public */}
@@ -66,6 +68,8 @@ function AppContent() {
             }
           />
           <Route path="/video/:id" element={<VideoDetail />} />
+          {/* Embed route — public, minimal player for iframe embedding */}
+          <Route path="/embed/:id" element={<Embed />} />
           <Route path="/search" element={<SearchResults />} />
           {/* Legacy /callback kept for safety; root is the real IDP redirect target */}
           <Route path="/callback" element={<OAuthCallback />} />
@@ -167,9 +171,11 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

@@ -57,7 +57,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col items-center justify-center p-4 font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex flex-col items-center justify-center p-4 font-sans transition-colors duration-200">
 
       {/* Top branding */}
       <div className="flex items-center gap-3 mb-8">
@@ -68,13 +68,13 @@ const Login = () => {
           </svg>
         </div>
         <div>
-          <div className="text-base font-bold text-gray-900 leading-tight">AO ID</div>
-          <div className="text-xs text-gray-500 tracking-wide">Korporativ İdentifikasiya Sistemi</div>
+          <div className="text-base font-bold text-gray-900 dark:text-gray-100 leading-tight">AO ID</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 tracking-wide">Korporativ İdentifikasiya Sistemi</div>
         </div>
       </div>
 
       {/* Card */}
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div className="w-full max-w-sm bg-white dark:bg-gray-800 rounded-2xl shadow-xl dark:shadow-2xl dark:border dark:border-gray-700 overflow-hidden">
 
         {/* Card header */}
         <div className="bg-gradient-to-r from-primary-600 to-orange-500 px-8 py-6 text-center">
@@ -89,11 +89,11 @@ const Login = () => {
         </div>
 
         {/* Card body */}
-        <div className="px-8 py-7">
+        <div className="px-8 py-7 dark:bg-gray-800">
 
           {/* Error */}
           {error && (
-            <div className="mb-5 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+            <div className="mb-5 flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2.5">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
                 stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                 className="flex-shrink-0 mt-px">
@@ -101,7 +101,7 @@ const Login = () => {
                 <line x1="15" y1="9" x2="9" y2="15"/>
                 <line x1="9" y1="9" x2="15" y2="15"/>
               </svg>
-              <span className="text-red-700 text-sm leading-snug">{error}</span>
+              <span className="text-red-700 dark:text-red-400 text-sm leading-snug">{error}</span>
             </div>
           )}
 
@@ -130,9 +130,9 @@ const Login = () => {
 
               {/* Divider — only shown when SSO button is visible */}
               <div className="flex items-center gap-3 my-5">
-                <hr className="flex-1 border-gray-200"/>
-                <span className="text-xs text-gray-400">və ya</span>
-                <hr className="flex-1 border-gray-200"/>
+                <hr className="flex-1 border-gray-200 dark:border-gray-600"/>
+                <span className="text-xs text-gray-400 dark:text-gray-500">və ya</span>
+                <hr className="flex-1 border-gray-200 dark:border-gray-600"/>
               </div>
             </>
           )}
@@ -141,7 +141,7 @@ const Login = () => {
           {idpEnabled && <button
             type="button"
             onClick={() => { setShowAdminForm(v => !v); setError(''); }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-gray-500 text-sm font-medium hover:border-gray-300 hover:text-gray-700 hover:bg-gray-50 transition-all"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-500 dark:text-gray-400 text-sm font-medium hover:border-gray-300 dark:hover:border-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -158,13 +158,13 @@ const Login = () => {
 
           {/* Admin form (collapsible) */}
           {showAdminForm && (
-            <div className="mt-5 pt-5 border-t border-gray-100">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
+            <div className="mt-5 pt-5 border-t border-gray-100 dark:border-gray-700">
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">
                 Administrator girişi
               </p>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     E-poçt ünvanı
                   </label>
                   <input
@@ -173,11 +173,11 @@ const Login = () => {
                     value={formData.email}
                     onChange={handleChange}
                     placeholder="admin@example.com"
-                    className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   />
                 </div>
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     Şifrə
                   </label>
                   <input
@@ -186,7 +186,7 @@ const Login = () => {
                     value={formData.password}
                     onChange={handleChange}
                     placeholder="••••••••"
-                    className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                    className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
                   />
                 </div>
                 <button
@@ -208,7 +208,7 @@ const Login = () => {
       </div>
 
       {/* Footer */}
-      <p className="mt-6 text-center text-xs text-gray-400 leading-relaxed">
+      <p className="mt-6 text-center text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
         Hesabınız yoxdur?{' '}
         <a href="mailto:admin@localtube.local" className="text-primary-600 font-medium hover:underline">
           Administratorla əlaqə

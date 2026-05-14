@@ -1,12 +1,14 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Search } from "lucide-react";
+import { useTheme } from "../context/ThemeContext";
+import { Search, Sun, Moon } from "lucide-react";
 import UserDropdown from "./UserDropdown";
 
 const Navbar = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
+  const { dark, toggle } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleSearch = (e) => {
@@ -17,7 +19,7 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+    <nav className="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
@@ -49,9 +51,10 @@ const Navbar = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search videos..."
-                className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-full text-sm
+                className="w-full pl-4 pr-10 py-2 border border-gray-300 dark:border-gray-600 rounded-full text-sm
                                     focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-                                    bg-gray-50 hover:bg-white transition-colors"
+                                    bg-gray-50 dark:bg-gray-800 hover:bg-white dark:hover:bg-gray-700
+                                    text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 transition-colors"
               />
               <button
                 type="submit"
@@ -63,7 +66,16 @@ const Navbar = () => {
           </form>
 
           {/* Right side */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* Dark mode toggle */}
+            <button
+              onClick={toggle}
+              className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+
             {isAuthenticated ? (
               <UserDropdown />
             ) : (

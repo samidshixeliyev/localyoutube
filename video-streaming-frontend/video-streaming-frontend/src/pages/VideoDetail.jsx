@@ -6,14 +6,14 @@ import ThumbnailUpload from "../components/ThumbnailUpload";
 import CommentSection from "../components/CommentSection";
 import VideoSuggestions from "../components/VideoSuggestion";
 import Navbar from "../components/Navbar";
-import { 
-  ThumbsUp, 
-  Eye, 
-  Calendar, 
-  Trash2, 
-  Loader2, 
-  Image, 
-  Edit2, 
+import {
+  ThumbsUp,
+  Eye,
+  Calendar,
+  Trash2,
+  Loader2,
+  Image,
+  Edit2,
   Lock,
   Globe,
   Link2,
@@ -22,7 +22,10 @@ import {
   X,
   Check,
   Plus,
-  Hash
+  Hash,
+  Code2,
+  Copy,
+  CheckCheck
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -52,6 +55,8 @@ const VideoDetail = () => {
   const [emailInput, setEmailInput] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showEmbedModal, setShowEmbedModal] = useState(false);
+  const [embedCopied, setEmbedCopied] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("jwt_token");
@@ -293,6 +298,18 @@ const VideoDetail = () => {
     setTagInput(value);
   };
 
+  const getEmbedCode = () => {
+    const embedUrl = `${window.location.origin}/embed/${id}`;
+    return `<iframe\n  src="${embedUrl}"\n  width="640"\n  height="360"\n  frameborder="0"\n  allowfullscreen\n  allow="autoplay; fullscreen"\n></iframe>`;
+  };
+
+  const handleCopyEmbed = () => {
+    navigator.clipboard.writeText(getEmbedCode()).then(() => {
+      setEmbedCopied(true);
+      setTimeout(() => setEmbedCopied(false), 2000);
+    });
+  };
+
   const formatDate = (timestamp) => {
     if (!timestamp) return "";
     return new Date(timestamp).toLocaleDateString("en-US", {
@@ -327,7 +344,7 @@ const VideoDetail = () => {
     return (
       <>
         <Navbar />
-        <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
           <Loader2 className="h-12 w-12 animate-spin text-primary-600" />
         </div>
       </>
@@ -338,8 +355,8 @@ const VideoDetail = () => {
     return (
       <>
         <Navbar />
-        <div className="flex flex-col items-center justify-center min-h-screen">
-          <p className="text-red-600 mb-4">{error || "Video not found"}</p>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+          <p className="text-red-600 dark:text-red-400 mb-4">{error || "Video not found"}</p>
           <button
             onClick={() => navigate("/")}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
@@ -366,6 +383,7 @@ const VideoDetail = () => {
   return (
     <>
       <Navbar />
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main content */}
@@ -394,34 +412,34 @@ const VideoDetail = () => {
             </div>
 
             {/* Video Info Card */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none dark:border dark:border-gray-700 p-6">
               {isEditing ? (
                 <div className="space-y-4">
                   {/* Title */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
                     <input
                       type="text"
                       value={editForm.title}
                       onChange={(e) => setEditForm({...editForm, title: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     />
                   </div>
 
                   {/* Description */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
                     <textarea
                       value={editForm.description}
                       onChange={(e) => setEditForm({...editForm, description: e.target.value})}
                       rows={4}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                     />
                   </div>
 
                   {/* Tags */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags</label>
                     <div className="flex gap-2 mb-2">
                       <div className="relative flex-1">
                         <Hash className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
@@ -431,7 +449,7 @@ const VideoDetail = () => {
                           onChange={handleTagInputChange}
                           onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                           placeholder="#example-tag"
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         />
                       </div>
                       <button onClick={addTag} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
@@ -440,10 +458,10 @@ const VideoDetail = () => {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {editForm.tags.map(tag => (
-                        <span key={tag} className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
+                        <span key={tag} className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 px-2 py-1 rounded text-sm">
                           <Hash className="h-3 w-3" />
                           {tag}
-                          <button onClick={() => removeTag(tag)} className="text-blue-600 hover:text-blue-800">
+                          <button onClick={() => removeTag(tag)} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200">
                             <X className="h-3 w-3" />
                           </button>
                         </span>
@@ -453,7 +471,7 @@ const VideoDetail = () => {
 
                   {/* Visibility */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Visibility</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Visibility</label>
                     <div className="grid grid-cols-2 gap-2">
                       {[
                         { value: 'public', icon: Globe, label: 'Public' },
@@ -464,7 +482,9 @@ const VideoDetail = () => {
                         const Icon = option.icon;
                         return (
                           <label key={option.value} className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer ${
-                            editForm.visibility === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                            editForm.visibility === option.value
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                              : 'border-gray-200 dark:border-gray-600'
                           }`}>
                             <input
                               type="radio"
@@ -474,9 +494,9 @@ const VideoDetail = () => {
                               onChange={(e) => setEditForm({...editForm, visibility: e.target.value})}
                               className="sr-only"
                             />
-                            <Icon className="h-5 w-5" />
-                            <span className="font-medium">{option.label}</span>
-                            {editForm.visibility === option.value && <Check className="h-4 w-4 ml-auto" />}
+                            <Icon className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{option.label}</span>
+                            {editForm.visibility === option.value && <Check className="h-4 w-4 ml-auto text-blue-500" />}
                           </label>
                         );
                       })}
@@ -485,8 +505,8 @@ const VideoDetail = () => {
 
                   {/* Restricted Emails */}
                   {editForm.visibility === 'restricted' && (
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <label className="block text-sm font-medium text-purple-900 mb-2">Allowed Users</label>
+                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
+                      <label className="block text-sm font-medium text-purple-900 dark:text-purple-300 mb-2">Allowed Users</label>
                       <div className="flex gap-2 mb-3">
                         <input
                           type="email"
@@ -494,7 +514,7 @@ const VideoDetail = () => {
                           onChange={(e) => setEmailInput(e.target.value)}
                           onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
                           placeholder="user@example.com"
-                          className="flex-1 px-3 py-2 border border-purple-300 rounded-lg"
+                          className="flex-1 px-3 py-2 border border-purple-300 dark:border-purple-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         />
                         <button onClick={addEmail} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
                           <Plus className="h-4 w-4" />
@@ -502,9 +522,9 @@ const VideoDetail = () => {
                       </div>
                       <div className="space-y-2">
                         {editForm.allowedEmails.map(email => (
-                          <div key={email} className="flex items-center justify-between bg-white px-3 py-2 rounded border">
-                            <span className="text-sm">{email}</span>
-                            <button onClick={() => removeEmail(email)} className="text-red-600">
+                          <div key={email} className="flex items-center justify-between bg-white dark:bg-gray-700 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
+                            <span className="text-sm text-gray-900 dark:text-gray-100">{email}</span>
+                            <button onClick={() => removeEmail(email)} className="text-red-600 dark:text-red-400">
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
@@ -514,7 +534,7 @@ const VideoDetail = () => {
                   )}
 
                   {/* Actions */}
-                  <div className="flex gap-3 pt-4 border-t">
+                  <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       onClick={handleSaveEdit}
                       disabled={saving}
@@ -526,7 +546,7 @@ const VideoDetail = () => {
                     <button
                       onClick={() => setIsEditing(false)}
                       disabled={saving}
-                      className="px-6 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50"
+                      className="px-6 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                     >
                       Cancel
                     </button>
@@ -535,7 +555,7 @@ const VideoDetail = () => {
               ) : (
                 <>
                   <div className="flex items-start justify-between mb-4 gap-4">
-                    <h1 className="text-2xl font-bold text-gray-900 flex-1">
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex-1">
                       {video.title}
                     </h1>
                     <span className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-white text-sm ${visibilityInfo.color} flex-shrink-0`}>
@@ -544,7 +564,7 @@ const VideoDetail = () => {
                     </span>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-6 text-gray-600 mb-6 pb-6 border-b">
+                  <div className="flex flex-wrap items-center gap-6 text-gray-600 dark:text-gray-400 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center space-x-2">
                       <Eye className="h-5 w-5" />
                       <span className="font-medium">{formatViews(video.views)}</span>
@@ -555,17 +575,28 @@ const VideoDetail = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 mb-6 pb-6 border-b">
+                  <div className="flex flex-wrap items-center gap-3 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
                     <button
                       onClick={handleLike}
                       disabled={isLiking}
                       className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-                        liked ? "bg-primary-600 text-white shadow-md" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        liked ? "bg-primary-600 text-white shadow-md" : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
                       } disabled:opacity-50`}
                     >
                       <ThumbsUp className={`h-5 w-5 ${liked ? 'fill-current' : ''}`} />
                       <span className="font-medium">{video.likes || 0}</span>
                     </button>
+
+                    {/* Embed button — only for public/unlisted videos */}
+                    {(video.visibility === 'public' || video.visibility === 'unlisted' || !video.visibility) && (
+                      <button
+                        onClick={() => setShowEmbedModal(true)}
+                        className="flex items-center space-x-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 font-medium"
+                      >
+                        <Code2 className="h-5 w-5" />
+                        <span>Embed</span>
+                      </button>
+                    )}
 
                     {canEdit && (
                       <>
@@ -597,12 +628,12 @@ const VideoDetail = () => {
                   </div>
 
                   {video.uploaderName && (
-                    <div className="mb-6 pb-6 border-b">
+                    <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
                       <div className="flex items-center space-x-3">
                         <div className="h-12 w-12 bg-gradient-to-br from-primary-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md">
                           {video.uploaderName.charAt(0).toUpperCase()}
                         </div>
-                        <p className="font-semibold text-gray-900 text-lg">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-lg">
                           {video.uploaderName}
                         </p>
                       </div>
@@ -611,8 +642,8 @@ const VideoDetail = () => {
 
                   {video.description && (
                     <div className="mb-6">
-                      <h2 className="font-semibold text-gray-900 mb-3 text-lg">Description</h2>
-                      <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 text-lg">Description</h2>
+                      <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
                         {video.description}
                       </p>
                     </div>
@@ -622,7 +653,7 @@ const VideoDetail = () => {
                     <div>
                       <div className="flex flex-wrap gap-2">
                         {video.tags.map((tag, index) => (
-                          <span key={index} className="bg-gray-100 px-3 py-1 rounded-full text-sm text-gray-700">
+                          <span key={index} className="bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full text-sm text-gray-700 dark:text-gray-300">
                             #{tag}
                           </span>
                         ))}
@@ -650,17 +681,17 @@ const VideoDetail = () => {
           {/* Sidebar with Suggestions */}
           <div className="lg:col-span-1">
             <div className="sticky top-24 space-y-6">
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="font-semibold text-gray-900 mb-4 text-lg">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none dark:border dark:border-gray-700 p-6">
+                <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 text-lg">
                   Video Info
                 </h2>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Status:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Status:</span>
                     <span className={`font-medium px-2 py-1 rounded ${
-                      video.status === 'ready' ? 'bg-green-100 text-green-800' :
-                      video.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
+                      video.status === 'ready' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :
+                      video.status === 'processing' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' :
+                      'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
                     }`}>
                       {video.status ? video.status.charAt(0).toUpperCase() + video.status.slice(1) : 'Unknown'}
                     </span>
@@ -669,13 +700,52 @@ const VideoDetail = () => {
               </div>
 
               {/* SUGGESTIONS */}
-              <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none dark:border dark:border-gray-700 p-6">
                 <VideoSuggestions videoId={id} tags={video.tags || []} />
               </div>
             </div>
           </div>
         </div>
       </div>
+      </div>
+
+      {/* Embed Code Modal */}
+      {showEmbedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+             onClick={() => setShowEmbedModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-lg"
+               onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <Code2 className="h-5 w-5 text-primary-600" />
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Embed Video</h3>
+              </div>
+              <button onClick={() => setShowEmbedModal(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                Paste this code into your HTML page to embed the video:
+              </p>
+              <pre className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-xs text-gray-800 dark:text-gray-200 font-mono whitespace-pre-wrap break-all overflow-x-auto">
+{getEmbedCode()}
+              </pre>
+              <button
+                onClick={handleCopyEmbed}
+                className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                  embedCopied
+                    ? 'bg-green-600 text-white'
+                    : 'bg-primary-600 hover:bg-primary-700 text-white'
+                }`}
+              >
+                {embedCopied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> Copy code</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

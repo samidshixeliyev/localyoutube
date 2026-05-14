@@ -52,7 +52,7 @@ public class SecurityConfiguration {
                         .requestMatchers("/assets/**", "/static/**").permitAll()
                         // SPA client-side routes — Spring serves index.html for all of these
                         .requestMatchers("/login", "/callback", "/logged_out",
-                                "/video/**", "/search", "/upload", "/my-videos",
+                                "/video/**", "/embed/**", "/search", "/upload", "/my-videos",
                                 "/change-password", "/admin/**").permitAll()
 
                         // AUTHENTICATION - Public

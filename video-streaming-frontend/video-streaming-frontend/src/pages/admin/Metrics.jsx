@@ -105,21 +105,21 @@ const ChartTooltip = ({ active, payload, label, unit = '' }) => {
 // ── StatCard ──────────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4">
       <div className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center"
            style={{ backgroundColor: color + '18' }}>
         <Icon className="w-5 h-5" style={{ color }} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-gray-500 truncate">{title}</p>
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate">{title}</p>
         {loading ? (
-          <div className="h-5 w-16 bg-gray-100 rounded animate-pulse mt-1"/>
+          <div className="h-5 w-16 bg-gray-100 dark:bg-gray-700 rounded animate-pulse mt-1"/>
         ) : (
-          <p className="text-xl font-bold text-gray-900 leading-tight">
+          <p className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
             {value != null ? `${fmtNum(value, value < 10 ? 2 : 0)}${unit}` : '—'}
           </p>
         )}
-        {sub && <p className="text-xs text-gray-400 truncate">{sub}</p>}
+        {sub && <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{sub}</p>}
       </div>
     </div>
   );
@@ -128,17 +128,17 @@ function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading }) 
 // ── ChartCard ─────────────────────────────────────────────────────────────────
 function ChartCard({ title, children, loading, empty }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <p className="text-sm font-semibold text-gray-700">{title}</p>
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{title}</p>
       </div>
       <div className="p-4" style={{ height: 220 }}>
         {loading ? (
           <div className="h-full flex items-center justify-center">
-            <RefreshCw className="w-5 h-5 text-gray-300 animate-spin" />
+            <RefreshCw className="w-5 h-5 text-gray-300 dark:text-gray-600 animate-spin" />
           </div>
         ) : empty ? (
-          <div className="h-full flex flex-col items-center justify-center text-gray-400">
+          <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-600">
             <Activity className="w-8 h-8 mb-2 opacity-30" />
             <p className="text-xs">No data yet</p>
           </div>
@@ -150,7 +150,7 @@ function ChartCard({ title, children, loading, empty }) {
 
 // ── Section label ─────────────────────────────────────────────────────────────
 const Section = ({ children }) => (
-  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-6 mb-3">{children}</p>
+  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-6 mb-3">{children}</p>
 );
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -279,44 +279,44 @@ export default function Metrics() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
           {/* ── Header ── */}
           <div className="flex items-center gap-4 mb-6">
             <button onClick={() => navigate('/admin/users')}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all">
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary-600" />
-                <h1 className="text-2xl font-bold text-gray-900">System Metrics</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">System Metrics</h1>
               </div>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 Live Prometheus data — auto-refreshes every 30 s
                 {lastRefresh && <> · last updated {lastRefresh.toLocaleTimeString()}</>}
               </p>
             </div>
             <div className="flex items-center gap-2">
               {/* Time range */}
-              <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <div className="flex bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                 {TIME_RANGES.map(r => (
                   <button key={r.label} onClick={() => setRange(r)}
                     className={`px-3 py-1.5 text-sm font-medium transition-colors ${
                       range_.label === r.label
                         ? 'bg-primary-600 text-white'
-                        : 'text-gray-600 hover:bg-gray-50'}`}>
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                     {r.label}
                   </button>
                 ))}
               </div>
               <button onClick={refresh}
-                className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition-all">
+                className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
                 <RefreshCw className="w-4 h-4" />
               </button>
               <a href={`${GRAFANA_BASE}/d/localtube-main`} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-all">
+                className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
                 <ExternalLink className="w-4 h-4" /> Grafana
               </a>
             </div>
@@ -324,9 +324,9 @@ export default function Metrics() {
 
           {/* ── Error banner ── */}
           {error && (
-            <div className="mb-4 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <div className="mb-4 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
               <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-700">{error}</p>
+              <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
             </div>
           )}
 
@@ -529,7 +529,7 @@ export default function Metrics() {
             </ChartCard>
           </div>
 
-          <p className="text-xs text-gray-400 text-center mt-6">
+          <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-6">
             Data from Prometheus scraping Spring Boot /actuator/prometheus and node_exporter every 15 s.
             App metrics (uploads, views) populate after first activity.
           </p>

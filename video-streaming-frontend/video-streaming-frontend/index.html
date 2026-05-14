@@ -17,6 +17,14 @@
     <title>ModTube</title>
   </head>
   <body>
+    <!-- Apply dark class before React mounts to prevent flash of wrong theme -->
+    <script>
+      (function(){
+        var s=localStorage.getItem('theme');
+        var p=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if(s==='dark'||(s===null&&p)){document.documentElement.classList.add('dark');}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
