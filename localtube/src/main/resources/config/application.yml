@@ -56,9 +56,9 @@ localtube:
     qualities: 480p,720p,1080p
 
   idp:
-    base-url: ${IDP_BASE_URL:https://51.20.12.6}
+    base-url: ${IDP_BASE_URL:https://13.61.159.58}
     client-id: ${IDP_CLIENT_ID:EFxbQK-ekDX1OkWov51cjg}
-    jwks-uri: ${IDP_JWKS_URI:https://51.20.12.6/jwks}
+    jwks-uri: ${IDP_JWKS_URI:https://13.61.159.58/jwks}
     issuer: ${IDP_ISSUER:https://auth.ao.az}
     skip-ssl-verify: ${IDP_SKIP_SSL:true}
     redirect-uri: ${IDP_REDIRECT_URI:http://13.61.159.58:4000/}
