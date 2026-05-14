@@ -256,45 +256,22 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
     if (!hlsRef.current) return;
 
     const hls = hlsRef.current;
-    const video = videoRef.current;
-    
-    console.log('[VideoPlayer] Changing quality to level:', levelIndex);
-
-    // Store current state
-    const wasPlaying = !video.paused;
-    const currentVideoTime = video.currentTime;
 
     setIsSwitchingQuality(true);
 
     if (levelIndex === -1) {
-      // Auto quality
+      // Re-enable ABR (auto quality)
       hls.currentLevel = -1;
       setCurrentQuality(-1);
       console.log('[VideoPlayer] Quality set to AUTO');
     } else {
-      // Manual quality selection
-      hls.currentLevel = levelIndex;
+      // nextLevel = smooth switch: loads new quality after current buffer runs out
+      // avoids the stutter/seek caused by hls.currentLevel (hard flush)
+      hls.nextLevel = levelIndex;
       setCurrentQuality(levelIndex);
-      
       const selectedLevel = hls.levels[levelIndex];
-      console.log('[VideoPlayer] Quality set to:', selectedLevel.height + 'p');
+      console.log('[VideoPlayer] Quality switching to:', selectedLevel?.height + 'p');
     }
-
-    // CRITICAL FIX: Wait for level switch before seeking
-    const handleLevelSwitched = () => {
-      // Seek to maintain position
-      video.currentTime = currentVideoTime;
-      
-      // Resume playback if it was playing
-      if (wasPlaying) {
-        video.play().catch(err => console.error('[VideoPlayer] Play after quality change error:', err));
-      }
-      
-      // Remove event listener
-      hls.off(Hls.Events.LEVEL_SWITCHED, handleLevelSwitched);
-    };
-
-    hls.on(Hls.Events.LEVEL_SWITCHED, handleLevelSwitched);
 
     setShowQualityMenu(false);
   };

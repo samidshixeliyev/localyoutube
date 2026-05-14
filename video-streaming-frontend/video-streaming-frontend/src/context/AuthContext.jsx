@@ -229,9 +229,32 @@ export const AuthProvider = ({ children }) => {
 
   const loginWithIdp = (token, idpUser) => {
     localStorage.setItem('jwt_token', token);
+
+    // Map common OIDC/LDAP claim names to local fields.
+    // AO IDP may use: display_name, ldap_username, name, preferred_username, given_name + family_name
+    const email =
+      idpUser.email ||
+      idpUser.preferred_username ||
+      (typeof idpUser.sub === 'string' && idpUser.sub.includes('@') ? idpUser.sub : null);
+
+    const fullName =
+      idpUser.display_name ||
+      idpUser.name ||
+      (idpUser.given_name && idpUser.family_name
+        ? `${idpUser.given_name} ${idpUser.family_name}`
+        : null);
+
+    const username =
+      idpUser.ldap_username ||
+      idpUser.preferred_username ||
+      (email ? email.split('@')[0] : null) ||
+      idpUser.sub;
+
     const userData = {
-      email: idpUser.email || idpUser.sub,
-      username: idpUser.display_name || idpUser.ldap_username || idpUser.email?.split('@')[0],
+      email: email || idpUser.sub,
+      name: fullName || username,
+      fullName: fullName || username,
+      username,
       permissions: [],
       role: 'USER',
       isIdpUser: true,

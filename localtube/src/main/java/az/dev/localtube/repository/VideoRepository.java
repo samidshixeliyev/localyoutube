@@ -143,13 +143,16 @@ public interface VideoRepository extends JpaRepository<Video, String> {
 
     // ─── Tag-based suggestions ───────────────────────────────────────────────
 
+    // Uses a subquery instead of DISTINCT to avoid PostgreSQL's
+    // "ORDER BY expressions must appear in select list" restriction.
     @Query(nativeQuery = true, value = """
-            SELECT DISTINCT v.* FROM videos v
-            INNER JOIN video_tags vt ON vt.video_id = v.id
+            SELECT v.* FROM videos v
             WHERE v.status = 'READY'
               AND v.visibility = 'PUBLIC'
               AND v.id <> :excludeId
-              AND vt.tag IN (:tags)
+              AND v.id IN (
+                  SELECT vt.video_id FROM video_tags vt WHERE vt.tag IN (:tags)
+              )
             ORDER BY (
                 SELECT COUNT(*) FROM video_tags vt2
                 WHERE vt2.video_id = v.id AND vt2.tag IN (:tags)

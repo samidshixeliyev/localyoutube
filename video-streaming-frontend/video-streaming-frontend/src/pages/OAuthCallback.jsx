@@ -57,15 +57,25 @@ const OAuthCallback = () => {
         }
 
         const data = await response.json();
-        const token = data.access_token || data.id_token;
 
-        if (!token) {
+        // access_token = sent to our API for authorization
+        // id_token     = contains user identity claims (display_name, email, etc.)
+        const accessToken = data.access_token;
+        const idToken = data.id_token;
+        const authToken = accessToken || idToken;
+
+        if (!authToken) {
           setError('No token in IDP response.');
           return;
         }
 
-        const payload = decodeJwtPayload(token);
-        loginWithIdp(token, payload);
+        // Prefer id_token for user info (has display_name, email, etc.)
+        // Fall back to access_token payload if id_token is absent
+        const userInfoPayload = idToken
+          ? decodeJwtPayload(idToken)
+          : decodeJwtPayload(accessToken);
+
+        loginWithIdp(authToken, userInfoPayload);
         // Replace URL to remove ?code=&state= params, then go to home
         window.history.replaceState({}, '', '/');
         navigate('/', { replace: true });
