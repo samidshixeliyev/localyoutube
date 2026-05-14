@@ -306,8 +306,15 @@ public class AuthController {
                 return ResponseEntity.ok(Map.of("synced", false, "reason", "user not found"));
             }
 
-            // Extract best available name from id_token claims
+            // LDAP claim names from the Global Bank IDP:
+            //   cn        = full name ("Daniel Hernandez")
+            //   givenName = first name, sn = surname
+            //   mail      = email address
+            //   uid       = login username
             String displayName = firstNonBlank(
+                    claims.get("cn"),
+                    buildFullName(claims.get("givenName"), claims.get("sn")),
+                    claims.get("uid"),
                     claims.get("display_name"),
                     claims.get("name"),
                     buildFullName(claims.get("given_name"), claims.get("family_name")),
@@ -315,8 +322,9 @@ public class AuthController {
                     claims.get("preferred_username")
             );
 
-            // Extract real email (id_token usually has it, access_token doesn't)
+            // Extract real email — LDAP uses "mail", OIDC uses "email"
             String realEmail = firstNonBlank(
+                    claims.get("mail"),
                     claims.get("email"),
                     claims.get("preferred_username")
             );

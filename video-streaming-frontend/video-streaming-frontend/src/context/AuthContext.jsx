@@ -230,14 +230,24 @@ export const AuthProvider = ({ children }) => {
   const loginWithIdp = (token, idpUser) => {
     localStorage.setItem('jwt_token', token);
 
-    // Map common OIDC/LDAP claim names to local fields.
-    // AO IDP may use: display_name, ldap_username, name, preferred_username, given_name + family_name
+    // Global Bank LDAP claim names (from IDP JWT mapping):
+    //   cn        = full name ("Daniel Hernandez")
+    //   givenName = first name,  sn = surname
+    //   mail      = email address
+    //   uid       = login username  (e.g. "dhernandez")
+    //   employeeNumber, title, telephoneNumber, o also available
+
     const email =
-      idpUser.email ||
+      idpUser.mail ||                   // LDAP mail attribute
+      idpUser.email ||                  // standard OIDC
       idpUser.preferred_username ||
       (typeof idpUser.sub === 'string' && idpUser.sub.includes('@') ? idpUser.sub : null);
 
     const fullName =
+      idpUser.cn ||                     // LDAP cn = "Daniel Hernandez"
+      (idpUser.givenName && idpUser.sn
+        ? `${idpUser.givenName} ${idpUser.sn}`
+        : null) ||
       idpUser.display_name ||
       idpUser.name ||
       (idpUser.given_name && idpUser.family_name
@@ -245,6 +255,7 @@ export const AuthProvider = ({ children }) => {
         : null);
 
     const username =
+      idpUser.uid ||                    // LDAP uid = "dhernandez"
       idpUser.ldap_username ||
       idpUser.preferred_username ||
       (email ? email.split('@')[0] : null) ||
@@ -255,6 +266,8 @@ export const AuthProvider = ({ children }) => {
       name: fullName || username,
       fullName: fullName || username,
       username,
+      title: idpUser.title || null,           // e.g. "IT Developer"
+      organization: idpUser.o || null,        // e.g. "Global Bank Corporation"
       permissions: [],
       role: 'USER',
       isIdpUser: true,

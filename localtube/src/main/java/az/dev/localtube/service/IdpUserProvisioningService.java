@@ -78,8 +78,13 @@ public class IdpUserProvisioningService {
                 });
     }
 
+    /**
+     * Splits a display name ("Daniel Hernandez") into [firstName, surname].
+     * Returns ["User"] if blank.
+     */
     private String[] splitName(String displayName) {
         if (displayName == null || displayName.isBlank()) return new String[]{"User"};
+        // Split on first whitespace: "Daniel Hernandez" → ["Daniel", "Hernandez"]
         String[] parts = displayName.trim().split("\\s+", 2);
         return parts;
     }

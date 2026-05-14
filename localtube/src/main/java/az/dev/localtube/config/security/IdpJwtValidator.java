@@ -50,11 +50,48 @@ public class IdpJwtValidator {
     }
 
     public OidcUserDetails toUserDetails(Jwt jwt) {
-        String email = jwt.getClaimAsString("email");
-        if (email == null) email = jwt.getSubject();
-        String displayName = jwt.getClaimAsString("display_name");
-        if (displayName == null) displayName = jwt.getClaimAsString("ldap_username");
+        // LDAP claim names from the IDP (Global Bank LDAP):
+        //   mail        → email address
+        //   cn          → full name (e.g. "Daniel Hernandez")
+        //   givenName   → first name
+        //   sn          → surname
+        //   uid         → login username
+        String email = firstNonNull(
+                jwt.getClaimAsString("mail"),
+                jwt.getClaimAsString("email"),
+                jwt.getSubject()
+        );
+
+        String displayName = firstNonNull(
+                jwt.getClaimAsString("cn"),           // full name preferred
+                buildFullName(jwt.getClaimAsString("givenName"), jwt.getClaimAsString("sn")),
+                jwt.getClaimAsString("uid"),
+                jwt.getClaimAsString("display_name"),
+                jwt.getClaimAsString("ldap_username")
+        );
+
+        log.debug("IDP claims — email(mail)={} cn={} givenName={} sn={} uid={}",
+                jwt.getClaimAsString("mail"),
+                jwt.getClaimAsString("cn"),
+                jwt.getClaimAsString("givenName"),
+                jwt.getClaimAsString("sn"),
+                jwt.getClaimAsString("uid"));
+
         return new OidcUserDetails(email, displayName);
+    }
+
+    private static String firstNonNull(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v;
+        }
+        return null;
+    }
+
+    private static String buildFullName(String given, String sn) {
+        if (given == null && sn == null) return null;
+        if (sn == null) return given;
+        if (given == null) return sn;
+        return given + " " + sn;
     }
 
     private static RestTemplate buildSslIgnoringRestTemplate() {
