@@ -47,6 +47,14 @@ public class SecurityConfiguration {
                 .headers(AbstractHttpConfigurer::disable)
 
                 .authorizeHttpRequests(auth -> auth
+                        // ── Static frontend (React SPA) ──────────────────────
+                        .requestMatchers("/", "/index.html", "/favicon.ico").permitAll()
+                        .requestMatchers("/assets/**", "/static/**").permitAll()
+                        // SPA client-side routes — Spring serves index.html for all of these
+                        .requestMatchers("/login", "/callback", "/logged_out",
+                                "/video/**", "/search", "/upload", "/my-videos",
+                                "/change-password", "/admin/**").permitAll()
+
                         // AUTHENTICATION - Public
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/refresh").permitAll()
