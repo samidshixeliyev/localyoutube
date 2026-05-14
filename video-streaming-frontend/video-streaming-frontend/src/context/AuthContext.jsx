@@ -104,9 +104,45 @@ export const useAuth = () => {
   return context;
 };
 
+// ── Synchronous bootstrap ────────────────────────────────────────────────────
+// Read and validate the JWT from localStorage before the first render so that
+// `loading` never needs to be true and no spinner ever flashes on page load.
+function decodeJwt(token) {
+  const base64Url = token.split('.')[1];
+  const base64    = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const json      = decodeURIComponent(
+    atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+  );
+  return JSON.parse(json);
+}
+
+function loadUserSync() {
+  try {
+    const token = localStorage.getItem('jwt_token');
+    if (!token) return null;
+
+    const decoded = decodeJwt(token);
+    if (Date.now() >= decoded.exp * 1000) {
+      // Token already expired — clear immediately
+      localStorage.removeItem('jwt_token');
+      localStorage.removeItem('user');
+      return null;
+    }
+
+    const raw = localStorage.getItem('user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('user');
+    return null;
+  }
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Initialized synchronously — no async delay, no loading flash
+  const [user, setUser] = useState(loadUserSync);
+  const [loading] = useState(false); // always false; kept for API compat
 
   // Check token validity without redirecting
   const checkTokenValidity = () => {
@@ -117,30 +153,15 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-
-      const decoded = JSON.parse(jsonPayload);
-      const exp = decoded.exp * 1000; // Convert to milliseconds
-      const now = Date.now();
-
-      // Token expired
-      if (now >= exp) {
+      const decoded = decodeJwt(token);
+      if (Date.now() >= decoded.exp * 1000) {
         setUser(null);
         localStorage.removeItem('jwt_token');
         localStorage.removeItem('user');
-        // DON'T redirect - just clear auth state
         return false;
       }
-
       return true;
-    } catch (error) {
+    } catch {
       setUser(null);
       localStorage.removeItem('jwt_token');
       localStorage.removeItem('user');
@@ -149,35 +170,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    const initAuth = () => {
-      // Check token validity
-      if (!checkTokenValidity()) {
-        setLoading(false);
-        return;
-      }
-
-      // Load user from localStorage
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          setUser(userData);
-        } catch (error) {
-          localStorage.removeItem('user');
-          localStorage.removeItem('jwt_token');
-        }
-      }
-      setLoading(false);
-    };
-
-    initAuth();
-
-    // Check token validity every minute
-    const interval = setInterval(() => {
-      checkTokenValidity();
-    }, 60000); // Check every 60 seconds
-
+    // Periodic expiry check — catches tokens that expire while the tab is open
+    const interval = setInterval(checkTokenValidity, 60000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── IDP (PKCE) auth ──────────────────────────────────────────────────────

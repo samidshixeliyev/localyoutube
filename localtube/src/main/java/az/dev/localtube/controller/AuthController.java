@@ -217,10 +217,14 @@ public class AuthController {
 
     /**
      * Returns IDP config so the frontend can build the authorization URL.
+     * Cache-Control: no-store ensures that toggling idp.enabled in the admin UI
+     * is reflected immediately — no browser or proxy caching.
      */
     @GetMapping("/idp/config")
     public ResponseEntity<Map<String, String>> getIdpConfig() {
-        return ResponseEntity.ok(Map.ofEntries(
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-store")
+                .body(Map.ofEntries(
                 Map.entry("authorizationEndpoint", idpBaseUrl() + "/oauth2/authorize"),
                 Map.entry("tokenEndpoint",         idpBaseUrl() + "/oauth2/token"),
                 Map.entry("endSessionEndpoint",    idpBaseUrl() + "/oauth2/logout"),

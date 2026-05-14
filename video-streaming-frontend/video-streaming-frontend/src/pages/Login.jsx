@@ -17,7 +17,9 @@ const Login = () => {
   // Falls back to showing the button if the request fails (safe default).
   // When SSO is disabled, auto-expand the admin form so users aren't stuck.
   useEffect(() => {
-    fetch('/api/auth/idp/config')
+    // cache: 'no-store' prevents the browser from serving a stale response
+    // after an admin has just toggled the IDP enabled/disabled setting.
+    fetch('/api/auth/idp/config', { cache: 'no-store' })
       .then(r => r.json())
       .then(cfg => {
         const enabled = cfg.idpEnabled !== 'false';

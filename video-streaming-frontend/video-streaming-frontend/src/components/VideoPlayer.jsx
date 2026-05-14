@@ -63,6 +63,7 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
 
         nudgeMaxRetry:       5,
         enableSoftwareAES:   false,
+        startFragPrefetch:   true,  // pre-fetch first fragment of new level after switch
       });
       
       hlsRef.current = hls;
@@ -265,24 +266,20 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
     if (!hlsRef.current) return;
 
     const hls = hlsRef.current;
-
-    setIsSwitchingQuality(true);
+    setShowQualityMenu(false);
 
     if (levelIndex === -1) {
-      // Re-enable ABR (auto quality)
+      // Re-enable ABR (auto quality) — no buffering needed
       hls.currentLevel = -1;
       setCurrentQuality(-1);
-      console.log('[VideoPlayer] Quality set to AUTO');
     } else {
-      // nextLevel = smooth switch: loads new quality after current buffer runs out
-      // avoids the stutter/seek caused by hls.currentLevel (hard flush)
-      hls.nextLevel = levelIndex;
+      // Hard switch: currentLevel flushes the buffer immediately and starts
+      // loading the new level right away. nextLevel would wait for the
+      // existing buffer (up to 60 s) to drain first — far too slow.
+      setIsSwitchingQuality(true);
+      hls.currentLevel = levelIndex;
       setCurrentQuality(levelIndex);
-      const selectedLevel = hls.levels[levelIndex];
-      console.log('[VideoPlayer] Quality switching to:', selectedLevel?.height + 'p');
     }
-
-    setShowQualityMenu(false);
   };
 
   const getQualityLabel = () => {
@@ -333,15 +330,18 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
         playsInline
       />
 
-      {/* Loading Spinner */}
-      {(isLoading || isSwitchingQuality) && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-2"></div>
-            {isSwitchingQuality && (
-              <p className="text-white text-sm">Switching quality...</p>
-            )}
-          </div>
+      {/* Initial loading spinner — full overlay only before first play */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-60">
+          <div className="animate-spin rounded-full h-14 w-14 border-b-2 border-white" />
+        </div>
+      )}
+
+      {/* Quality-switch indicator — small badge, doesn't block the video */}
+      {isSwitchingQuality && !isLoading && (
+        <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/70 text-white text-xs font-medium px-2.5 py-1.5 rounded-full pointer-events-none">
+          <div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+          Switching…
         </div>
       )}
 
