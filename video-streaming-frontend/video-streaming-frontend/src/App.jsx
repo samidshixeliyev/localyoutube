@@ -155,8 +155,10 @@ function AppContent() {
         </Suspense>
 
         <MiniPlayer />
-        <UploadManager />
       </div>
+      {/* UploadManager uses fixed positioning — rendered outside the page div
+          so no ancestor transform/overflow can ever clip it */}
+      <UploadManager />
     </MiniPlayerProvider>
     </UploadProvider>
   );

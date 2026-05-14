@@ -32,7 +32,7 @@ export default function UploadManager() {
               : 'Starting…';
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+    <div className="fixed bottom-5 right-5 z-[9999] w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
 
       {/* Header */}
       <div className={`${statusColor} px-4 py-3 flex items-center gap-2`}>
