@@ -1,46 +1,272 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Activity, ExternalLink, RefreshCw } from 'lucide-react';
+import {
+  ArrowLeft, Activity, RefreshCw, ExternalLink,
+  Cpu, MemoryStick, HardDrive, Globe,
+  Upload, Clapperboard, Eye, Database,
+  TrendingUp, AlertCircle,
+} from 'lucide-react';
+import {
+  AreaChart, Area, LineChart, Line, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import Navbar from '../../components/Navbar';
+import api from '../../services/api';
 
-// Grafana is on port 3000 of the same host.
-// We build the URL relative to the current host so it works on any server.
-const GRAFANA_BASE = `${window.location.protocol}//${window.location.hostname}:3000`;
-const DASHBOARD_UID = 'localtube-main';
+// ── Prometheus proxy helpers ──────────────────────────────────────────────────
 
-// System stat tiles (panel IDs match the dashboard JSON)
-const SYS_PANELS = [
-  { id: 2,  title: 'CPU'        },
-  { id: 3,  title: 'Memory'     },
-  { id: 4,  title: 'Disk'       },
-  { id: 5,  title: 'HTTP Req/s' },
-];
+const instant = (query) =>
+  api.get('/admin/metrics/instant', { params: { query } })
+     .then(r => r.data);
 
-// App-specific stat tiles
-const APP_PANELS = [
-  { id: 40, title: 'Uploads'           },
-  { id: 41, title: 'Transcodings'      },
-  { id: 42, title: 'Total Views'       },
-  { id: 43, title: 'Video Storage'     },
-];
+const range = (query, start, end, step) =>
+  api.get('/admin/metrics/range', { params: { query, start, end, step } })
+     .then(r => r.data);
 
-function panelUrl(panelId, from = 'now-1h', to = 'now') {
-  return `${GRAFANA_BASE}/d-solo/${DASHBOARD_UID}?orgId=1&from=${from}&to=${to}&panelId=${panelId}&theme=light`;
+// Safely extract the first scalar value from a Prometheus instant result
+function scalar(data, fallback = null) {
+  try {
+    const v = parseFloat(data.data.result[0].value[1]);
+    return isNaN(v) ? fallback : v;
+  } catch { return fallback; }
 }
 
+// Convert a Prometheus matrix result to recharts [{time, ...series}]
+function toSeries(data, labelFn = () => 'value') {
+  try {
+    const results = data.data.result;
+    if (!results || results.length === 0) return [];
+    // Merge all series on timestamp
+    const map = new Map();
+    results.forEach(r => {
+      const seriesName = labelFn(r.metric);
+      r.values.forEach(([ts, val]) => {
+        const t = ts * 1000;
+        if (!map.has(t)) map.set(t, { ts: t });
+        map.get(t)[seriesName] = parseFloat(val);
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.ts - b.ts);
+  } catch { return []; }
+}
+
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function fmtBytes(b) {
+  if (b == null) return '—';
+  if (b >= 1e9) return (b / 1e9).toFixed(1) + ' GB';
+  if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB';
+  if (b >= 1e3) return (b / 1e3).toFixed(1) + ' KB';
+  return b + ' B';
+}
+function fmtNum(n, dec = 1) {
+  if (n == null) return '—';
+  return n.toFixed(dec);
+}
+
+// ── Time range config ─────────────────────────────────────────────────────────
+
 const TIME_RANGES = [
-  { label: '30m', from: 'now-30m' },
-  { label: '1h',  from: 'now-1h'  },
-  { label: '6h',  from: 'now-6h'  },
-  { label: '24h', from: 'now-24h' },
+  { label: '30m', seconds: 1800,  step: 30  },
+  { label: '1h',  seconds: 3600,  step: 60  },
+  { label: '6h',  seconds: 21600, step: 360 },
+  { label: '24h', seconds: 86400, step: 1440},
 ];
+
+// ── Colour palette ────────────────────────────────────────────────────────────
+const C = {
+  orange:  '#f97316',
+  blue:    '#3b82f6',
+  green:   '#22c55e',
+  red:     '#ef4444',
+  purple:  '#a855f7',
+  sky:     '#0ea5e9',
+  amber:   '#f59e0b',
+  teal:    '#14b8a6',
+};
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+const ChartTooltip = ({ active, payload, label, unit = '' }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-gray-400 mb-1">{fmtTime(label)}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color }} className="font-medium">
+          {p.name}: {typeof p.value === 'number' ? p.value.toFixed(2) : p.value}{unit}
+        </p>
+      ))}
+    </div>
+  );
+};
+
+// ── StatCard ──────────────────────────────────────────────────────────────────
+function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
+      <div className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center"
+           style={{ backgroundColor: color + '18' }}>
+        <Icon className="w-5 h-5" style={{ color }} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-gray-500 truncate">{title}</p>
+        {loading ? (
+          <div className="h-5 w-16 bg-gray-100 rounded animate-pulse mt-1"/>
+        ) : (
+          <p className="text-xl font-bold text-gray-900 leading-tight">
+            {value != null ? `${fmtNum(value, value < 10 ? 2 : 0)}${unit}` : '—'}
+          </p>
+        )}
+        {sub && <p className="text-xs text-gray-400 truncate">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── ChartCard ─────────────────────────────────────────────────────────────────
+function ChartCard({ title, children, loading, empty }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-700">{title}</p>
+      </div>
+      <div className="p-4" style={{ height: 220 }}>
+        {loading ? (
+          <div className="h-full flex items-center justify-center">
+            <RefreshCw className="w-5 h-5 text-gray-300 animate-spin" />
+          </div>
+        ) : empty ? (
+          <div className="h-full flex flex-col items-center justify-center text-gray-400">
+            <Activity className="w-8 h-8 mb-2 opacity-30" />
+            <p className="text-xs">No data yet</p>
+          </div>
+        ) : children}
+      </div>
+    </div>
+  );
+}
+
+// ── Section label ─────────────────────────────────────────────────────────────
+const Section = ({ children }) => (
+  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mt-6 mb-3">{children}</p>
+);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Main component
+// ═════════════════════════════════════════════════════════════════════════════
 
 export default function Metrics() {
   const navigate = useNavigate();
-  const [range,  setRange]  = useState(TIME_RANGES[1]);
-  const [reload, setReload] = useState(0);
+  const [range_,  setRange]   = useState(TIME_RANGES[1]); // 1h default
+  const [stats,   setStats]   = useState({});
+  const [charts,  setCharts]  = useState({});
+  const [loading, setLoading] = useState(true);
+  const [chartsLoading, setChartsLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const timerRef = useRef(null);
 
-  const refresh = () => setReload(r => r + 1);
+  const GRAFANA_BASE = `${window.location.protocol}//${window.location.hostname}:3000`;
+
+  // ── Fetch instant stats ───────────────────────────────────────────────────
+  const fetchStats = useCallback(async () => {
+    try {
+      const [cpu, mem, disk, http_, uploads, transcodings, views, storage] =
+        await Promise.all([
+          instant('100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
+          instant('(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100'),
+          instant('max((1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"}) * 100)'),
+          instant('sum(rate(http_server_requests_seconds_count[5m]))'),
+          instant('localtube_uploads_success_total'),
+          instant('localtube_active_transcodings'),
+          instant('localtube_video_views_total'),
+          instant('sum(localtube_disk_usage_bytes)'),
+        ]);
+      setStats({
+        cpu:           scalar(cpu),
+        mem:           scalar(mem),
+        disk:          scalar(disk),
+        http:          scalar(http_),
+        uploads:       scalar(uploads),
+        transcodings:  scalar(transcodings),
+        views:         scalar(views),
+        storage:       scalar(storage),
+      });
+      setLastRefresh(new Date());
+      setError(null);
+    } catch (e) {
+      setError('Cannot reach Prometheus. Is the container running?');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Fetch chart data ──────────────────────────────────────────────────────
+  const fetchCharts = useCallback(async () => {
+    setChartsLoading(true);
+    try {
+      const now   = Math.floor(Date.now() / 1000);
+      const start = now - range_.seconds;
+      const step  = range_.step;
+      const S     = String(start), E = String(now), T = String(step);
+
+      const [cpuTs, memTs, httpTs, p95Ts, heapUsed, heapMax,
+             uploadRate, viewRate, diskTs, transTs] =
+        await Promise.all([
+          range('100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)', S, E, T),
+          range('node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes', S, E, T),
+          range('sum by(status)(rate(http_server_requests_seconds_count[5m]))', S, E, T),
+          range('histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket[5m])))', S, E, T),
+          range('sum(jvm_memory_used_bytes{area="heap"})', S, E, T),
+          range('sum(jvm_memory_max_bytes{area="heap"})', S, E, T),
+          range('rate(localtube_uploads_success_total[10m]) * 60', S, E, T),
+          range('rate(localtube_video_views_total[5m]) * 60', S, E, T),
+          range('localtube_disk_usage_bytes', S, E, T),
+          range('localtube_active_transcodings', S, E, T),
+        ]);
+
+      // merge heapUsed + heapMax into one series
+      const heapData = (() => {
+        const u = toSeries(heapUsed, () => 'used');
+        const m = toSeries(heapMax, () => 'max');
+        const mMap = new Map(m.map(d => [d.ts, d.max]));
+        return u.map(d => ({ ...d, max: mMap.get(d.ts) ?? null }));
+      })();
+
+      setCharts({
+        cpu:        toSeries(cpuTs,        () => 'CPU %'),
+        mem:        toSeries(memTs,        () => 'Used'),
+        http:       toSeries(httpTs,       m => `HTTP ${m.status || 'all'}`),
+        p95:        toSeries(p95Ts,        () => 'p95'),
+        heap:       heapData,
+        uploadRate: toSeries(uploadRate,   () => 'Uploads/min'),
+        viewRate:   toSeries(viewRate,     () => 'Views/min'),
+        disk:       toSeries(diskTs,       m => m.type || 'bytes'),
+        transcodings: toSeries(transTs,   () => 'Active'),
+      });
+    } catch {/* charts fail gracefully */}
+    finally { setChartsLoading(false); }
+  }, [range_]);
+
+  // ── Auto-refresh ──────────────────────────────────────────────────────────
+  const refresh = useCallback(() => {
+    fetchStats();
+    fetchCharts();
+  }, [fetchStats, fetchCharts]);
+
+  useEffect(() => {
+    refresh();
+    timerRef.current = setInterval(refresh, 30_000);
+    return () => clearInterval(timerRef.current);
+  }, [refresh]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const cpuColor  = stats.cpu  > 85 ? C.red : stats.cpu  > 70 ? C.amber : C.green;
+  const memColor  = stats.mem  > 85 ? C.red : stats.mem  > 70 ? C.amber : C.blue;
+  const diskColor = stats.disk > 85 ? C.red : stats.disk > 70 ? C.amber : C.teal;
 
   return (
     <>
@@ -48,27 +274,29 @@ export default function Metrics() {
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-          {/* Header */}
-          <div className="flex items-center gap-4 mb-8">
+          {/* ── Header ── */}
+          <div className="flex items-center gap-4 mb-6">
             <button onClick={() => navigate('/admin/users')}
               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-0.5">
+              <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary-600" />
                 <h1 className="text-2xl font-bold text-gray-900">System Metrics</h1>
               </div>
-              <p className="text-sm text-gray-500">Live Prometheus + Grafana — refreshes every 30 s</p>
+              <p className="text-sm text-gray-500">
+                Live Prometheus data — auto-refreshes every 30 s
+                {lastRefresh && <> · last updated {lastRefresh.toLocaleTimeString()}</>}
+              </p>
             </div>
-
-            {/* Controls */}
             <div className="flex items-center gap-2">
+              {/* Time range */}
               <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden">
                 {TIME_RANGES.map(r => (
                   <button key={r.label} onClick={() => setRange(r)}
                     className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                      range.from === r.from
+                      range_.label === r.label
                         ? 'bg-primary-600 text-white'
                         : 'text-gray-600 hover:bg-gray-50'}`}>
                     {r.label}
@@ -76,69 +304,228 @@ export default function Metrics() {
                 ))}
               </div>
               <button onClick={refresh}
-                className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-all">
+                className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-primary-600 hover:bg-gray-50 transition-all">
                 <RefreshCw className="w-4 h-4" />
               </button>
-              <a href={`${GRAFANA_BASE}/d/${DASHBOARD_UID}`} target="_blank" rel="noreferrer"
+              <a href={`${GRAFANA_BASE}/d/localtube-main`} target="_blank" rel="noreferrer"
                 className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-all">
-                <ExternalLink className="w-4 h-4" />
-                Open Grafana
+                <ExternalLink className="w-4 h-4" /> Grafana
               </a>
             </div>
           </div>
 
-          {/* System stat tiles */}
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">System</p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            {SYS_PANELS.map(p => (
-              <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <p className="text-xs font-semibold text-gray-500 px-3 pt-3 pb-1">{p.title}</p>
-                <iframe
-                  key={`${p.id}-${range.from}-${reload}`}
-                  src={panelUrl(p.id, range.from)}
-                  className="w-full h-24 border-0"
-                  title={p.title}
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* App stat tiles */}
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Application</p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {APP_PANELS.map(p => (
-              <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <p className="text-xs font-semibold text-gray-500 px-3 pt-3 pb-1">{p.title}</p>
-                <iframe
-                  key={`${p.id}-${range.from}-${reload}`}
-                  src={panelUrl(p.id, range.from)}
-                  className="w-full h-24 border-0"
-                  title={p.title}
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* Full dashboard embed */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-700">Full Dashboard</p>
-              <span className="text-xs text-gray-400">Grafana · anonymous viewer</span>
+          {/* ── Error banner ── */}
+          {error && (
+            <div className="mb-4 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+              <p className="text-sm text-red-700">{error}</p>
             </div>
-            <iframe
-              key={`full-${range.from}-${reload}`}
-              src={`${GRAFANA_BASE}/d/${DASHBOARD_UID}?orgId=1&from=${range.from}&to=now&theme=light&kiosk=tv`}
-              className="w-full border-0"
-              style={{ height: '80vh' }}
-              title="LocalTube Dashboard"
-            />
+          )}
+
+          {/* ══ SYSTEM STATS ══════════════════════════════════════════════════ */}
+          <Section>System</Section>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard icon={Cpu}        title="CPU Usage"     value={stats.cpu}    unit="%" color={cpuColor}  loading={loading} sub="5-min avg" />
+            <StatCard icon={MemoryStick} title="Memory Used"  value={stats.mem}    unit="%" color={memColor}  loading={loading} sub="of total RAM" />
+            <StatCard icon={HardDrive}   title="Disk Used"    value={stats.disk}   unit="%" color={diskColor} loading={loading} sub="largest partition" />
+            <StatCard icon={Globe}       title="HTTP Req/s"   value={stats.http}   unit="" color={C.sky}     loading={loading} sub="5-min rate" />
           </div>
 
-          {/* Fallback hint */}
-          <p className="text-xs text-gray-400 text-center mt-4">
-            If panels show "No data" wait ~60 s for Prometheus to scrape the first metrics.
-            Use "Open Grafana" if the iframe is blocked (login: <strong>admin / admin</strong>).
+          {/* ══ APP STATS ═════════════════════════════════════════════════════ */}
+          <Section>Application</Section>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard icon={Upload}       title="Total Uploads"      value={stats.uploads}       unit="" color={C.orange} loading={loading} />
+            <StatCard icon={Clapperboard} title="Active Transcodings" value={stats.transcodings} unit="" color={stats.transcodings > 0 ? C.amber : C.green} loading={loading} />
+            <StatCard icon={Eye}          title="Total Views"         value={stats.views}         unit="" color={C.purple} loading={loading} />
+            <StatCard icon={Database}     title="Video Storage"       value={stats.storage != null ? stats.storage / 1e9 : null} unit=" GB" color={C.teal} loading={loading} sub={fmtBytes(stats.storage)} />
+          </div>
+
+          {/* ══ SYSTEM CHARTS ═════════════════════════════════════════════════ */}
+          <Section>System over time</Section>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            <ChartCard title="CPU Usage %" loading={chartsLoading} empty={!charts.cpu?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={charts.cpu} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gCpu" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.orange} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={C.orange} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis domain={[0,100]} unit="%" tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip content={<ChartTooltip unit="%" />} />
+                  <Area type="monotone" dataKey="CPU %" stroke={C.orange} fill="url(#gCpu)" strokeWidth={2} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Memory Usage" loading={chartsLoading} empty={!charts.mem?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={charts.mem} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gMem" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.blue} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={C.blue} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip content={<ChartTooltip />} formatter={v => fmtBytes(v)} />
+                  <Area type="monotone" dataKey="Used" stroke={C.blue} fill="url(#gMem)" strokeWidth={2} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </div>
+
+          {/* ══ HTTP / JVM CHARTS ═════════════════════════════════════════════ */}
+          <Section>HTTP &amp; JVM</Section>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            <ChartCard title="HTTP Requests / s  (by status)" loading={chartsLoading} empty={!charts.http?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={charts.http} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                  {charts.http?.length > 0 &&
+                    Object.keys(charts.http[0])
+                      .filter(k => k !== 'ts')
+                      .map((k, i) => {
+                        const colours = [C.green, C.red, C.amber, C.blue, C.purple];
+                        return <Line key={k} type="monotone" dataKey={k}
+                          stroke={colours[i % colours.length]} strokeWidth={2} dot={false} />;
+                      })}
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="HTTP Response Time" loading={chartsLoading} empty={!charts.p95?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={charts.p95} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gP95" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.purple} stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor={C.purple} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis unit="s" tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip content={<ChartTooltip unit="s" />} />
+                  <Area type="monotone" dataKey="p95" stroke={C.purple} fill="url(#gP95)" strokeWidth={2} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="JVM Heap Memory" loading={chartsLoading} empty={!charts.heap?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={charts.heap} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gHeap" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.sky} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={C.sky} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip formatter={v => fmtBytes(v)} />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="used" stroke={C.sky}  fill="url(#gHeap)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="max"  stroke={C.red}  strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Active Transcodings" loading={chartsLoading} empty={!charts.transcodings?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={charts.transcodings} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gTrans" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.amber} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={C.amber} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Area type="stepAfter" dataKey="Active" stroke={C.amber} fill="url(#gTrans)" strokeWidth={2} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </div>
+
+          {/* ══ APP CHARTS ════════════════════════════════════════════════════ */}
+          <Section>Application over time</Section>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            <ChartCard title="Upload Rate  (uploads / min)" loading={chartsLoading} empty={!charts.uploadRate?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={charts.uploadRate} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="Uploads/min" fill={C.orange} radius={[2,2,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Video Views / min" loading={chartsLoading} empty={!charts.viewRate?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={charts.viewRate} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="Views/min" fill={C.purple} radius={[2,2,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Video Storage Breakdown" loading={chartsLoading} empty={!charts.disk?.length}
+              className="lg:col-span-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={charts.disk} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gUploads" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.orange} stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor={C.orange} stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="gHls" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.teal} stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor={C.teal} stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="gThumb" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.sky} stopOpacity={0.35}/>
+                      <stop offset="95%" stopColor={C.sky} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <Tooltip formatter={v => fmtBytes(v)} />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="uploads"    stroke={C.orange} fill="url(#gUploads)" strokeWidth={2} dot={false} stackId="s" />
+                  <Area type="monotone" dataKey="hls"        stroke={C.teal}   fill="url(#gHls)"     strokeWidth={2} dot={false} stackId="s" />
+                  <Area type="monotone" dataKey="thumbnails" stroke={C.sky}    fill="url(#gThumb)"   strokeWidth={2} dot={false} stackId="s" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </div>
+
+          <p className="text-xs text-gray-400 text-center mt-6">
+            Data from Prometheus scraping Spring Boot /actuator/prometheus and node_exporter every 15 s.
+            App metrics (uploads, views) populate after first activity.
           </p>
+
         </div>
       </div>
     </>
