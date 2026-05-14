@@ -3,6 +3,7 @@ package az.dev.localtube.controller;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
@@ -31,7 +32,16 @@ import java.nio.charset.StandardCharsets;
 public class MetricsProxyController {
 
     private static final String PROM = "http://localhost:9090";
-    private final RestTemplate http = new RestTemplate();
+
+    // Short timeouts so a dead Prometheus never stalls the request for long
+    private final RestTemplate http = buildRestTemplate();
+
+    private static RestTemplate buildRestTemplate() {
+        SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
+        f.setConnectTimeout(2_000);  // 2 s connect
+        f.setReadTimeout(10_000);    // 10 s read
+        return new RestTemplate(f);
+    }
 
     /** Current (instant) value for one PromQL expression. */
     @GetMapping("/instant")
