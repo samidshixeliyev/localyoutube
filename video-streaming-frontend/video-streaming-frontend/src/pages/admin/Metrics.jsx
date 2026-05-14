@@ -8,12 +8,20 @@ import Navbar from '../../components/Navbar';
 const GRAFANA_BASE = `${window.location.protocol}//${window.location.hostname}:3000`;
 const DASHBOARD_UID = 'localtube-main';
 
-// Individual panel embed URLs — Grafana anonymous viewer can see these without login.
-const PANELS = [
-  { id: 2,  title: 'CPU',         h: 'h-32' },
-  { id: 3,  title: 'Memory',      h: 'h-32' },
-  { id: 4,  title: 'Disk',        h: 'h-32' },
-  { id: 5,  title: 'HTTP Req/s',  h: 'h-32' },
+// System stat tiles (panel IDs match the dashboard JSON)
+const SYS_PANELS = [
+  { id: 2,  title: 'CPU'        },
+  { id: 3,  title: 'Memory'     },
+  { id: 4,  title: 'Disk'       },
+  { id: 5,  title: 'HTTP Req/s' },
+];
+
+// App-specific stat tiles
+const APP_PANELS = [
+  { id: 40, title: 'Uploads'           },
+  { id: 41, title: 'Transcodings'      },
+  { id: 42, title: 'Total Views'       },
+  { id: 43, title: 'Video Storage'     },
 ];
 
 function panelUrl(panelId, from = 'now-1h', to = 'now') {
@@ -79,15 +87,32 @@ export default function Metrics() {
             </div>
           </div>
 
-          {/* Stat tiles */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {PANELS.map(p => (
+          {/* System stat tiles */}
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">System</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            {SYS_PANELS.map(p => (
               <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <p className="text-xs font-semibold text-gray-500 px-3 pt-3 pb-1">{p.title}</p>
                 <iframe
                   key={`${p.id}-${range.from}-${reload}`}
                   src={panelUrl(p.id, range.from)}
-                  className={`w-full ${p.h} border-0`}
+                  className="w-full h-24 border-0"
+                  title={p.title}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* App stat tiles */}
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Application</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {APP_PANELS.map(p => (
+              <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <p className="text-xs font-semibold text-gray-500 px-3 pt-3 pb-1">{p.title}</p>
+                <iframe
+                  key={`${p.id}-${range.from}-${reload}`}
+                  src={panelUrl(p.id, range.from)}
+                  className="w-full h-24 border-0"
                   title={p.title}
                 />
               </div>

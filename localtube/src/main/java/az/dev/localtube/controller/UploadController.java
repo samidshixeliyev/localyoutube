@@ -4,6 +4,7 @@ import az.dev.localtube.config.security.LocalTubePrincipal;
 import az.dev.localtube.config.security.LocalTubeUserDetails;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
+import az.dev.localtube.metrics.LocalTubeMetrics;
 import az.dev.localtube.service.TranscodingService;
 import az.dev.localtube.service.VideoService;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ public class UploadController {
 
     private final VideoService videoService;
     private final TranscodingService transcodingService;
+    private final LocalTubeMetrics metrics;
     private final Path uploadDir;
     private final long maxFileSize;
     private final long minDiskFree;
@@ -39,11 +41,13 @@ public class UploadController {
 
     public UploadController(VideoService videoService,
                             TranscodingService transcodingService,
+                            LocalTubeMetrics metrics,
                             @Value("${localtube.storage.upload-dir}") String uploadDirPath,
                             @Value("${localtube.storage.max-file-size}") long maxFileSize,
                             @Value("${localtube.storage.min-disk-free}") long minDiskFree) throws IOException {
         this.videoService = videoService;
         this.transcodingService = transcodingService;
+        this.metrics = metrics;
         this.uploadDir = Paths.get(uploadDirPath);
         this.maxFileSize = maxFileSize;
         this.minDiskFree = minDiskFree;
@@ -87,6 +91,8 @@ public class UploadController {
 
             String videoTitle = title != null ? title : filename;
             String videoDesc = description != null ? description : "";
+
+            metrics.recordUploadAttempt();
 
             Video video = videoService.createVideo(
                     videoTitle, filename, videoDesc,
@@ -204,6 +210,7 @@ public class UploadController {
 
             videoService.updateVideoStatus(videoId, VideoStatus.UPLOADED);
             log.info("Upload completed for video {} (size: {} bytes)", videoId, fileSize);
+            metrics.recordUploadSuccess();
 
             // Start transcoding
             transcodingService.transcodeToHLS(videoId, targetFile);

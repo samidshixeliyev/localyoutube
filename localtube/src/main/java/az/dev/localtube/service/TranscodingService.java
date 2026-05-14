@@ -1,6 +1,7 @@
 package az.dev.localtube.service;
 
 import az.dev.localtube.domain.VideoStatus;
+import az.dev.localtube.metrics.LocalTubeMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
@@ -32,6 +33,7 @@ public class TranscodingService {
             Pattern.compile("time=(\\d+):(\\d+):(\\d+\\.\\d+)");
 
     private final VideoService videoService;
+    private final LocalTubeMetrics metrics;
     private final Path hlsDir;
     private final Path thumbnailDir;
     private final int segmentDuration;
@@ -46,11 +48,13 @@ public class TranscodingService {
     }
 
     public TranscodingService(VideoService videoService,
+                              LocalTubeMetrics metrics,
                               @Value("${localtube.storage.hls-dir}") String hlsDirPath,
                               @Value("${localtube.storage.thumbnail-dir}") String thumbnailDirPath,
                               @Value("${localtube.transcoding.segment-duration}") int segmentDuration,
                               @Value("${localtube.transcoding.qualities}") List<String> qualities) {
         this.videoService = videoService;
+        this.metrics = metrics;
         this.hlsDir = Paths.get(hlsDirPath);
         this.thumbnailDir = Paths.get(thumbnailDirPath);
         this.segmentDuration = segmentDuration;
@@ -59,6 +63,8 @@ public class TranscodingService {
 
     @Async("videoProcessingExecutor")
     public void transcodeToHLS(String videoId, Path inputFile) {
+        long startMs = System.currentTimeMillis();
+        metrics.incrementActiveTranscodings();
         try {
             log.info("[Transcoding] ▶ Starting video={}", videoId);
             processingStages.put(videoId, "Starting");
@@ -118,15 +124,21 @@ public class TranscodingService {
             videoService.updateVideoStatus(videoId, VideoStatus.READY);
             processingStages.put(videoId, "Ready");
             log.info("[Transcoding] ✓ Done video={}", videoId);
+            metrics.recordTranscodingSuccess();
+            metrics.recordTranscodingDuration(System.currentTimeMillis() - startMs);
             System.gc();
 
         } catch (Exception e) {
             log.error("[Transcoding] ✗ ERROR video={}: {}", videoId, e.getMessage(), e);
             processingStages.put(videoId, "Failed: " + e.getMessage());
+            metrics.recordTranscodingFailure();
+            metrics.recordTranscodingDuration(System.currentTimeMillis() - startMs);
             try {
                 videoService.updateVideoStatus(videoId, VideoStatus.FAILED);
                 Files.deleteIfExists(inputFile);
             } catch (IOException ignored) {}
+        } finally {
+            metrics.decrementActiveTranscodings();
         }
     }
 

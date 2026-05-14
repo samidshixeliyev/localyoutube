@@ -5,6 +5,7 @@ import az.dev.localtube.domain.Comment;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
 import az.dev.localtube.domain.VideoVisibility;
+import az.dev.localtube.metrics.LocalTubeMetrics;
 import az.dev.localtube.service.CommentService;
 import az.dev.localtube.service.VideoService;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ public class VideoController {
 
     private final VideoService videoService;
     private final CommentService commentService;
+    private final LocalTubeMetrics metrics;
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> listVideos(
@@ -135,6 +137,7 @@ public class VideoController {
     public ResponseEntity<Void> incrementView(@PathVariable String id) {
         try {
             videoService.incrementViews(id);
+            metrics.recordVideoView();
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             log.error("Error incrementing view", e);
