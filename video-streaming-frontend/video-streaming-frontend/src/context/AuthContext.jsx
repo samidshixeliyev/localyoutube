@@ -3,17 +3,95 @@ import api from '../services/api';
 
 function generateRandomString(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-  return Array.from(crypto.getRandomValues(new Uint8Array(length)))
-    .map(b => chars[b % chars.length])
-    .join('');
+  try {
+    return Array.from(crypto.getRandomValues(new Uint8Array(length)))
+      .map(b => chars[b % chars.length])
+      .join('');
+  } catch {
+    // fallback for non-secure contexts
+    return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  }
+}
+
+// Pure-JS SHA-256 — works on HTTP (no crypto.subtle required)
+function sha256Sync(str) {
+  function rightRotate(value, amount) {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  const mathPow = Math.pow;
+  const maxWord = mathPow(2, 32);
+  let result = '';
+  const words = [];
+  const asciiBitLength = str.length * 8;
+  let hash = [];
+  const k = [];
+  let primeCounter = 0;
+  const isComposite = {};
+  for (let candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (let i = candidate * candidate; i < 313; i += candidate) isComposite[i] = true;
+      hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
+      k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
+    }
+  }
+  str += '\x80';
+  while (str.length % 64 !== 56) str += '\x00';
+  for (let i = 0; i < str.length; i++) {
+    const j = str.charCodeAt(i);
+    if (j >> 8) return '';
+    words[i >> 2] |= j << ((3 - i) % 4) * 8;
+  }
+  words[words.length] = (asciiBitLength / maxWord) | 0;
+  words[words.length] = asciiBitLength;
+  for (let j = 0; j < words.length;) {
+    const w = words.slice(j, j += 16);
+    const oldHash = hash.slice(0);
+    for (let i = 0; i < 64; i++) {
+      const i2 = i < 16 ? w[i] : (
+        rightRotate(w[i - 2], 17) ^ rightRotate(w[i - 2], 19) ^ (w[i - 2] >>> 10)
+      ) + w[i - 7] + (
+        rightRotate(w[i - 15], 7) ^ rightRotate(w[i - 15], 18) ^ (w[i - 15] >>> 3)
+      ) + w[i - 16];
+      w[i] = i2 >>> 0;
+      const temp1 = hash[7] + (
+        rightRotate(hash[4], 6) ^ rightRotate(hash[4], 11) ^ rightRotate(hash[4], 25)
+      ) + ((hash[4] & hash[5]) ^ (~hash[4] & hash[6])) + k[i] + w[i];
+      const temp2 = (
+        rightRotate(hash[0], 2) ^ rightRotate(hash[0], 13) ^ rightRotate(hash[0], 22)
+      ) + ((hash[0] & hash[1]) ^ (hash[0] & hash[2]) ^ (hash[1] & hash[2]));
+      hash = [(temp1 + temp2) >>> 0, hash[0], hash[1], hash[2],
+        (hash[3] + temp1) >>> 0, hash[4], hash[5], hash[6]];
+    }
+    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) >>> 0;
+  }
+  for (let i = 0; i < 8; i++) {
+    for (let j = 3; j >= 0; j--) {
+      const b = (hash[i] >> (j * 8)) & 255;
+      result += (b < 16 ? '0' : '') + b.toString(16);
+    }
+  }
+  return result;
+}
+
+function hexToBase64url(hex) {
+  const bytes = [];
+  for (let i = 0; i < hex.length; i += 2) bytes.push(parseInt(hex.substr(i, 2), 16));
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 async function sha256Base64url(str) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  // Prefer crypto.subtle (secure context: HTTPS / localhost)
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    try {
+      const data = new TextEncoder().encode(str);
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return btoa(String.fromCharCode(...new Uint8Array(hash)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    } catch { /* fall through to pure-JS */ }
+  }
+  // Pure-JS fallback for plain HTTP contexts
+  return hexToBase64url(sha256Sync(str));
 }
 
 const AuthContext = createContext();
