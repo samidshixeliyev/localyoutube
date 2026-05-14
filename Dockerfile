@@ -4,7 +4,7 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 COPY video-streaming-frontend/video-streaming-frontend/package*.json ./
-RUN npm ci --silent
+RUN npm install --silent
 COPY video-streaming-frontend/video-streaming-frontend/ ./
 RUN npm run build
 
