@@ -1,5 +1,6 @@
 package az.dev.localtube.controller;
 
+import az.dev.localtube.config.security.LocalTubePrincipal;
 import az.dev.localtube.config.security.LocalTubeUserDetails;
 import az.dev.localtube.dto.request.ChangePasswordRequest;
 import az.dev.localtube.dto.request.LoginRequest;
@@ -281,6 +282,96 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body("{\"error\":\"IDP token exchange failed: " + e.getMessage() + "\"}");
         }
+    }
+
+    /**
+     * Called by the frontend after IDP token exchange to sync id_token claims
+     * (display_name, email, ldap_username) into the local DB user record.
+     * The access_token only carries sub (UUID); the id_token has the real profile.
+     */
+    @PostMapping("/idp/sync-profile")
+    public ResponseEntity<?> syncIdpProfile(
+            @RequestBody Map<String, String> claims,
+            @AuthenticationPrincipal LocalTubePrincipal principal) {
+        try {
+            if (principal == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Not authenticated"));
+            }
+
+            String currentEmail = principal.getEmail(); // UUID or real email in DB
+            User user = userRepository.findUserByEmail(currentEmail)
+                    .orElse(null);
+            if (user == null) {
+                return ResponseEntity.ok(Map.of("synced", false, "reason", "user not found"));
+            }
+
+            // Extract best available name from id_token claims
+            String displayName = firstNonBlank(
+                    claims.get("display_name"),
+                    claims.get("name"),
+                    buildFullName(claims.get("given_name"), claims.get("family_name")),
+                    claims.get("ldap_username"),
+                    claims.get("preferred_username")
+            );
+
+            // Extract real email (id_token usually has it, access_token doesn't)
+            String realEmail = firstNonBlank(
+                    claims.get("email"),
+                    claims.get("preferred_username")
+            );
+
+            boolean changed = false;
+
+            if (displayName != null) {
+                String[] parts = displayName.trim().split("\\s+", 2);
+                String firstName = parts[0];
+                String surname = parts.length > 1 ? parts[1] : null;
+                if (!firstName.equals(user.getName())) { user.setName(firstName); changed = true; }
+                if (!java.util.Objects.equals(surname, user.getSurname())) { user.setSurname(surname); changed = true; }
+            }
+
+            // Only update email if the current one is a UUID (placeholder from provisioning)
+            if (realEmail != null && isUuidEmail(currentEmail) && !realEmail.equals(currentEmail)) {
+                // Check no other user owns the real email
+                if (userRepository.findUserByEmail(realEmail).isEmpty()) {
+                    user.setEmail(realEmail);
+                    changed = true;
+                    log.info("IDP profile sync: updated email {} → {} for user id={}", currentEmail, realEmail, user.getId());
+                }
+            }
+
+            if (changed) {
+                user.setUpdatedAt(LocalDateTime.now());
+                userRepository.save(user);
+                log.info("IDP profile synced for user id={}: name={} {}", user.getId(), user.getName(), user.getSurname());
+            }
+
+            return ResponseEntity.ok(Map.of("synced", changed, "name", user.getFullName(), "email", user.getEmail()));
+        } catch (Exception e) {
+            log.error("IDP profile sync failed: {}", e.getMessage(), e);
+            return ResponseEntity.ok(Map.of("synced", false, "error", e.getMessage()));
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v;
+        }
+        return null;
+    }
+
+    private String buildFullName(String given, String family) {
+        if (given == null && family == null) return null;
+        if (family == null) return given;
+        if (given == null) return family;
+        return given + " " + family;
+    }
+
+    private boolean isUuidEmail(String email) {
+        // UUIDs used as placeholder email: 8-4-4-4-12 hex pattern
+        return email != null && email.matches(
+                "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     }
 
     @lombok.Data

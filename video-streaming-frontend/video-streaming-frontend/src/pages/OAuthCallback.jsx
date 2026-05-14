@@ -69,13 +69,28 @@ const OAuthCallback = () => {
           return;
         }
 
-        // Prefer id_token for user info (has display_name, email, etc.)
+        // Prefer id_token for user info (has display_name, email, given_name etc.)
         // Fall back to access_token payload if id_token is absent
         const userInfoPayload = idToken
           ? decodeJwtPayload(idToken)
           : decodeJwtPayload(accessToken);
 
+        // Log in the user on the frontend
         loginWithIdp(authToken, userInfoPayload);
+
+        // Sync id_token profile claims to the backend DB so admin can see real names.
+        // Fire-and-forget: don't block login if this fails.
+        try {
+          await fetch('/api/auth/idp/sync-profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
+            },
+            body: JSON.stringify(userInfoPayload),
+          });
+        } catch (_) { /* ignore — profile sync is best-effort */ }
+
         // Replace URL to remove ?code=&state= params, then go to home
         window.history.replaceState({}, '', '/');
         navigate('/', { replace: true });
