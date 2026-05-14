@@ -25,8 +25,8 @@ services:
       # AO IDP
       IDP_BASE_URL: ${IDP_BASE_URL:-https://51.20.12.6}
       IDP_CLIENT_ID: ${IDP_CLIENT_ID:-EFxbQK-ekDX1OkWov51cjg}
-      IDP_REDIRECT_URI: ${IDP_REDIRECT_URI:-http://51.20.12.6:4000/}
-      IDP_LOGOUT_REDIRECT_URI: ${IDP_LOGOUT_REDIRECT_URI:-http://51.20.12.6:4000/logged_out}
+      IDP_REDIRECT_URI: ${IDP_REDIRECT_URI:-http://13.61.159.58:4000/}
+      IDP_LOGOUT_REDIRECT_URI: ${IDP_LOGOUT_REDIRECT_URI:-http://13.61.159.58:4000/logged_out}
       IDP_JWKS_URI: ${IDP_JWKS_URI:-https://51.20.12.6/jwks}
       IDP_ISSUER: ${IDP_ISSUER:-https://auth.ao.az}
       IDP_SKIP_SSL: ${IDP_SKIP_SSL:-true}

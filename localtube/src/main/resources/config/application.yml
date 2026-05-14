@@ -61,8 +61,8 @@ localtube:
     jwks-uri: ${IDP_JWKS_URI:https://51.20.12.6/jwks}
     issuer: ${IDP_ISSUER:https://auth.ao.az}
     skip-ssl-verify: ${IDP_SKIP_SSL:true}
-    redirect-uri: ${IDP_REDIRECT_URI:http://51.20.12.6:4000/}
-    logout-redirect-uri: ${IDP_LOGOUT_REDIRECT_URI:http://51.20.12.6:4000/logged_out}
+    redirect-uri: ${IDP_REDIRECT_URI:http://13.61.159.58:4000/}
+    logout-redirect-uri: ${IDP_LOGOUT_REDIRECT_URI:http://13.61.159.58:4000/logged_out}
 
   admin:
     email: ${ADMIN_EMAIL:admin@localtube.local}

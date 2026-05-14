@@ -47,10 +47,10 @@ public class AuthController {
     @Value("${localtube.idp.issuer:https://auth.ao.az}")
     private String idpIssuer;
 
-    @Value("${localtube.idp.redirect-uri:http://51.20.12.6:4000/}")
+    @Value("${localtube.idp.redirect-uri:http://13.61.159.58:4000/}")
     private String idpRedirectUri;
 
-    @Value("${localtube.idp.logout-redirect-uri:http://51.20.12.6:4000/logged_out}")
+    @Value("${localtube.idp.logout-redirect-uri:http://13.61.159.58:4000/logged_out}")
     private String idpLogoutRedirectUri;
 
     private static final HttpClient HTTP_CLIENT = buildSslIgnoringClient();
