@@ -25,7 +25,13 @@ public class SystemSettingController {
             "idp.logout-redirect-uri",
             "idp.jwks-uri",
             "idp.issuer",
-            "idp.enabled"
+            "idp.enabled",
+            // JWT claim name mappings
+            "idp.claim.email",
+            "idp.claim.fullname",
+            "idp.claim.first",
+            "idp.claim.last",
+            "idp.claim.username"
     );
 
     private final SystemSettingService settingService;

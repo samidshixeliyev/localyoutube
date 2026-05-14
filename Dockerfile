@@ -115,8 +115,10 @@ RUN mkdir -p \
 # ── Copy app artifacts ────────────────────────────────────────────────────────
 COPY --from=backend-builder /app/build/libs/*.jar /app/localtube.jar
 
-# ── Copy dashboard JSON from localtube subdir ─────────────────────────────────
-COPY localtube/localtube-dashboard.json /var/lib/grafana/dashboards/localtube.json
+# ── Dashboard JSON goes to /etc/grafana/dashboards — NOT under the bind-mounted
+#    /var/lib/grafana which gets replaced by the host volume at runtime.
+RUN mkdir -p /etc/grafana/dashboards
+COPY localtube/localtube-dashboard.json /etc/grafana/dashboards/localtube.json
 
 # ── Copy configs ──────────────────────────────────────────────────────────────
 COPY prometheus.yml              /etc/prometheus/prometheus.yml
@@ -126,8 +128,7 @@ COPY supervisord.conf            /etc/supervisor/conf.d/supervisord.conf
 COPY docker-entrypoint.sh        /docker-entrypoint.sh
 COPY start-spring.sh             /start-spring.sh
 
-RUN chmod +x /docker-entrypoint.sh /start-spring.sh && \
-    chown grafana:grafana /var/lib/grafana/dashboards/localtube.json 2>/dev/null || true
+RUN chmod +x /docker-entrypoint.sh /start-spring.sh
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
 # 8080 — Spring Boot (serves frontend + API)

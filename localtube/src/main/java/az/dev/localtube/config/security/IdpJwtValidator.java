@@ -1,5 +1,6 @@
 package az.dev.localtube.config.security;
 
+import az.dev.localtube.service.SystemSettingService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -16,17 +17,27 @@ import java.security.cert.X509Certificate;
 
 /**
  * Validates RS256 JWTs issued by AO ID (auth.ao.az) using the JWKS endpoint.
- * Supports self-signed TLS certificates (configurable via localtube.idp.skip-ssl-verify).
+ *
+ * Claim names used to extract email / display-name are read from the
+ * system_settings table at call time, so admins can reconfigure them
+ * via the IDP Settings page without rebuilding the container.
+ *
+ * NOTE: The JWKS URI itself is fixed at startup (used to build the decoder).
+ *       Changing it requires a container restart.
  */
 @Slf4j
 @Component
 public class IdpJwtValidator {
 
     private final JwtDecoder decoder;
+    private final SystemSettingService settings;
 
     public IdpJwtValidator(
             @Value("${localtube.idp.jwks-uri}") String jwksUri,
-            @Value("${localtube.idp.skip-ssl-verify:true}") boolean skipSslVerify) {
+            @Value("${localtube.idp.skip-ssl-verify:true}") boolean skipSslVerify,
+            SystemSettingService settings) {
+
+        this.settings = settings;
 
         NimbusJwtDecoder.JwkSetUriJwtDecoderBuilder builder =
                 NimbusJwtDecoder.withJwkSetUri(jwksUri);
@@ -49,33 +60,37 @@ public class IdpJwtValidator {
         }
     }
 
+    /**
+     * Extracts email and display name from the decoded JWT using the
+     * claim names configured in system_settings (defaults: mail, cn, givenName, sn, uid).
+     */
     public OidcUserDetails toUserDetails(Jwt jwt) {
-        // LDAP claim names from the IDP (Global Bank LDAP):
-        //   mail        → email address
-        //   cn          → full name (e.g. "Daniel Hernandez")
-        //   givenName   → first name
-        //   sn          → surname
-        //   uid         → login username
+        // Read claim names from DB — zero-cost cache lookup, changes take effect immediately
+        String emailClaim    = settings.get("idp.claim.email",    "mail");
+        String fullNameClaim = settings.get("idp.claim.fullname", "cn");
+        String firstClaim    = settings.get("idp.claim.first",    "givenName");
+        String lastClaim     = settings.get("idp.claim.last",     "sn");
+        String usernameClaim = settings.get("idp.claim.username", "uid");
+
         String email = firstNonNull(
-                jwt.getClaimAsString("mail"),
-                jwt.getClaimAsString("email"),
+                jwt.getClaimAsString(emailClaim),
+                jwt.getClaimAsString("email"),      // OIDC standard fallback
                 jwt.getSubject()
         );
 
         String displayName = firstNonNull(
-                jwt.getClaimAsString("cn"),           // full name preferred
-                buildFullName(jwt.getClaimAsString("givenName"), jwt.getClaimAsString("sn")),
-                jwt.getClaimAsString("uid"),
-                jwt.getClaimAsString("display_name"),
-                jwt.getClaimAsString("ldap_username")
+                jwt.getClaimAsString(fullNameClaim),
+                buildFullName(jwt.getClaimAsString(firstClaim), jwt.getClaimAsString(lastClaim)),
+                jwt.getClaimAsString(usernameClaim),
+                jwt.getClaimAsString("preferred_username")
         );
 
-        log.debug("IDP claims — email(mail)={} cn={} givenName={} sn={} uid={}",
-                jwt.getClaimAsString("mail"),
-                jwt.getClaimAsString("cn"),
-                jwt.getClaimAsString("givenName"),
-                jwt.getClaimAsString("sn"),
-                jwt.getClaimAsString("uid"));
+        log.debug("IDP claims — {}(email)={} {}(fullName)={} {}={} {}={} {}={}",
+                emailClaim,    jwt.getClaimAsString(emailClaim),
+                fullNameClaim, jwt.getClaimAsString(fullNameClaim),
+                firstClaim,    jwt.getClaimAsString(firstClaim),
+                lastClaim,     jwt.getClaimAsString(lastClaim),
+                usernameClaim, jwt.getClaimAsString(usernameClaim));
 
         return new OidcUserDetails(email, displayName);
     }

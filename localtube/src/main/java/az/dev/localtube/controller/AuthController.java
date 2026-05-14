@@ -220,16 +220,22 @@ public class AuthController {
      */
     @GetMapping("/idp/config")
     public ResponseEntity<Map<String, String>> getIdpConfig() {
-        return ResponseEntity.ok(Map.of(
-                "authorizationEndpoint", idpBaseUrl() + "/oauth2/authorize",
-                "tokenEndpoint",        idpBaseUrl() + "/oauth2/token",
-                "endSessionEndpoint",   idpBaseUrl() + "/oauth2/logout",
-                "clientId",             idpClientId(),
-                "scope",                "openid profile",
-                "issuer",               idpIssuer(),
-                "redirectUri",          idpRedirectUri(),
-                "logoutRedirectUri",    idpLogoutRedirectUri(),
-                "idpEnabled",           settings.get("idp.enabled", "true")
+        return ResponseEntity.ok(Map.ofEntries(
+                Map.entry("authorizationEndpoint", idpBaseUrl() + "/oauth2/authorize"),
+                Map.entry("tokenEndpoint",         idpBaseUrl() + "/oauth2/token"),
+                Map.entry("endSessionEndpoint",    idpBaseUrl() + "/oauth2/logout"),
+                Map.entry("clientId",              idpClientId()),
+                Map.entry("scope",                 "openid profile"),
+                Map.entry("issuer",                idpIssuer()),
+                Map.entry("redirectUri",           idpRedirectUri()),
+                Map.entry("logoutRedirectUri",     idpLogoutRedirectUri()),
+                Map.entry("idpEnabled",            settings.get("idp.enabled", "true")),
+                // JWT claim name mappings — used by frontend to decode id_token
+                Map.entry("claimEmail",            settings.get("idp.claim.email",    "mail")),
+                Map.entry("claimFullName",         settings.get("idp.claim.fullname", "cn")),
+                Map.entry("claimFirst",            settings.get("idp.claim.first",    "givenName")),
+                Map.entry("claimLast",             settings.get("idp.claim.last",     "sn")),
+                Map.entry("claimUsername",         settings.get("idp.claim.username", "uid"))
         ));
     }
 

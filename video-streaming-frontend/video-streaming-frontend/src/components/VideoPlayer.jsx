@@ -34,26 +34,35 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
-        backBufferLength: 90,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000,
-        maxBufferHole: 0.5,
-        // CRITICAL: Smoother quality switching
-        abrEwmaFastLive: 3.0,
-        abrEwmaSlowLive: 9.0,
-        abrEwmaFastVoD: 3.0,
-        abrEwmaSlowVoD: 9.0,
-        abrBandWidthFactor: 0.95,
-        abrBandWidthUpFactor: 0.7,
-        startLevel: -1,
-        // IMPORTANT: Enable smooth quality switch
-        enableSoftwareAES: false,
-        // Ensure we buffer enough before switching
-        nudgeMaxRetry: 3,
-        manifestLoadingTimeOut: 10000,
-        manifestLoadingMaxRetry: 1,
-        levelLoadingTimeOut: 10000,
+
+        // Buffer — larger values keep large-file playback smooth
+        backBufferLength:    90,
+        maxBufferLength:     60,          // up from 30 — buffer 60 s ahead
+        maxMaxBufferLength:  120,         // ceiling for ABR growth
+        maxBufferSize:       100 * 1e6,   // 100 MB in-memory segment cache
+        maxBufferHole:       0.5,
+
+        // Fragment loading — generous timeouts for large segments over LAN
+        fragLoadingTimeOut:        30000,
+        fragLoadingMaxRetry:       6,
+        fragLoadingRetryDelay:     1000,
+        fragLoadingMaxRetryTimeout: 64000,
+
+        // Manifest / level loading
+        manifestLoadingTimeOut:  15000,
+        manifestLoadingMaxRetry: 3,
+        levelLoadingTimeOut:     15000,
+        levelLoadingMaxRetry:    4,
+
+        // ABR — conservative to prevent thrashing on large files
+        abrEwmaFastVoD:      3.0,
+        abrEwmaSlowVoD:      9.0,
+        abrBandWidthFactor:  0.9,
+        abrBandWidthUpFactor: 0.6,
+        startLevel:          -1,          // let ABR pick initial quality
+
+        nudgeMaxRetry:       5,
+        enableSoftwareAES:   false,
       });
       
       hlsRef.current = hls;

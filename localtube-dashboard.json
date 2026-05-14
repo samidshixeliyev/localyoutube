@@ -1,4 +1,5 @@
 {
+  "uid": "localtube-main",
   "title": "LocalTube — System & Application",
   "description": "Resource and application metrics for LocalTube video platform",
   "tags": ["localtube"],

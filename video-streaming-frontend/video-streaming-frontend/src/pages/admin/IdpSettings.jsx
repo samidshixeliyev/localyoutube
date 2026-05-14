@@ -4,7 +4,7 @@ import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle,
 import Navbar from '../../components/Navbar';
 import { adminGetSettings, adminUpdateSettings } from '../../services/api';
 
-const FIELD_META = [
+const CONN_FIELDS = [
   {
     key: 'idp.base-url',
     label: 'IDP Base URL',
@@ -37,7 +37,7 @@ const FIELD_META = [
     key: 'idp.jwks-uri',
     label: 'JWKS URI',
     placeholder: 'https://auth.example.com/jwks',
-    description: 'Endpoint exposing the public keys used to verify JWT signatures.',
+    description: 'Endpoint exposing the public keys used to verify JWT signatures. Requires restart to apply.',
     type: 'url',
   },
   {
@@ -46,6 +46,39 @@ const FIELD_META = [
     placeholder: 'https://auth.example.com',
     description: 'Expected "iss" claim in the ID token. Must match exactly.',
     type: 'text',
+  },
+];
+
+const CLAIM_FIELDS = [
+  {
+    key: 'idp.claim.email',
+    label: 'Email claim',
+    placeholder: 'mail',
+    description: 'JWT/LDAP claim that holds the user\'s email address.',
+  },
+  {
+    key: 'idp.claim.fullname',
+    label: 'Full name claim',
+    placeholder: 'cn',
+    description: 'Claim for full display name (e.g. "Daniel Hernandez"). Preferred over first+last.',
+  },
+  {
+    key: 'idp.claim.first',
+    label: 'First name claim',
+    placeholder: 'givenName',
+    description: 'Claim for given / first name. Combined with last name if full-name claim is absent.',
+  },
+  {
+    key: 'idp.claim.last',
+    label: 'Last name claim',
+    placeholder: 'sn',
+    description: 'Claim for surname / family name.',
+  },
+  {
+    key: 'idp.claim.username',
+    label: 'Username claim',
+    placeholder: 'uid',
+    description: 'Claim for login username (used as display-name fallback when name claims are missing).',
   },
 ];
 
@@ -170,14 +203,13 @@ const IdpSettings = () => {
             </div>
           </div>
 
-          {/* Fields */}
+          {/* Connection Settings */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 divide-y divide-gray-100">
             <div className="px-6 py-4 flex items-center gap-2">
               <Settings className="w-4 h-4 text-gray-400" />
               <h2 className="text-sm font-semibold text-gray-700">Connection Settings</h2>
             </div>
-
-            {FIELD_META.map(({ key, label, placeholder, description, type }) => (
+            {CONN_FIELDS.map(({ key, label, placeholder, description, type }) => (
               <div key={key} className="px-6 py-5">
                 <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
                 <input
@@ -188,6 +220,37 @@ const IdpSettings = () => {
                   className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
                 />
                 <p className="text-xs text-gray-400 mt-1.5">{description}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* JWT Claim Mappings */}
+          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 divide-y divide-gray-100">
+            <div className="px-6 py-4">
+              <div className="flex items-center gap-2 mb-0.5">
+                <Shield className="w-4 h-4 text-gray-400" />
+                <h2 className="text-sm font-semibold text-gray-700">JWT Claim Mappings</h2>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Tell the system which JWT claims in the id_token carry each piece of user data.
+                Common LDAP values are shown as placeholders.
+              </p>
+            </div>
+            {CLAIM_FIELDS.map(({ key, label, placeholder, description }) => (
+              <div key={key} className="px-6 py-4 flex items-center gap-4">
+                <div className="w-36 flex-shrink-0">
+                  <span className="text-sm font-medium text-gray-700">{label}</span>
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={values[key] || ''}
+                    onChange={e => handleChange(key, e.target.value)}
+                    placeholder={placeholder}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">{description}</p>
+                </div>
               </div>
             ))}
           </div>

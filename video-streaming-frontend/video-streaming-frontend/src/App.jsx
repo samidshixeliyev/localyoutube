@@ -2,7 +2,9 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { MiniPlayerProvider } from './context/MiniPlayerContext';
+import { UploadProvider } from './context/UploadContext';
 import MiniPlayer from './components/MiniPlayer';
+import UploadManager from './components/UploadManager';
 import PrivateRoute from './components/PrivateRoute';
 
 // Eagerly-loaded (tiny, always needed)
@@ -22,6 +24,7 @@ const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const UserForm       = lazy(() => import('./pages/admin/UserForm'));
 const RoleManagement = lazy(() => import('./pages/admin/RoleManagement'));
 const IdpSettings    = lazy(() => import('./pages/admin/IdpSettings'));
+const Metrics        = lazy(() => import('./pages/admin/Metrics'));
 
 // Minimal full-page spinner shown while a lazy chunk loads
 const PageLoader = () => (
@@ -48,6 +51,7 @@ function AppContent() {
   const { isAuthenticated } = useAuth();     // ← now works
 
   return (
+    <UploadProvider>
     <MiniPlayerProvider>
       <div className="min-h-screen bg-gray-50">
         <Suspense fallback={<PageLoader />}>
@@ -136,6 +140,14 @@ function AppContent() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/admin/metrics"
+            element={
+              <PrivateRoute requiredPermission="super-admin">
+                <Metrics />
+              </PrivateRoute>
+            }
+          />
 
           {/* 404 */}
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -143,8 +155,10 @@ function AppContent() {
         </Suspense>
 
         <MiniPlayer />
+        <UploadManager />
       </div>
     </MiniPlayerProvider>
+    </UploadProvider>
   );
 }
 

@@ -230,47 +230,49 @@ export const AuthProvider = ({ children }) => {
   const loginWithIdp = (token, idpUser) => {
     localStorage.setItem('jwt_token', token);
 
-    // Global Bank LDAP claim names (from IDP JWT mapping):
-    //   cn        = full name ("Daniel Hernandez")
-    //   givenName = first name,  sn = surname
-    //   mail      = email address
-    //   uid       = login username  (e.g. "dhernandez")
-    //   employeeNumber, title, telephoneNumber, o also available
+    // Read claim names from the IDP config that was fetched before the OAuth redirect.
+    // This means the admin can rename claim mappings in Settings and they take effect
+    // on next login without any frontend rebuild.
+    const config = (() => {
+      try { return JSON.parse(sessionStorage.getItem('idp_config') || '{}'); }
+      catch { return {}; }
+    })();
+
+    const claimEmail    = config.claimEmail    || 'mail';
+    const claimFullName = config.claimFullName || 'cn';
+    const claimFirst    = config.claimFirst    || 'givenName';
+    const claimLast     = config.claimLast     || 'sn';
+    const claimUsername = config.claimUsername || 'uid';
 
     const email =
-      idpUser.mail ||                   // LDAP mail attribute
-      idpUser.email ||                  // standard OIDC
+      idpUser[claimEmail] ||
+      idpUser.email ||
       idpUser.preferred_username ||
       (typeof idpUser.sub === 'string' && idpUser.sub.includes('@') ? idpUser.sub : null);
 
     const fullName =
-      idpUser.cn ||                     // LDAP cn = "Daniel Hernandez"
-      (idpUser.givenName && idpUser.sn
-        ? `${idpUser.givenName} ${idpUser.sn}`
-        : null) ||
-      idpUser.display_name ||
-      idpUser.name ||
-      (idpUser.given_name && idpUser.family_name
-        ? `${idpUser.given_name} ${idpUser.family_name}`
-        : null);
+      idpUser[claimFullName] ||
+      (idpUser[claimFirst] && idpUser[claimLast]
+        ? `${idpUser[claimFirst]} ${idpUser[claimLast]}`
+        : idpUser[claimFirst] || idpUser[claimLast]) ||
+      idpUser.name;
 
     const username =
-      idpUser.uid ||                    // LDAP uid = "dhernandez"
-      idpUser.ldap_username ||
+      idpUser[claimUsername] ||
       idpUser.preferred_username ||
       (email ? email.split('@')[0] : null) ||
       idpUser.sub;
 
     const userData = {
-      email: email || idpUser.sub,
-      name: fullName || username,
-      fullName: fullName || username,
+      email:        email || idpUser.sub,
+      name:         fullName || username,
+      fullName:     fullName || username,
       username,
-      title: idpUser.title || null,           // e.g. "IT Developer"
-      organization: idpUser.o || null,        // e.g. "Global Bank Corporation"
-      permissions: [],
-      role: 'USER',
-      isIdpUser: true,
+      title:        idpUser.title || null,
+      organization: idpUser.o    || null,
+      permissions:  [],
+      role:         'USER',
+      isIdpUser:    true,
     };
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));

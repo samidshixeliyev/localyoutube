@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminGetUsers, adminDeleteUser, adminResetPassword } from '../../services/api';
-import { Plus, Edit2, Trash2, Key, ArrowLeft, Shield, Users as UsersIcon, Search, X, Settings } from 'lucide-react';
+import { Plus, Edit2, Trash2, Key, ArrowLeft, Shield, Users as UsersIcon, Search, X, Settings, Activity } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 
 const UserManagement = () => {
@@ -136,6 +136,13 @@ const UserManagement = () => {
                             >
                                 <Settings className="h-4 w-4" />
                                 <span>IDP Settings</span>
+                            </button>
+                            <button
+                                onClick={() => navigate('/admin/metrics')}
+                                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-all shadow-sm hover:shadow"
+                            >
+                                <Activity className="h-4 w-4" />
+                                <span>Metrics</span>
                             </button>
                         </div>
 
