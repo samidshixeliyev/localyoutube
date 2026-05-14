@@ -1,7 +1,10 @@
 package az.dev.localtube.service;
 
+import az.dev.localtube.dto.request.CreateRoleRequest;
 import az.dev.localtube.dto.request.CreateUserRequest;
+import az.dev.localtube.dto.request.UpdateRoleRequest;
 import az.dev.localtube.dto.request.UpdateUserRequest;
+import az.dev.localtube.dto.response.PermissionResponse;
 import az.dev.localtube.dto.response.RoleResponse;
 import az.dev.localtube.dto.response.UserResponse;
 import az.dev.localtube.entity.Permission;
@@ -9,6 +12,7 @@ import az.dev.localtube.entity.Role;
 import az.dev.localtube.entity.User;
 import az.dev.localtube.exception.BadRequestException;
 import az.dev.localtube.exception.ResourceNotFoundException;
+import az.dev.localtube.repository.PermissionRepository;
 import az.dev.localtube.repository.RoleRepository;
 import az.dev.localtube.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +22,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,6 +34,7 @@ public class AdminService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final PermissionRepository permissionRepository;
     private final PasswordEncoder passwordEncoder;
 
     // ═══════════════════════════════════════════════════════════════
@@ -141,7 +148,17 @@ public class AdminService {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // ROLE QUERIES
+    // PERMISSION QUERIES
+    // ═══════════════════════════════════════════════════════════════
+
+    public List<PermissionResponse> getAllPermissions() {
+        return permissionRepository.findAll().stream()
+                .map(this::toPermissionResponse)
+                .collect(Collectors.toList());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROLE CRUD
     // ═══════════════════════════════════════════════════════════════
 
     public List<RoleResponse> getAllRoles() {
@@ -154,6 +171,88 @@ public class AdminService {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found with id: " + id));
         return toRoleResponse(role);
+    }
+
+    @Transactional
+    public RoleResponse createRole(CreateRoleRequest request) {
+        if (roleRepository.findByName(request.getName()).isPresent()) {
+            throw new BadRequestException("Role name already exists: " + request.getName());
+        }
+
+        Role role = new Role();
+        role.setName(request.getName().trim());
+        role.setDescription(request.getDescription());
+        role.setCreatedAt(LocalDateTime.now());
+        role.setPermissions(resolvePermissions(request.getPermissionIds()));
+
+        role = roleRepository.save(role);
+        log.info("Created role: {}", role.getName());
+        return toRoleResponse(role);
+    }
+
+    @Transactional
+    public RoleResponse updateRole(Long id, UpdateRoleRequest request) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Role not found with id: " + id));
+
+        // Guard: super-admin role name cannot be changed
+        if ("super-admin".equals(role.getName()) && request.getName() != null
+                && !request.getName().equals(role.getName())) {
+            throw new BadRequestException("Cannot rename the super-admin role");
+        }
+
+        if (request.getName() != null && !request.getName().isBlank()) {
+            // Check uniqueness (another role with same name)
+            roleRepository.findByName(request.getName()).ifPresent(existing -> {
+                if (!existing.getId().equals(id)) {
+                    throw new BadRequestException("Role name already in use: " + request.getName());
+                }
+            });
+            role.setName(request.getName().trim());
+        }
+        if (request.getDescription() != null) {
+            role.setDescription(request.getDescription());
+        }
+        if (request.getPermissionIds() != null) {
+            // Guard: super-admin permission cannot be removed from super-admin role
+            if ("super-admin".equals(role.getName())) {
+                boolean keepsSuperAdmin = request.getPermissionIds().stream().anyMatch(pid ->
+                        permissionRepository.findById(pid)
+                                .map(p -> "super-admin".equals(p.getName()))
+                                .orElse(false));
+                if (!keepsSuperAdmin) {
+                    throw new BadRequestException("Cannot remove the super-admin permission from the super-admin role");
+                }
+            }
+            role.setPermissions(resolvePermissions(request.getPermissionIds()));
+        }
+
+        role = roleRepository.save(role);
+        log.info("Updated role: {}", role.getName());
+        return toRoleResponse(role);
+    }
+
+    @Transactional
+    public void deleteRole(Long id) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Role not found with id: " + id));
+
+        // Guard: cannot delete a built-in protected role
+        if ("super-admin".equals(role.getName())) {
+            throw new BadRequestException("Cannot delete the super-admin role");
+        }
+
+        // Guard: cannot delete a role that is currently assigned to users
+        long usersWithRole = userRepository.findAll().stream()
+                .filter(u -> u.getRole() != null && u.getRole().getId().equals(id))
+                .count();
+        if (usersWithRole > 0) {
+            throw new BadRequestException(
+                    "Cannot delete role '" + role.getName() + "' — it is assigned to " + usersWithRole + " user(s)");
+        }
+
+        roleRepository.delete(role);
+        log.info("Deleted role: {}", role.getName());
     }
 
     // ═══════════════════════════════════════════════════════════════
