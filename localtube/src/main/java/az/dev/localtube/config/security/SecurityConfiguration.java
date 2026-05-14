@@ -63,8 +63,10 @@ public class SecurityConfiguration {
                         // Swagger/OpenAPI - Public
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 
-                        // Health check - Public
+                        // Health + metrics - Public (Prometheus scrapes these without auth)
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/prometheus").permitAll()
+                        .requestMatchers("/actuator/info").permitAll()
 
                         // Video streaming - Public
                         .requestMatchers("/hls/**").permitAll()
