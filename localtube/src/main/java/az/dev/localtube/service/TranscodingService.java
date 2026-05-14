@@ -16,19 +16,34 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 public class TranscodingService {
 
-    // Process timeout to prevent hanging processes
     private static final long PROCESS_TIMEOUT_MINUTES = 60;
+
+    // FFmpeg progress parsing patterns
+    private static final Pattern DURATION_PATTERN =
+            Pattern.compile("Duration:\\s+(\\d+):(\\d+):(\\d+\\.\\d+)");
+    private static final Pattern TIME_PATTERN =
+            Pattern.compile("time=(\\d+):(\\d+):(\\d+\\.\\d+)");
+
     private final VideoService videoService;
     private final Path hlsDir;
     private final Path thumbnailDir;
     private final int segmentDuration;
     private final List<String> allowedQualities;
     private final ConcurrentHashMap<String, Process> activeProcesses = new ConcurrentHashMap<>();
+
+    /** Human-readable stage exposed via GET /api/upload/status/{id} */
+    private final ConcurrentHashMap<String, String> processingStages = new ConcurrentHashMap<>();
+
+    public String getProcessingStage(String videoId) {
+        return processingStages.getOrDefault(videoId, "");
+    }
 
     public TranscodingService(VideoService videoService,
                               @Value("${localtube.storage.hls-dir}") String hlsDirPath,
@@ -44,75 +59,74 @@ public class TranscodingService {
 
     @Async("videoProcessingExecutor")
     public void transcodeToHLS(String videoId, Path inputFile) {
-        BufferedReader errorReader = null;
-
         try {
-            log.info("[Transcoding] Starting for video ID: {}", videoId);
-
+            log.info("[Transcoding] ▶ Starting video={}", videoId);
+            processingStages.put(videoId, "Starting");
             videoService.updateVideoStatus(videoId, VideoStatus.PROCESSING);
+            videoService.updateProcessingProgress(videoId, 0);
 
             Path outputDir = hlsDir.resolve(videoId);
             Files.createDirectories(outputDir);
 
-            // Generate thumbnail
+            // Stage 1: thumbnail (0 → 5%)
+            processingStages.put(videoId, "Generating thumbnail");
             generateThumbnail(videoId, inputFile);
+            videoService.updateProcessingProgress(videoId, 5);
 
-            // Get video info
+            // Stage 2: probe (5%)
+            processingStages.put(videoId, "Analysing video");
             VideoInfo info = getVideoInfo(inputFile);
-            log.info("[Transcoding] Input: {}x{}, duration: {}s", info.width, info.height, info.durationSeconds);
-
+            log.info("[Transcoding] video={} size={}x{} duration={}s",
+                    videoId, info.width, info.height, info.durationSeconds);
             videoService.updateVideoMetadata(videoId, info.width, info.height,
                     info.durationSeconds, Files.size(inputFile));
 
-            // Build quality profiles
+            // Stage 3: per-quality transcoding (5 → 95%, split evenly)
             List<QualityProfile> profiles = buildQualityProfiles(info);
+            int perQuality = profiles.isEmpty() ? 0 : 90 / profiles.size();
 
             StringBuilder masterPlaylist = new StringBuilder();
-            masterPlaylist.append("#EXTM3U\n");
-            masterPlaylist.append("#EXT-X-VERSION:3\n");
+            masterPlaylist.append("#EXTM3U\n#EXT-X-VERSION:3\n");
 
-            for (QualityProfile profile : profiles) {
-                if (!transcodeQuality(videoId, inputFile, outputDir, profile)) {
-                    log.error("[Transcoding] Failed for quality: {}", profile.label);
+            for (int i = 0; i < profiles.size(); i++) {
+                QualityProfile profile = profiles.get(i);
+                int rangeStart = 5 + i * perQuality;
+                int rangeEnd   = 5 + (i + 1) * perQuality;
+
+                processingStages.put(videoId, "Transcoding " + profile.label);
+                if (!transcodeQuality(videoId, inputFile, outputDir, profile, rangeStart, rangeEnd)) {
+                    log.error("[Transcoding] ✗ quality={} video={}", profile.label, videoId);
                     continue;
                 }
-
                 masterPlaylist.append("#EXT-X-STREAM-INF:BANDWIDTH=")
                         .append(profile.bandwidth)
                         .append(",RESOLUTION=")
                         .append(profile.width).append("x").append(profile.height)
-                        .append("\n")
-                        .append(profile.label).append("/playlist.m3u8\n");
-
+                        .append("\n").append(profile.label).append("/playlist.m3u8\n");
                 videoService.addQualityToVideo(videoId, profile.label);
             }
 
-            Path masterFile = outputDir.resolve("master.m3u8");
-            Files.writeString(masterFile, masterPlaylist.toString());
+            // Stage 4: finalise (95 → 100%)
+            processingStages.put(videoId, "Finalising");
+            videoService.updateProcessingProgress(videoId, 95);
+            Files.writeString(outputDir.resolve("master.m3u8"), masterPlaylist.toString());
 
-            // Delete original file to save space
-            try {
-                Files.deleteIfExists(inputFile);
-                log.info("[Transcoding] Deleted original file to save space: {}", inputFile);
-            } catch (IOException e) {
-                log.warn("[Transcoding] Could not delete original file: {}", e.getMessage());
-            }
+            try { Files.deleteIfExists(inputFile); }
+            catch (IOException e) { log.warn("[Transcoding] Could not delete original: {}", e.getMessage()); }
 
+            videoService.updateProcessingProgress(videoId, 100);
             videoService.updateVideoStatus(videoId, VideoStatus.READY);
-            log.info("[Transcoding] SUCCESS: {}", videoId);
-
-            // Force garbage collection after transcoding
+            processingStages.put(videoId, "Ready");
+            log.info("[Transcoding] ✓ Done video={}", videoId);
             System.gc();
 
         } catch (Exception e) {
-            log.error("[Transcoding ERROR] Video ID: {}, Error: {}", videoId, e.getMessage(), e);
+            log.error("[Transcoding] ✗ ERROR video={}: {}", videoId, e.getMessage(), e);
+            processingStages.put(videoId, "Failed: " + e.getMessage());
             try {
                 videoService.updateVideoStatus(videoId, VideoStatus.FAILED);
                 Files.deleteIfExists(inputFile);
-            } catch (IOException ignored) {
-            }
-        } finally {
-            closeQuietly(errorReader);
+            } catch (IOException ignored) {}
         }
     }
 
@@ -162,38 +176,41 @@ public class TranscodingService {
         }
     }
 
-    private boolean transcodeQuality(String videoId, Path input, Path outputDir, QualityProfile profile) {
+    /**
+     * Transcodes the input to the given quality profile.
+     * progressStart/End define the overall 0-100 range this quality maps to,
+     * so the DB progress value rises smoothly across all qualities.
+     */
+    private boolean transcodeQuality(String videoId, Path input, Path outputDir,
+                                     QualityProfile profile, int progressStart, int progressEnd) {
         Process process = null;
         BufferedReader reader = null;
 
         try {
             Path qualityDir = outputDir.resolve(profile.label);
             Files.createDirectories(qualityDir);
-
-            log.info("[Transcoding] Processing {} for {}", profile.label, videoId);
-
             System.gc();
+
+            log.info("[Transcoding] ▶ {} video={} (progress {}→{}%)",
+                    profile.label, videoId, progressStart, progressEnd);
 
             ProcessBuilder pb = new ProcessBuilder(
                     "ffmpeg",
                     "-i", input.toAbsolutePath().toString(),
-
-                    // MEMORY OPTIMIZATION FLAGS
-                    "-threads", "1",  // Single thread to reduce memory
-                    "-max_muxing_queue_size", "512",  // Reduce from 1024
-
+                    "-threads", "1",
+                    "-max_muxing_queue_size", "512",
                     "-vf", "scale=" + profile.width + ":" + profile.height +
-                    ":force_original_aspect_ratio=decrease,pad=" +
-                    profile.width + ":" + profile.height + ":(ow-iw)/2:(oh-ih)/2",
+                           ":force_original_aspect_ratio=decrease,pad=" +
+                           profile.width + ":" + profile.height + ":(ow-iw)/2:(oh-ih)/2",
                     "-c:v", "libx264",
-                    "-preset", "ultrafast",  // Changed from "veryfast"
-                    "-crf", "26",  // Increased from 23 (lower quality = less memory)
-                    "-profile:v", "baseline",  // Changed from "high"
-                    "-level", "3.0",  // Reduced from 4.0
+                    "-preset", "ultrafast",
+                    "-crf", "26",
+                    "-profile:v", "baseline",
+                    "-level", "3.0",
                     "-pix_fmt", "yuv420p",
                     "-c:a", "aac",
-                    "-b:a", "96k",  // Reduced from 128k
-                    "-ar", "44100",  // Reduced from 48000
+                    "-b:a", "96k",
+                    "-ar", "44100",
                     "-movflags", "+faststart",
                     "-hls_time", String.valueOf(segmentDuration),
                     "-hls_playlist_type", "vod",
@@ -201,59 +218,86 @@ public class TranscodingService {
                     "-hls_segment_filename", qualityDir.resolve("seg_%03d.ts").toString(),
                     qualityDir.resolve("playlist.m3u8").toString()
             );
-
-// Set process limits
             pb.environment().put("MALLOC_ARENA_MAX", "2");
-
             pb.redirectErrorStream(true);
+
             process = pb.start();
             activeProcesses.put(videoId + "_" + profile.label, process);
 
-            // Read output with limited buffer to prevent memory issues
-            reader = new BufferedReader(new InputStreamReader(process.getInputStream()), 8192);
+            // Parse FFmpeg stdout/stderr for Duration + time= progress
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()), 16384);
+            double totalDuration = 0;
+            int lastWrittenPct = progressStart; // only write DB when we move 5+ points
+
             String line;
-            int lineCount = 0;
             while ((line = reader.readLine()) != null) {
-                lineCount++;
-                // Only log every 100 lines to reduce memory usage
-                if (lineCount % 100 == 0 && (line.contains("frame=") || line.contains("speed="))) {
-                    log.debug("[FFmpeg {}] Processing...", profile.label);
+                // Extract total duration once
+                if (totalDuration == 0 && line.contains("Duration:")) {
+                    totalDuration = parseFfmpegTime(DURATION_PATTERN, line);
+                }
+
+                // Parse current encoding position
+                if (totalDuration > 0 && line.contains("time=")) {
+                    double currentTime = parseFfmpegTime(TIME_PATTERN, line);
+                    if (currentTime >= 0) {
+                        double ratio = Math.min(currentTime / totalDuration, 1.0);
+                        int overallPct = progressStart + (int) ((progressEnd - progressStart) * ratio);
+                        int qualityPct = (int) (ratio * 100);
+
+                        // Write DB only every 5 points to avoid flooding
+                        if (overallPct >= lastWrittenPct + 5) {
+                            videoService.updateProcessingProgress(videoId, overallPct);
+                            lastWrittenPct = overallPct;
+                            log.info("[Transcoding] {} video={} {}% (overall {}%)",
+                                    profile.label, videoId, qualityPct, overallPct);
+                        }
+                    }
                 }
             }
 
             boolean completed = process.waitFor(PROCESS_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+            activeProcesses.remove(videoId + "_" + profile.label);
             int exitCode = completed ? process.exitValue() : -1;
 
-            activeProcesses.remove(videoId + "_" + profile.label);
-
             if (!completed) {
-                log.error("[Transcoding] FFmpeg timeout for {}", profile.label);
+                log.error("[Transcoding] ✗ timeout quality={} video={}", profile.label, videoId);
                 process.destroyForcibly();
                 deleteDirectoryRecursive(qualityDir);
                 return false;
             }
-
             if (exitCode != 0) {
-                log.error("[Transcoding] FFmpeg failed with exit code: {}", exitCode);
+                log.error("[Transcoding] ✗ FFmpeg exit={} quality={} video={}",
+                        exitCode, profile.label, videoId);
                 deleteDirectoryRecursive(qualityDir);
                 return false;
             }
 
-            log.info("[Transcoding] SUCCESS: {}", profile.label);
+            videoService.updateProcessingProgress(videoId, progressEnd);
+            log.info("[Transcoding] ✓ {} video={}", profile.label, videoId);
             return true;
 
         } catch (Exception e) {
-            log.error("[Transcoding] Error for {}: {}", profile.label, e.getMessage());
-            if (process != null && process.isAlive()) {
-                process.destroyForcibly();
-            }
+            log.error("[Transcoding] ✗ error quality={} video={}: {}", profile.label, videoId, e.getMessage());
+            if (process != null && process.isAlive()) process.destroyForcibly();
             return false;
         } finally {
             closeQuietly(reader);
-
-            // Suggest GC after each quality transcoding
             System.gc();
         }
+    }
+
+    /** Parses HH:MM:SS.ms from an FFmpeg output line using the given pattern. Returns -1 on failure. */
+    private static double parseFfmpegTime(Pattern pattern, String line) {
+        try {
+            Matcher m = pattern.matcher(line);
+            if (m.find()) {
+                double h   = Double.parseDouble(m.group(1));
+                double min = Double.parseDouble(m.group(2));
+                double sec = Double.parseDouble(m.group(3));
+                return h * 3600 + min * 60 + sec;
+            }
+        } catch (Exception ignored) {}
+        return -1;
     }
 
     private VideoInfo getVideoInfo(Path input) throws IOException, InterruptedException {

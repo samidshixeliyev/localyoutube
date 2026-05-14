@@ -154,7 +154,12 @@ public class UploadController {
                 outputStream.flush();
             }
 
-            log.debug("Uploaded chunk {}/{} for video {}", chunkIndex + 1, totalChunks, videoId);
+            // Log at INFO at every 10% milestone (and always on first/last chunk)
+            int prevPct = (int) ((double) chunkIndex / totalChunks * 100);
+            int curPct  = (int) ((double) (chunkIndex + 1) / totalChunks * 100);
+            if (chunkIndex == 0 || chunkIndex == totalChunks - 1 || curPct / 10 > prevPct / 10) {
+                log.info("[Upload] video={} chunk {}/{} ({}%)", videoId, chunkIndex + 1, totalChunks, curPct);
+            }
 
             double progress = (double) (chunkIndex + 1) / totalChunks * 100;
 
@@ -228,8 +233,9 @@ public class UploadController {
             Map<String, Object> status = new HashMap<>();
             status.put("videoId", video.getId());
             status.put("status", video.getStatus() != null ? video.getStatus().name() : "UNKNOWN");
-            status.put("progress", video.getProcessingProgress());
+            status.put("progress", video.getProcessingProgress() != null ? video.getProcessingProgress() : 0);
             status.put("qualities", video.getAvailableQualities());
+            status.put("stage", transcodingService.getProcessingStage(video.getId()));
 
             if (video.getStatus() == VideoStatus.READY) {
                 status.put("hlsUrl", video.getMasterPlaylistUrl());

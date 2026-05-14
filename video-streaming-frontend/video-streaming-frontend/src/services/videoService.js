@@ -101,6 +101,16 @@ const videoService = {
     }
   },
 
+  getUploadStatus: async (videoId) => {
+    try {
+      const response = await api.get(`/upload/status/${videoId}`);
+      return response.data;
+    } catch (error) {
+      console.error('[VideoService] Error getting upload status:', error);
+      throw error;
+    }
+  },
+
   setPrivacy: async (videoId, privacySettings) => {
     try {
       const response = await api.post(`/videos/${videoId}/privacy`, privacySettings);

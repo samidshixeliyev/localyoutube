@@ -193,6 +193,14 @@ public class VideoService {
     }
 
     @Transactional
+    public void updateProcessingProgress(String id, int progress) {
+        videoRepository.findById(id).ifPresent(video -> {
+            video.setProcessingProgress(Math.min(100, Math.max(0, progress)));
+            videoRepository.save(video);
+        });
+    }
+
+    @Transactional
     public void updateVideoMetadata(String id, Integer width, Integer height,
                                     Integer duration, Long fileSize) {
         videoRepository.findById(id).ifPresent(video -> {

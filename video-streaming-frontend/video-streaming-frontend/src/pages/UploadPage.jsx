@@ -10,19 +10,27 @@ const MAX_RETRIES = 3;
 const UploadPage = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const pollRef = useRef(null);
+  const uploadStartRef = useRef(null);
+  const bytesUploadedRef = useRef(0);
+
   const [selectedFile, setSelectedFile] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState('public');
   const [allowedEmails, setAllowedEmails] = useState([]);
   const [emailInput, setEmailInput] = useState('');
-  
-  // ✅ NEW: Tag state
+
   const [tags, setTags] = useState([]);
   const [tagInput, setTagInput] = useState('');
-  
+
   const [uploading, setUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState('idle'); // idle | uploading | processing | done
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingStage, setProcessingStage] = useState('');
+  const [uploadSpeed, setUploadSpeed] = useState(0);   // bytes/sec
+  const [uploadEta, setUploadEta] = useState(null);    // seconds remaining
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [uploadedVideoId, setUploadedVideoId] = useState(null);
@@ -129,9 +137,46 @@ const UploadPage = () => {
     setAllowedEmails(allowedEmails.filter(e => e !== email));
   };
 
+  const formatSpeed = (bytesPerSec) => {
+    if (bytesPerSec > 1024 * 1024) return `${(bytesPerSec / 1024 / 1024).toFixed(1)} MB/s`;
+    if (bytesPerSec > 1024) return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+    return `${bytesPerSec.toFixed(0)} B/s`;
+  };
+
+  const formatEta = (seconds) => {
+    if (!seconds || seconds <= 0) return '';
+    if (seconds < 60) return `~${Math.ceil(seconds)}s left`;
+    return `~${Math.ceil(seconds / 60)}m left`;
+  };
+
+  const startProcessingPoll = (videoId) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await videoService.getUploadStatus(videoId);
+        const { status, progress, stage } = res;
+        setProcessingProgress(progress || 0);
+        setProcessingStage(stage || '');
+
+        if (status === 'READY') {
+          clearInterval(pollRef.current);
+          setUploadPhase('done');
+          setSuccess(true);
+          setUploading(false);
+        } else if (status === 'FAILED') {
+          clearInterval(pollRef.current);
+          setError('Processing failed. Please try uploading again.');
+          setUploading(false);
+          setUploadPhase('idle');
+        }
+      } catch (err) {
+        console.warn('[Upload] Status poll error:', err.message);
+      }
+    }, 2000);
+  };
+
   const uploadChunkWithRetry = async (chunk, chunkIndex, totalChunks, videoId) => {
     let retries = 0;
-    
     while (retries < MAX_RETRIES) {
       try {
         await videoService.uploadChunk(chunk, chunkIndex, totalChunks, videoId);
@@ -139,11 +184,7 @@ const UploadPage = () => {
       } catch (err) {
         retries++;
         console.warn(`[Upload] Chunk ${chunkIndex} failed, retry ${retries}/${MAX_RETRIES}`);
-        
-        if (retries === MAX_RETRIES) {
-          throw new Error(`Failed to upload chunk ${chunkIndex + 1} after ${MAX_RETRIES} attempts`);
-        }
-        
+        if (retries === MAX_RETRIES) throw new Error(`Failed to upload chunk ${chunkIndex + 1} after ${MAX_RETRIES} attempts`);
         await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retries - 1)));
       }
     }
@@ -152,53 +193,52 @@ const UploadPage = () => {
   const uploadChunks = async (file) => {
     const chunks = Math.ceil(file.size / CHUNK_SIZE);
     setTotalChunks(chunks);
-    
-    try {
-      const initResponse = await videoService.initUpload(
-        file.name,
-        title,
-        description,
-        file.size,
-        chunks
-      );
+    uploadStartRef.current = Date.now();
+    bytesUploadedRef.current = 0;
 
+    try {
+      const initResponse = await videoService.initUpload(file.name, title, description, file.size, chunks);
       const videoId = initResponse.videoId;
       setUploadedVideoId(videoId);
+      setUploadPhase('uploading');
 
       for (let chunkIndex = 0; chunkIndex < chunks; chunkIndex++) {
         setCurrentChunk(chunkIndex + 1);
-        
+
         const start = chunkIndex * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
 
         await uploadChunkWithRetry(chunk, chunkIndex, chunks, videoId);
+
+        bytesUploadedRef.current += (end - start);
+        const elapsed = (Date.now() - uploadStartRef.current) / 1000;
+        const speed = elapsed > 0 ? bytesUploadedRef.current / elapsed : 0;
+        const remaining = speed > 0 ? (file.size - bytesUploadedRef.current) / speed : null;
+        setUploadSpeed(speed);
+        setUploadEta(remaining);
         setUploadProgress(Math.round(((chunkIndex + 1) / chunks) * 100));
       }
 
       await videoService.completeUpload(videoId, chunks);
 
-      // ✅ UPDATED: Set privacy AND tags
-      const updates = {
-        visibility,
-        allowedUserEmails: allowedEmails
-      };
-      
       if (visibility !== 'public' || allowedEmails.length > 0 || tags.length > 0) {
-        await videoService.setPrivacy(videoId, updates);
-        
-        // Also update with tags
-        if (tags.length > 0) {
-          await videoService.updateVideo(videoId, { tags });
-        }
+        await videoService.setPrivacy(videoId, { visibility, allowedUserEmails: allowedEmails });
+        if (tags.length > 0) await videoService.updateVideo(videoId, { tags });
       }
-      
-      setSuccess(true);
-      setUploading(false);
+
+      // Switch to processing phase and start polling
+      setUploadPhase('processing');
+      setProcessingProgress(0);
+      setProcessingStage('Starting…');
+      startProcessingPoll(videoId);
+
     } catch (err) {
       console.error('Upload error:', err);
+      if (pollRef.current) clearInterval(pollRef.current);
       setError(err.response?.data?.message || err.message || 'Upload failed. Please try again.');
       setUploading(false);
+      setUploadPhase('idle');
       setUploadProgress(0);
       setCurrentChunk(0);
     }
@@ -230,7 +270,11 @@ const UploadPage = () => {
     await uploadChunks(selectedFile);
   };
 
+  // Cleanup poll on unmount
+  React.useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
   const resetForm = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
     setSelectedFile(null);
     setTitle('');
     setDescription('');
@@ -240,14 +284,17 @@ const UploadPage = () => {
     setTags([]);
     setTagInput('');
     setUploadProgress(0);
+    setProcessingProgress(0);
+    setProcessingStage('');
+    setUploadPhase('idle');
+    setUploadSpeed(0);
+    setUploadEta(null);
     setCurrentChunk(0);
     setTotalChunks(0);
     setError('');
     setSuccess(false);
     setUploadedVideoId(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   if (success) {
@@ -537,24 +584,71 @@ const UploadPage = () => {
               </div>
             )}
 
-            {/* Upload Progress */}
+            {/* Upload / Processing Progress */}
             {uploading && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex justify-between text-sm text-gray-700 mb-2">
-                  <span className="font-medium">Uploading...</span>
-                  <span className="font-bold">{uploadProgress}%</span>
+              <div className="rounded-lg overflow-hidden border border-blue-200">
+                {/* Phase tabs */}
+                <div className="flex text-xs font-semibold">
+                  {['uploading', 'processing'].map((phase, i) => (
+                    <div key={phase}
+                      className={`flex-1 py-2 text-center transition-colors ${
+                        uploadPhase === phase
+                          ? 'bg-primary-600 text-white'
+                          : uploadPhase === 'processing' && phase === 'uploading'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-400'
+                      }`}
+                    >
+                      {phase === 'uploading' ? '① Uploading' : '② Processing'}
+                    </div>
+                  ))}
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 mb-2 overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-primary-600 to-orange-600 h-3 rounded-full transition-all duration-300 shadow-inner"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
+
+                <div className="bg-blue-50 p-4">
+                  {uploadPhase === 'uploading' && (
+                    <>
+                      <div className="flex justify-between text-sm text-gray-700 mb-1">
+                        <span className="font-medium">
+                          Uploading… {currentChunk}/{totalChunks} chunks
+                        </span>
+                        <span className="font-bold text-primary-600">{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3 mb-2 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-primary-600 to-orange-500 h-3 rounded-full transition-all duration-200"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB total` : ''}</span>
+                        <span className="space-x-3">
+                          {uploadSpeed > 0 && <span>{formatSpeed(uploadSpeed)}</span>}
+                          {uploadEta && <span className="text-primary-600">{formatEta(uploadEta)}</span>}
+                        </span>
+                      </div>
+                    </>
+                  )}
+
+                  {uploadPhase === 'processing' && (
+                    <>
+                      <div className="flex justify-between text-sm text-gray-700 mb-1">
+                        <span className="font-medium">
+                          {processingStage || 'Processing…'}
+                        </span>
+                        <span className="font-bold text-orange-600">{processingProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3 mb-2 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-orange-500 to-yellow-400 h-3 rounded-full transition-all duration-500"
+                          style={{ width: `${processingProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 text-center">
+                        Video is being transcoded to HLS. This may take a few minutes.
+                      </p>
+                    </>
+                  )}
                 </div>
-                {totalChunks > 0 && (
-                  <p className="text-xs text-gray-600 text-center">
-                    Chunk {currentChunk} of {totalChunks}
-                  </p>
-                )}
               </div>
             )}
 
@@ -565,7 +659,9 @@ const UploadPage = () => {
                 disabled={uploading || !selectedFile}
                 className="flex-1 py-3 px-6 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-md"
               >
-                {uploading ? 'Uploading...' : 'Upload Video'}
+                {uploadPhase === 'uploading' ? `Uploading… ${uploadProgress}%`
+               : uploadPhase === 'processing' ? `Processing… ${processingProgress}%`
+               : 'Upload Video'}
               </button>
               {!uploading && (
                 <button
