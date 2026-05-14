@@ -7,6 +7,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
+  const [showAdminForm, setShowAdminForm] = useState(false);
   const { login, initiateIdpLogin } = useAuth();
   const navigate = useNavigate();
 
@@ -17,14 +18,14 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.email || !formData.password) { setError('Fill in all fields'); return; }
+    if (!formData.email || !formData.password) { setError('Bütün sahələri doldurun'); return; }
     setLoading(true);
     try {
       const result = await login(formData.email, formData.password);
       if (result.success) navigate('/');
-      else setError(result.message || 'Login failed');
+      else setError(result.message || 'Giriş uğursuz oldu');
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid credentials');
+      setError(err.response?.data?.message || 'Yanlış məlumatlar');
     } finally {
       setLoading(false);
     }
@@ -32,320 +33,434 @@ const Login = () => {
 
   const handleSso = async () => {
     setSsoLoading(true);
+    setError('');
     try { await initiateIdpLogin(); }
-    catch { setError('SSO unavailable. Try again.'); setSsoLoading(false); }
+    catch { setError('SSO mövcud deyil. Yenidən cəhd edin.'); setSsoLoading(false); }
   };
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-        .lt-login-root {
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        .ao-root {
           min-height: 100vh;
-          background: #0a0c10;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: 'JetBrains Mono', 'Courier New', monospace;
-          padding: 1.5rem 1rem;
-          position: relative;
-          overflow: hidden;
-          color: #5eead4;
-        }
-        .lt-login-root::before {
-          content: '';
-          position: fixed;
-          inset: 0;
-          pointer-events: none;
-          background: repeating-linear-gradient(
-            0deg,
-            transparent,
-            transparent 2px,
-            rgba(0,255,255,0.012) 2px,
-            rgba(0,255,255,0.012) 4px
-          );
-          z-index: 0;
-        }
-        .lt-login-root::after {
-          content: '';
-          position: fixed;
-          inset: 0;
-          pointer-events: none;
-          background: radial-gradient(ellipse at 50% 40%, rgba(94,234,212,0.06) 0%, transparent 65%);
-          z-index: 0;
-        }
-        .lt-card {
-          position: relative;
-          z-index: 1;
-          width: 100%;
-          max-width: 360px;
-        }
-        .lt-header {
+          background: #f0f2f5;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 0.5rem;
-          margin-bottom: 2rem;
+          justify-content: center;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+          padding: 2rem 1rem;
         }
-        .lt-logo {
+
+        /* ── Top branding bar ── */
+        .ao-topbar {
           display: flex;
           align-items: center;
-          gap: 0.6rem;
+          gap: 10px;
+          margin-bottom: 2rem;
         }
-        .lt-logo-icon {
-          filter: drop-shadow(0 0 6px rgba(94,234,212,0.7));
-        }
-        .lt-title {
-          font-size: 1.35rem;
-          font-weight: 700;
-          color: #5eead4;
-          letter-spacing: 0.05em;
-        }
-        .lt-subtitle {
-          font-size: 0.6rem;
-          color: #134e4a;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-        }
-        .lt-app-badge {
-          margin-top: 0.25rem;
-          background: rgba(94,234,212,0.04);
-          border: 1px solid rgba(94,234,212,0.15);
-          border-radius: 4px;
-          padding: 0.35rem 0.75rem;
-          font-size: 0.7rem;
-          color: #2dd4bf;
-          text-align: center;
-        }
-        .lt-app-badge strong { color: #5eead4; }
-        .lt-panel {
-          background: #12161e;
-          border: 1px solid rgba(94,234,212,0.2);
+        .ao-topbar-logo {
+          width: 40px;
+          height: 40px;
+          background: #003087;
           border-radius: 8px;
-          padding: 1.75rem 1.5rem;
-          box-shadow: 0 0 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(94,234,212,0.05);
-        }
-        .lt-section-tag {
-          font-size: 0.6rem;
-          color: #134e4a;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          margin-bottom: 1rem;
-        }
-        .lt-error {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.5rem;
-          background: rgba(255,51,51,0.06);
-          border: 1px solid rgba(255,68,68,0.3);
-          border-radius: 4px;
-          padding: 0.6rem 0.75rem;
-          color: #ff4444;
-          font-size: 0.75rem;
-          margin-bottom: 1rem;
-        }
-        .lt-field { margin-bottom: 1rem; }
-        .lt-label {
-          display: block;
-          font-size: 0.6rem;
-          color: #2dd4bf;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-          margin-bottom: 0.4rem;
-        }
-        .lt-input {
-          width: 100%;
-          background: #0a0c10;
-          border: 1px solid rgba(94,234,212,0.25);
-          border-radius: 4px;
-          color: #5eead4;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.875rem;
-          padding: 0.6rem 0.75rem;
-          outline: none;
-          transition: border-color 0.15s, box-shadow 0.15s;
-          box-sizing: border-box;
-          caret-color: #5eead4;
-        }
-        .lt-input::placeholder { color: #134e4a; }
-        .lt-input:focus {
-          border-color: #5eead4;
-          box-shadow: 0 0 0 2px rgba(94,234,212,0.15);
-        }
-        .lt-btn-primary {
-          width: 100%;
-          background: transparent;
-          border: 1px solid #5eead4;
-          border-radius: 4px;
-          color: #5eead4;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 0.8125rem;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          padding: 0.7rem 1rem;
-          cursor: pointer;
-          transition: background 0.15s, color 0.15s, box-shadow 0.15s;
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-shrink: 0;
+        }
+        .ao-topbar-logo svg { display: block; }
+        .ao-topbar-text { line-height: 1.2; }
+        .ao-topbar-name {
+          font-size: 1.1rem;
+          font-weight: 700;
+          color: #003087;
+          letter-spacing: -0.01em;
+        }
+        .ao-topbar-sub {
+          font-size: 0.7rem;
+          color: #6b7280;
+          letter-spacing: 0.01em;
+        }
+
+        /* ── Card ── */
+        .ao-card {
+          background: #ffffff;
+          border-radius: 12px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.08);
+          width: 100%;
+          max-width: 400px;
+          overflow: hidden;
+        }
+
+        /* ── Card header ── */
+        .ao-card-header {
+          background: #003087;
+          padding: 1.5rem 2rem 1.25rem;
+          text-align: center;
+        }
+        .ao-card-header-label {
+          font-size: 0.65rem;
+          font-weight: 600;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: rgba(255,255,255,0.55);
+          margin-bottom: 0.4rem;
+        }
+        .ao-card-header-title {
+          font-size: 1.15rem;
+          font-weight: 700;
+          color: #ffffff;
+          letter-spacing: -0.01em;
+        }
+        .ao-card-header-app {
+          margin-top: 0.6rem;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 20px;
+          padding: 0.25rem 0.75rem;
+          font-size: 0.75rem;
+          color: rgba(255,255,255,0.85);
+        }
+        .ao-app-dot {
+          width: 6px;
+          height: 6px;
+          background: #22c55e;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+
+        /* ── Card body ── */
+        .ao-card-body {
+          padding: 1.75rem 2rem 2rem;
+        }
+
+        /* ── Error ── */
+        .ao-error {
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          border-radius: 8px;
+          padding: 0.65rem 0.875rem;
+          color: #dc2626;
+          font-size: 0.8125rem;
+          display: flex;
+          align-items: flex-start;
           gap: 0.5rem;
-          margin-top: 1.25rem;
+          margin-bottom: 1.25rem;
         }
-        .lt-btn-primary:hover:not(:disabled) {
-          background: #5eead4;
-          color: #0a0c10;
-          box-shadow: 0 0 12px rgba(94,234,212,0.4);
+
+        /* ── SSO button ── */
+        .ao-btn-sso {
+          width: 100%;
+          background: #003087;
+          border: none;
+          border-radius: 8px;
+          color: #ffffff;
+          font-family: inherit;
+          font-size: 0.9375rem;
+          font-weight: 600;
+          padding: 0.8rem 1.25rem;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.625rem;
+          transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+          letter-spacing: -0.01em;
         }
-        .lt-btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-        .lt-divider {
+        .ao-btn-sso:hover:not(:disabled) {
+          background: #00256e;
+          box-shadow: 0 4px 12px rgba(0,48,135,0.3);
+          transform: translateY(-1px);
+        }
+        .ao-btn-sso:active:not(:disabled) { transform: translateY(0); }
+        .ao-btn-sso:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .ao-btn-sso-icon {
+          width: 22px;
+          height: 22px;
+          background: rgba(255,255,255,0.15);
+          border-radius: 5px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        /* ── Divider ── */
+        .ao-divider {
           display: flex;
           align-items: center;
           gap: 0.75rem;
           margin: 1.25rem 0;
         }
-        .lt-divider-line {
+        .ao-divider hr {
           flex: 1;
-          height: 1px;
-          background: rgba(94,234,212,0.12);
+          border: none;
+          border-top: 1px solid #e5e7eb;
         }
-        .lt-divider-text {
-          font-size: 0.6rem;
-          color: #134e4a;
-          letter-spacing: 0.1em;
+        .ao-divider span {
+          font-size: 0.75rem;
+          color: #9ca3af;
+          white-space: nowrap;
         }
-        .lt-btn-sso {
+
+        /* ── Admin toggle ── */
+        .ao-admin-toggle {
           width: 100%;
-          background: rgba(94,234,212,0.04);
-          border: 1px solid rgba(94,234,212,0.2);
-          border-radius: 4px;
-          color: #5eead4;
-          font-family: 'JetBrains Mono', monospace;
+          background: none;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          color: #6b7280;
+          font-family: inherit;
           font-size: 0.8125rem;
-          font-weight: 600;
-          letter-spacing: 0.05em;
-          padding: 0.7rem 1rem;
+          font-weight: 500;
+          padding: 0.65rem 1rem;
           cursor: pointer;
-          transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 0.6rem;
+          gap: 0.4rem;
+          transition: border-color 0.15s, color 0.15s, background 0.15s;
         }
-        .lt-btn-sso:hover:not(:disabled) {
-          border-color: #5eead4;
-          background: rgba(94,234,212,0.08);
-          box-shadow: 0 0 8px rgba(94,234,212,0.2);
+        .ao-admin-toggle:hover {
+          border-color: #9ca3af;
+          color: #374151;
+          background: #f9fafb;
         }
-        .lt-btn-sso:disabled { opacity: 0.45; cursor: not-allowed; }
-        .lt-spinner {
-          width: 14px; height: 14px;
-          border: 2px solid rgba(94,234,212,0.3);
-          border-top-color: #5eead4;
+
+        /* ── Admin form ── */
+        .ao-admin-form {
+          margin-top: 1.25rem;
+          padding-top: 1.25rem;
+          border-top: 1px solid #f3f4f6;
+        }
+        .ao-admin-form-title {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 1rem;
+        }
+        .ao-field { margin-bottom: 1rem; }
+        .ao-label {
+          display: block;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          color: #374151;
+          margin-bottom: 0.375rem;
+        }
+        .ao-input {
+          width: 100%;
+          background: #ffffff;
+          border: 1px solid #d1d5db;
+          border-radius: 7px;
+          color: #111827;
+          font-family: inherit;
+          font-size: 0.9375rem;
+          padding: 0.625rem 0.875rem;
+          outline: none;
+          transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .ao-input::placeholder { color: #9ca3af; }
+        .ao-input:focus {
+          border-color: #003087;
+          box-shadow: 0 0 0 3px rgba(0,48,135,0.1);
+        }
+        .ao-btn-submit {
+          width: 100%;
+          background: #111827;
+          border: none;
+          border-radius: 8px;
+          color: #ffffff;
+          font-family: inherit;
+          font-size: 0.9rem;
+          font-weight: 600;
+          padding: 0.75rem 1rem;
+          cursor: pointer;
+          margin-top: 0.5rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          transition: background 0.15s, transform 0.1s;
+        }
+        .ao-btn-submit:hover:not(:disabled) {
+          background: #1f2937;
+          transform: translateY(-1px);
+        }
+        .ao-btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* ── Spinner ── */
+        .ao-spinner {
+          width: 16px; height: 16px;
+          border: 2px solid rgba(255,255,255,0.3);
+          border-top-color: #ffffff;
           border-radius: 50%;
-          animation: lt-spin 0.7s linear infinite;
-          flex-shrink: 0;
+          animation: ao-spin 0.65s linear infinite;
         }
-        @keyframes lt-spin { to { transform: rotate(360deg); } }
-        .lt-footer {
-          margin-top: 1.5rem;
+        @keyframes ao-spin { to { transform: rotate(360deg); } }
+
+        /* ── Footer ── */
+        .ao-footer {
           text-align: center;
-          font-size: 0.6rem;
-          color: #134e4a;
-          letter-spacing: 0.06em;
+          margin-top: 1.5rem;
+          font-size: 0.75rem;
+          color: #9ca3af;
+          line-height: 1.5;
         }
+        .ao-footer a {
+          color: #003087;
+          text-decoration: none;
+          font-weight: 500;
+        }
+        .ao-footer a:hover { text-decoration: underline; }
       `}</style>
 
-      <div className="lt-login-root">
-        <div className="lt-card">
+      <div className="ao-root">
+
+        {/* Top branding */}
+        <div className="ao-topbar">
+          <div className="ao-topbar-logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+              stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <div className="ao-topbar-text">
+            <div className="ao-topbar-name">AO ID</div>
+            <div className="ao-topbar-sub">Korporativ İdentifikasiya Sistemi</div>
+          </div>
+        </div>
+
+        {/* Card */}
+        <div className="ao-card">
+
           {/* Header */}
-          <div className="lt-header">
-            <div className="lt-logo">
-              <svg className="lt-logo-icon" width="22" height="22" viewBox="0 0 24 24"
-                fill="none" stroke="#5eead4" strokeWidth="1.5"
-                strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="1"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              <span className="lt-title">LocalTube</span>
-            </div>
-            <div className="lt-subtitle">media.platform · giriş</div>
-            <div className="lt-app-badge">
-              <strong>AO ID</strong> kimlik sistemi ilə qorunur
+          <div className="ao-card-header">
+            <div className="ao-card-header-label">Sistemə giriş</div>
+            <div className="ao-card-header-title">LocalTube</div>
+            <div className="ao-card-header-app">
+              <span className="ao-app-dot"/>
+              media.platform
             </div>
           </div>
 
-          <div className="lt-panel">
-            {/* Error */}
+          {/* Body */}
+          <div className="ao-card-body">
+
             {error && (
-              <div className="lt-error">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+              <div className="ao-error">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                   style={{flexShrink:0, marginTop:'1px'}}>
-                  <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/>
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
                   <line x1="9" y1="9" x2="15" y2="15"/>
                 </svg>
                 <span>{error}</span>
               </div>
             )}
 
-            {/* SSO — primary action */}
-            <div className="lt-section-tag">// AO ID vasitəsilə daxil ol</div>
+            {/* Primary: SSO */}
             <button
               type="button"
-              className="lt-btn-sso"
+              className="ao-btn-sso"
               disabled={ssoLoading || loading}
               onClick={handleSso}
             >
               {ssoLoading ? (
-                <div className="lt-spinner" />
+                <div className="ao-spinner"/>
               ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="1.5"
-                  strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
+                <div className="ao-btn-sso-icon">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                    stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                </div>
               )}
-              {ssoLoading ? 'Yönləndirilir…' : 'Sign in with AO ID'}
+              {ssoLoading ? 'Yönləndirilir…' : 'AO ID ilə daxil ol'}
             </button>
 
             {/* Divider */}
-            <div className="lt-divider">
-              <div className="lt-divider-line"/>
-              <span className="lt-divider-text">or admin login</span>
-              <div className="lt-divider-line"/>
+            <div className="ao-divider">
+              <hr/><span>və ya</span><hr/>
             </div>
 
-            {/* Local admin form */}
-            <div className="lt-section-tag">// administrator girişi</div>
-            <form onSubmit={handleSubmit}>
-              <div className="lt-field">
-                <label className="lt-label" htmlFor="email">E-poçt</label>
-                <input
-                  id="email" name="email" type="email" autoComplete="email" required
-                  className="lt-input" placeholder="admin@example.com"
-                  value={formData.email} onChange={handleChange}
-                />
-              </div>
-              <div className="lt-field">
-                <label className="lt-label" htmlFor="password">Şifrə</label>
-                <input
-                  id="password" name="password" type="password"
-                  autoComplete="current-password" required
-                  className="lt-input" placeholder="••••••••"
-                  value={formData.password} onChange={handleChange}
-                />
-              </div>
-              <button type="submit" className="lt-btn-primary" disabled={loading || ssoLoading}>
-                {loading ? <><div className="lt-spinner"/>Yüklənir…</> : '→ Daxil ol'}
-              </button>
-            </form>
-          </div>
+            {/* Secondary: admin toggle */}
+            <button
+              type="button"
+              className="ao-admin-toggle"
+              onClick={() => { setShowAdminForm(v => !v); setError(''); }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="1"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              {showAdminForm ? 'Admin formu gizlət' : 'Administrator girişi'}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                style={{marginLeft: 'auto', transform: showAdminForm ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s'}}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
 
-          <div className="lt-footer">
-            Hesabınız yoxdur? Administratorla əlaqə saxlayın.
+            {/* Admin form (collapsible) */}
+            {showAdminForm && (
+              <div className="ao-admin-form">
+                <div className="ao-admin-form-title">Administrator girişi</div>
+                <form onSubmit={handleSubmit}>
+                  <div className="ao-field">
+                    <label className="ao-label" htmlFor="email">E-poçt ünvanı</label>
+                    <input
+                      id="email" name="email" type="email"
+                      autoComplete="email" required
+                      className="ao-input"
+                      placeholder="admin@example.com"
+                      value={formData.email}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="ao-field">
+                    <label className="ao-label" htmlFor="password">Şifrə</label>
+                    <input
+                      id="password" name="password" type="password"
+                      autoComplete="current-password" required
+                      className="ao-input"
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <button type="submit" className="ao-btn-submit" disabled={loading || ssoLoading}>
+                    {loading ? <><div className="ao-spinner"/>Yüklənir…</> : 'Daxil ol'}
+                  </button>
+                </form>
+              </div>
+            )}
+
           </div>
         </div>
+
+        <div className="ao-footer">
+          Hesabınız yoxdur?&nbsp;
+          <a href="mailto:admin@localtube.local">Administratorla əlaqə</a>
+          <br/>
+          <span style={{fontSize:'0.7rem', opacity: 0.7}}>
+            Powered by AO ID · auth.ao.az
+          </span>
+        </div>
+
       </div>
     </>
   );
