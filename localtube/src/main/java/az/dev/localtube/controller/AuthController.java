@@ -7,6 +7,7 @@ import az.dev.localtube.dto.request.LoginRequest;
 import az.dev.localtube.dto.response.LoginResponse;
 import az.dev.localtube.entity.User;
 import az.dev.localtube.repository.UserRepository;
+import az.dev.localtube.service.SystemSettingService;
 import az.dev.localtube.util.JwtUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,21 +34,26 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final SystemSettingService settings;
 
-    @Value("${localtube.idp.base-url}")
-    private String idpBaseUrl;
-
-    @Value("${localtube.idp.client-id}")
-    private String idpClientId;
-
+    // Fallback defaults (used if DB not yet migrated or setting missing)
+    @Value("${localtube.idp.base-url:https://13.61.159.58}")
+    private String defaultIdpBaseUrl;
+    @Value("${localtube.idp.client-id:EFxbQK-ekDX1OkWov51cjg}")
+    private String defaultIdpClientId;
     @Value("${localtube.idp.issuer:https://auth.ao.az}")
-    private String idpIssuer;
-
+    private String defaultIdpIssuer;
     @Value("${localtube.idp.redirect-uri:http://13.61.159.58:4000/}")
-    private String idpRedirectUri;
-
+    private String defaultIdpRedirectUri;
     @Value("${localtube.idp.logout-redirect-uri:http://13.61.159.58:4000/logged_out}")
-    private String idpLogoutRedirectUri;
+    private String defaultIdpLogoutRedirectUri;
+
+    // Live values — read from DB on every request so admin changes take effect immediately
+    private String idpBaseUrl()          { return settings.get("idp.base-url",            defaultIdpBaseUrl); }
+    private String idpClientId()         { return settings.get("idp.client-id",           defaultIdpClientId); }
+    private String idpIssuer()           { return settings.get("idp.issuer",               defaultIdpIssuer); }
+    private String idpRedirectUri()      { return settings.get("idp.redirect-uri",         defaultIdpRedirectUri); }
+    private String idpLogoutRedirectUri(){ return settings.get("idp.logout-redirect-uri",  defaultIdpLogoutRedirectUri); }
 
     /**
      * Login endpoint - returns JWT with roles and permissions
@@ -215,14 +221,15 @@ public class AuthController {
     @GetMapping("/idp/config")
     public ResponseEntity<Map<String, String>> getIdpConfig() {
         return ResponseEntity.ok(Map.of(
-                "authorizationEndpoint", idpBaseUrl + "/oauth2/authorize",
-                "tokenEndpoint", idpBaseUrl + "/oauth2/token",
-                "endSessionEndpoint", idpBaseUrl + "/oauth2/logout",
-                "clientId", idpClientId,
-                "scope", "openid profile",
-                "issuer", idpIssuer,
-                "redirectUri", idpRedirectUri,
-                "logoutRedirectUri", idpLogoutRedirectUri
+                "authorizationEndpoint", idpBaseUrl() + "/oauth2/authorize",
+                "tokenEndpoint",        idpBaseUrl() + "/oauth2/token",
+                "endSessionEndpoint",   idpBaseUrl() + "/oauth2/logout",
+                "clientId",             idpClientId(),
+                "scope",                "openid profile",
+                "issuer",               idpIssuer(),
+                "redirectUri",          idpRedirectUri(),
+                "logoutRedirectUri",    idpLogoutRedirectUri(),
+                "idpEnabled",           settings.get("idp.enabled", "true")
         ));
     }
 
@@ -243,7 +250,7 @@ public class AuthController {
                 return ResponseEntity.badRequest().body("{\"error\":\"missing required fields\"}");
             }
 
-            String tokenUrl = idpBaseUrl + "/oauth2/token";
+            String tokenUrl = idpBaseUrl() + "/oauth2/token";
 
             // curl -k bypasses Java's TLS hostname verification for self-signed certs with IP SANs.
             // ProcessBuilder avoids shell injection — args are passed directly to the OS.
@@ -255,7 +262,7 @@ public class AuthController {
                     "--data-urlencode", "code=" + code,
                     "--data-urlencode", "redirect_uri=" + redirectUri,
                     "--data-urlencode", "code_verifier=" + codeVerifier,
-                    "--data-urlencode", "client_id=" + idpClientId,
+                    "--data-urlencode", "client_id=" + idpClientId(),
                     "-w", "\n%{http_code}"
             );
             pb.redirectErrorStream(true);
@@ -267,10 +274,20 @@ public class AuthController {
             // curl appends "\n<http_code>" at the end due to -w "%{http_code}"
             int lastNewline = output.lastIndexOf('\n');
             String responseBody = lastNewline > 0 ? output.substring(0, lastNewline).trim() : output;
-            String statusStr   = lastNewline > 0 ? output.substring(lastNewline + 1).trim() : "502";
+            String statusStr   = lastNewline > 0 ? output.substring(lastNewline + 1).trim() : "0";
 
-            int status = 502;
-            try { status = Integer.parseInt(statusStr); } catch (NumberFormatException ignore) {}
+            int status;
+            try {
+                status = Integer.parseInt(statusStr);
+                // 0 or 000 means curl couldn't connect at all
+                if (status < 100 || status > 599) {
+                    log.error("IDP unreachable — curl output: {}", output.length() > 500 ? output.substring(0, 500) : output);
+                    return ResponseEntity.status(502)
+                            .body("{\"error\":\"IDP server unreachable. Check IDP base URL in admin settings.\"}");
+                }
+            } catch (NumberFormatException ignore) {
+                status = 502;
+            }
 
             log.info("IDP token exchange returned status: {} via curl", status);
             return ResponseEntity.status(status)

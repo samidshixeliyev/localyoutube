@@ -35,8 +35,8 @@ spring:
     multipart:
       enabled: true
       file-size-threshold: 2KB
-      max-file-size: 100MB
-      max-request-size: 100MB
+      max-file-size: 30MB       # per chunk — frontend sends 20MB chunks
+      max-request-size: 35MB
 
 jwt:
   secret: ${JWT_SECRET:4gTduyxJahQatgIkxwGErvADeIjfdulxI98B8bAGUOKStnBVTyngXfU5jM1rMbVR}

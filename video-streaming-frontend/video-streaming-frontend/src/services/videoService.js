@@ -80,7 +80,7 @@ const videoService = {
       const response = await api.post('/upload/chunk', formData, {
         params: { chunkIndex, totalChunks, videoId },
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000,
+        timeout: 300000, // 5 min — large 20 MB chunks on slow connections
       });
       return response.data;
     } catch (error) {

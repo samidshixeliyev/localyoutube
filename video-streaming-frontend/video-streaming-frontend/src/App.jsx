@@ -1,21 +1,37 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';      // ← added useAuth here
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { MiniPlayerProvider } from './context/MiniPlayerContext';
 import MiniPlayer from './components/MiniPlayer';
-import PrivateRoute from './components/PrivateRoute'; // adjust path if needed
+import PrivateRoute from './components/PrivateRoute';
 
-// Pages
-import Home from './pages/Home';
+// Eagerly-loaded (tiny, always needed)
 import Login from './pages/Login';
-import VideoDetail from './pages/VideoDetail';
-import UploadPage from './pages/UploadPage';
-import MyVideos from './pages/MyVideos';
-import SearchResults from './pages/SearchResults';
-import ChangePassword from './pages/ChangePassword';
+import OAuthCallback from './pages/OAuthCallback';
 import LoggedOut from './pages/LoggedOut';
 
-import OAuthCallback from './pages/OAuthCallback';
+// Lazily-loaded pages — only fetched when the route is visited
+const Home           = lazy(() => import('./pages/Home'));
+const VideoDetail    = lazy(() => import('./pages/VideoDetail'));
+const UploadPage     = lazy(() => import('./pages/UploadPage'));
+const MyVideos       = lazy(() => import('./pages/MyVideos'));
+const SearchResults  = lazy(() => import('./pages/SearchResults'));
+const ChangePassword = lazy(() => import('./pages/ChangePassword'));
+
+const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
+const UserForm       = lazy(() => import('./pages/admin/UserForm'));
+const RoleManagement = lazy(() => import('./pages/admin/RoleManagement'));
+const IdpSettings    = lazy(() => import('./pages/admin/IdpSettings'));
+
+// Minimal full-page spinner shown while a lazy chunk loads
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <svg className="w-8 h-8 text-primary-600 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3V4a8 8 0 00-8 8z"/>
+    </svg>
+  </div>
+);
 
 // Root wrapper: if IDP redirected here with ?code=, handle OAuth2 callback;
 // otherwise render the normal Home page.
@@ -28,17 +44,13 @@ function RootRoute() {
   return <Home />;
 }
 
-// Admin Pages
-import UserManagement from './pages/admin/UserManagement';
-import UserForm from './pages/admin/UserForm';
-import RoleManagement from './pages/admin/RoleManagement';
-
 function AppContent() {
   const { isAuthenticated } = useAuth();     // ← now works
 
   return (
     <MiniPlayerProvider>
       <div className="min-h-screen bg-gray-50">
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public */}
           {/* Root doubles as OAuth2 callback — IDP redirects to http://host:4000/?code=... */}
@@ -108,18 +120,27 @@ function AppContent() {
               </PrivateRoute>
             } 
           />
-          <Route 
-            path="/admin/roles" 
+          <Route
+            path="/admin/roles"
             element={
               <PrivateRoute requiredPermission="super-admin">
                 <RoleManagement />
               </PrivateRoute>
-            } 
+            }
+          />
+          <Route
+            path="/admin/settings"
+            element={
+              <PrivateRoute requiredPermission="super-admin">
+                <IdpSettings />
+              </PrivateRoute>
+            }
           />
 
           {/* 404 */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
 
         <MiniPlayer />
       </div>

@@ -162,6 +162,16 @@ export const adminGetRole = (id) =>
     api.get(`/admin/roles/${id}`);
 
 // ═══════════════════════════════════════════════════════════════
+// ADMIN - SYSTEM SETTINGS (super-admin only)
+// ═══════════════════════════════════════════════════════════════
+
+export const adminGetSettings = () =>
+    api.get('/admin/settings');
+
+export const adminUpdateSettings = (data) =>
+    api.put('/admin/settings', data);
+
+// ═══════════════════════════════════════════════════════════════
 // SHARE
 // ═══════════════════════════════════════════════════════════════
 

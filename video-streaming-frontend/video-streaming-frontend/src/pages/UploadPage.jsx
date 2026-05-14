@@ -4,8 +4,9 @@ import videoService from '../services/videoService';
 import Navbar from '../components/Navbar';
 import { Upload, X, CheckCircle, AlertCircle, Globe, Lock, Link2, Users, Hash, Plus } from 'lucide-react';
 
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
-const MAX_RETRIES = 3;
+const CHUNK_SIZE   = 20 * 1024 * 1024; // 20 MB — fewer round-trips for large files
+const MAX_RETRIES  = 3;
+const CONCURRENCY  = 2;               // upload 2 chunks in parallel
 
 const UploadPage = () => {
   const navigate = useNavigate();
@@ -52,9 +53,9 @@ const UploadPage = () => {
         return;
       }
 
-      const maxSize = 10 * 1024 * 1024 * 1024;
+      const maxSize = 50 * 1024 * 1024 * 1024; // 50 GB
       if (file.size > maxSize) {
-        setError('File size exceeds 10GB limit');
+        setError('File size exceeds 50 GB limit');
         return;
       }
 
@@ -202,23 +203,36 @@ const UploadPage = () => {
       setUploadedVideoId(videoId);
       setUploadPhase('uploading');
 
-      for (let chunkIndex = 0; chunkIndex < chunks; chunkIndex++) {
-        setCurrentChunk(chunkIndex + 1);
+      // Upload chunks in parallel windows of CONCURRENCY size.
+      // Chunks must be appended in order server-side, so we order them strictly.
+      let nextChunk = 0;
+      let completed = 0;
+      let failed = false;
 
-        const start = chunkIndex * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
+      const runWorker = async () => {
+        while (nextChunk < chunks && !failed) {
+          const chunkIndex = nextChunk++;
+          const start = chunkIndex * CHUNK_SIZE;
+          const end   = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = file.slice(start, end);
 
-        await uploadChunkWithRetry(chunk, chunkIndex, chunks, videoId);
+          await uploadChunkWithRetry(chunk, chunkIndex, chunks, videoId);
 
-        bytesUploadedRef.current += (end - start);
-        const elapsed = (Date.now() - uploadStartRef.current) / 1000;
-        const speed = elapsed > 0 ? bytesUploadedRef.current / elapsed : 0;
-        const remaining = speed > 0 ? (file.size - bytesUploadedRef.current) / speed : null;
-        setUploadSpeed(speed);
-        setUploadEta(remaining);
-        setUploadProgress(Math.round(((chunkIndex + 1) / chunks) * 100));
-      }
+          completed++;
+          bytesUploadedRef.current += (end - start);
+          const elapsed   = (Date.now() - uploadStartRef.current) / 1000;
+          const speed     = elapsed > 0 ? bytesUploadedRef.current / elapsed : 0;
+          const remaining = speed > 0 ? (file.size - bytesUploadedRef.current) / speed : null;
+          setCurrentChunk(completed);
+          setUploadSpeed(speed);
+          setUploadEta(remaining);
+          setUploadProgress(Math.round((completed / chunks) * 100));
+        }
+      };
+
+      // Launch CONCURRENCY workers; if any throws, the outer Promise.all rejects
+      const workers = Array.from({ length: Math.min(CONCURRENCY, chunks) }, () => runWorker());
+      await Promise.all(workers);
 
       await videoService.completeUpload(videoId, chunks);
 
@@ -356,7 +370,7 @@ const UploadPage = () => {
                 >
                   <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-600 mb-2">Click to select a video file</p>
-                  <p className="text-sm text-gray-400">MP4, AVI, MOV, MKV (Max 10GB)</p>
+                  <p className="text-sm text-gray-400">MP4, AVI, MOV, MKV (Max 50 GB)</p>
                 </div>
               ) : (
                 <div className="border border-gray-300 rounded-lg p-4 flex items-center justify-between">
