@@ -1,5 +1,6 @@
 package az.dev.localtube.config.security;
 
+import az.dev.localtube.service.IdpUserProvisioningService;
 import az.dev.localtube.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -27,6 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserDetailsService userDetailsService;
     private final IdpJwtValidator idpJwtValidator;
+    private final IdpUserProvisioningService idpUserProvisioningService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -79,12 +81,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             log.warn("IDP JWT validation failed for: {}", requestUri);
             return;
         }
-        OidcUserDetails userDetails = idpJwtValidator.toUserDetails(decoded);
-        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                userDetails, null, userDetails.getAuthorities());
-        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-        SecurityContextHolder.getContext().setAuthentication(auth);
-        log.debug("IDP auth successful: {} on {}", userDetails.getEmail(), requestUri);
+
+        OidcUserDetails oidc = idpJwtValidator.toUserDetails(decoded);
+
+        // Auto-provision IDP user in the local DB so admins can see and manage them.
+        // On success we use LocalTubeUserDetails so admin-assigned roles/permissions apply.
+        try {
+            var dbUser = idpUserProvisioningService.getOrCreate(oidc.getEmail(), oidc.getDisplayName());
+            var userDetails = new LocalTubeUserDetails(dbUser);
+            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                    userDetails, null, userDetails.getAuthorities());
+            auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(auth);
+            log.debug("IDP auth successful: {} on {}", oidc.getEmail(), requestUri);
+        } catch (Exception e) {
+            // DB unavailable or role missing — fall back to OIDC-only (no DB record)
+            log.warn("IDP user provisioning failed for {}: {} — using OIDC-only auth", oidc.getEmail(), e.getMessage());
+            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                    oidc, null, oidc.getAuthorities());
+            auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(auth);
+        }
     }
 
     private void authenticateWithLocalJwt(String jwt, HttpServletRequest request, String requestUri) {
