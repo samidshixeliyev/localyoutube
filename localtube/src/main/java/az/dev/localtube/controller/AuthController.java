@@ -65,8 +65,14 @@ public class AuthController {
                     public void checkServerTrusted(java.security.cert.X509Certificate[] c, String a) {}
                 }
             }, new java.security.SecureRandom());
+
+            // Disable hostname verification (IP SANs missing on self-signed cert)
+            javax.net.ssl.SSLParameters sslParams = new javax.net.ssl.SSLParameters();
+            sslParams.setEndpointIdentificationAlgorithm("");
+
             return HttpClient.newBuilder()
                     .sslContext(sc)
+                    .sslParameters(sslParams)
                     .build();
         } catch (Exception e) {
             return HttpClient.newHttpClient();
