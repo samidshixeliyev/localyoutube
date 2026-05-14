@@ -10,12 +10,14 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Admin API for reading and updating dynamic system settings (OAuth2/IDP config etc.).
- * Restricted to super-admin only.
+ * Admin API for reading and updating dynamic system settings.
+ * super-admin — full access.
+ * manage-settings — same read/write access to all whitelisted keys.
  */
 @RestController
 @RequestMapping("/api/admin/settings")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyAuthority('super-admin', 'manage-settings')")
 public class SystemSettingController {
 
     private static final Set<String> ALLOWED_KEYS = Set.of(
@@ -33,19 +35,19 @@ public class SystemSettingController {
             "idp.claim.last",
             "idp.claim.username",
             // Upload behaviour
-            "upload.max-parallel"
+            "upload.max-parallel",
+            // Grafana integration
+            "grafana.url"
     );
 
     private final SystemSettingService settingService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('super-admin')")
     public ResponseEntity<Map<String, Object>> getAll() {
         return ResponseEntity.ok(settingService.getAll());
     }
 
     @PutMapping
-    @PreAuthorize("hasAuthority('super-admin')")
     public ResponseEntity<?> updateAll(@RequestBody Map<String, String> updates) {
         // Only allow whitelisted keys to prevent arbitrary DB writes
         updates.keySet().removeIf(k -> !ALLOWED_KEYS.contains(k));

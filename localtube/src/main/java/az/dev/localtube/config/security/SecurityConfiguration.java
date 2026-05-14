@@ -100,7 +100,12 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.DELETE, "/api/videos/*/like").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/like-status").authenticated()
 
-                        // SUPER-ADMIN ONLY
+                        // ADMIN — granular sub-routes (must precede the catch-all below)
+                        // Users with view-metrics can reach the metrics proxy
+                        .requestMatchers("/api/admin/metrics/**").hasAnyAuthority("super-admin", "view-metrics")
+                        // Users with manage-settings can read/write settings
+                        .requestMatchers("/api/admin/settings/**").hasAnyAuthority("super-admin", "manage-settings")
+                        // Everything else (user/role management etc.) — super-admin only
                         .requestMatchers("/api/admin/**").hasAuthority("super-admin")
 
                         .requestMatchers("/api/upload/**").hasAnyAuthority("admin-modtube", "super-admin")

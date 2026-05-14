@@ -168,7 +168,15 @@ export default function Metrics() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const timerRef = useRef(null);
 
-  const GRAFANA_BASE = `${window.location.protocol}//${window.location.hostname}:3000`;
+  // Grafana URL — fetched from admin settings; falls back to same-host:3000
+  const [grafanaBase, setGrafanaBase] = useState('');
+  useEffect(() => {
+    fetch('/api/config/grafana')
+      .then(r => r.json())
+      .then(cfg => setGrafanaBase(cfg.grafanaUrl || ''))
+      .catch(() => {});
+  }, []);
+  const GRAFANA_BASE = grafanaBase || `${window.location.protocol}//${window.location.hostname}:3000`;
 
   // ── Fetch instant stats ───────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {

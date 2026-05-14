@@ -135,7 +135,7 @@ function AppContent() {
           <Route
             path="/admin/settings"
             element={
-              <PrivateRoute requiredPermission="super-admin">
+              <PrivateRoute requiredPermission={['super-admin', 'manage-settings']}>
                 <IdpSettings />
               </PrivateRoute>
             }
@@ -143,7 +143,7 @@ function AppContent() {
           <Route
             path="/admin/metrics"
             element={
-              <PrivateRoute requiredPermission="super-admin">
+              <PrivateRoute requiredPermission={['super-admin', 'view-metrics']}>
                 <Metrics />
               </PrivateRoute>
             }

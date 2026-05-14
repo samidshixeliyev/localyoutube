@@ -34,4 +34,14 @@ public class AppConfigController {
         }
         return ResponseEntity.ok(Map.of("maxParallelUploads", maxParallel));
     }
+
+    /**
+     * Returns the configured Grafana base URL.
+     * Empty string means "auto-detect as &lt;hostname&gt;:3000" in the frontend.
+     */
+    @GetMapping("/grafana")
+    public ResponseEntity<Map<String, Object>> grafanaConfig() {
+        String url = settingService.get("grafana.url", "");
+        return ResponseEntity.ok(Map.of("grafanaUrl", url));
+    }
 }

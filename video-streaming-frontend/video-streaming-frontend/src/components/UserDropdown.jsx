@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, Video, Key, Users, Shield, Upload, ChevronDown } from 'lucide-react';
+import { LogOut, Video, Key, Users, Shield, Upload, Settings, BarChart2 } from 'lucide-react';
 
 const UserDropdown = () => {
     const { user, logout, hasPermission } = useAuth();
@@ -10,8 +10,10 @@ const UserDropdown = () => {
     const timeoutRef = useRef(null);
     const navigate = useNavigate();
 
-    const isSuperAdmin = hasPermission('super-admin');
-    const isAdmin = hasPermission('admin-modtube') || isSuperAdmin;
+    const isSuperAdmin    = hasPermission('super-admin');
+    const isAdmin         = hasPermission('admin-modtube') || isSuperAdmin;
+    const canViewMetrics  = isSuperAdmin || hasPermission('view-metrics');
+    const canManageSettings = isSuperAdmin || hasPermission('manage-settings');
 
     const handleMouseEnter = () => {
         clearTimeout(timeoutRef.current);
@@ -111,9 +113,34 @@ const UserDropdown = () => {
                             Change Password
                         </Link>
 
+                        {(canViewMetrics || canManageSettings || isSuperAdmin) && (
+                            <div className="border-t border-gray-100 my-1" />
+                        )}
+
+                        {canViewMetrics && (
+                            <Link
+                                to="/admin/metrics"
+                                onClick={() => setIsOpen(false)}
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                <BarChart2 className="h-4 w-4 text-gray-400" />
+                                Metrics
+                            </Link>
+                        )}
+
+                        {canManageSettings && (
+                            <Link
+                                to="/admin/settings"
+                                onClick={() => setIsOpen(false)}
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                <Settings className="h-4 w-4 text-gray-400" />
+                                Settings
+                            </Link>
+                        )}
+
                         {isSuperAdmin && (
                             <>
-                                <div className="border-t border-gray-100 my-1" />
                                 <Link
                                     to="/admin/users"
                                     onClick={() => setIsOpen(false)}

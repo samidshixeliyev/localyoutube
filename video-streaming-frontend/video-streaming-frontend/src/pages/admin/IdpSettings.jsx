@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle, ToggleLeft, ToggleRight, Upload } from 'lucide-react';
+import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle, ToggleLeft, ToggleRight, Upload, BarChart2 } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import { adminGetSettings, adminUpdateSettings } from '../../services/api';
 
@@ -253,6 +253,28 @@ const IdpSettings = () => {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Grafana Settings */}
+          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 divide-y divide-gray-100">
+            <div className="px-6 py-4 flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-700">Grafana Integration</h2>
+            </div>
+            <div className="px-6 py-5">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Grafana base URL</label>
+              <input
+                type="url"
+                value={values['grafana.url'] || ''}
+                onChange={e => handleChange('grafana.url', e.target.value)}
+                placeholder="http://10.0.0.1:3000"
+                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                The "Open Grafana" button on the Metrics page links to this URL.
+                Leave empty to auto-detect as <code className="bg-gray-100 px-1 rounded">{'<hostname>:3000'}</code>.
+              </p>
+            </div>
           </div>
 
           {/* Upload Settings */}
