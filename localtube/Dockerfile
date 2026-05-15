@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# LocalTube Backend Dockerfile
+# ModTube Backend Dockerfile
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Stage 1: Build
@@ -17,19 +17,19 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create app user
-RUN groupadd -r localtube && useradd -r -g localtube localtube
+RUN groupadd -r modtube && useradd -r -g modtube modtube
 
 WORKDIR /app
 
 # Create directories
 RUN mkdir -p /data/uploads /data/hls /data/temp /data/thumbnails && \
-    chown -R localtube:localtube /data
+    chown -R modtube:modtube /data
 
 # Copy jar
 COPY --from=builder /app/build/libs/*.jar app.jar
-RUN chown localtube:localtube app.jar
+RUN chown modtube:modtube app.jar
 
-USER localtube
+USER modtube
 
 EXPOSE 8080
 

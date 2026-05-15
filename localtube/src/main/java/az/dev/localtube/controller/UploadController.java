@@ -1,10 +1,10 @@
 package az.dev.localtube.controller;
 
-import az.dev.localtube.config.security.LocalTubePrincipal;
-import az.dev.localtube.config.security.LocalTubeUserDetails;
+import az.dev.localtube.config.security.ModTubePrincipal;
+import az.dev.localtube.config.security.ModTubeUserDetails;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
-import az.dev.localtube.metrics.LocalTubeMetrics;
+import az.dev.localtube.metrics.ModTubeMetrics;
 import az.dev.localtube.service.TranscodingService;
 import az.dev.localtube.service.VideoService;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +32,7 @@ public class UploadController {
 
     private final VideoService videoService;
     private final TranscodingService transcodingService;
-    private final LocalTubeMetrics metrics;
+    private final ModTubeMetrics metrics;
     private final Path uploadDir;
     private final long maxFileSize;
     private final long minDiskFree;
@@ -41,7 +41,7 @@ public class UploadController {
 
     public UploadController(VideoService videoService,
                             TranscodingService transcodingService,
-                            LocalTubeMetrics metrics,
+                            ModTubeMetrics metrics,
                             @Value("${localtube.storage.upload-dir}") String uploadDirPath,
                             @Value("${localtube.storage.max-file-size}") long maxFileSize,
                             @Value("${localtube.storage.min-disk-free}") long minDiskFree) throws IOException {
@@ -76,7 +76,7 @@ public class UploadController {
             @RequestParam(required = false) String description,
             @RequestParam long totalSize,
             @RequestParam int totalChunks,
-            @AuthenticationPrincipal LocalTubeUserDetails user) {
+            @AuthenticationPrincipal ModTubeUserDetails user) {
 
         try {
             if (totalSize > maxFileSize) {
@@ -124,7 +124,7 @@ public class UploadController {
             @RequestParam int chunkIndex,
             @RequestParam int totalChunks,
             @RequestParam String videoId,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
 
         try {
             if (chunk.getSize() > MAX_CHUNK_SIZE) {
@@ -187,7 +187,7 @@ public class UploadController {
     @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<Map<String, String>> completeUpload(
             @RequestParam String videoId,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             Video video = videoService.getVideo(videoId).orElse(null);
             if (video == null) {

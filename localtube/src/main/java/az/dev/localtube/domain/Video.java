@@ -135,6 +135,10 @@ public class Video implements Persistable<String> {
     @Column(name = "restriction_note", columnDefinition = "TEXT")
     private String restrictionNote;
 
+    @Builder.Default
+    @Column(name = "is_short")
+    private boolean isShort = false;
+
     // Timestamps as epoch millis (BIGINT in DB) for backward compat
     @Column(name = "uploaded_at")
     private Long uploadedAt;

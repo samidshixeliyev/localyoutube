@@ -1,8 +1,8 @@
 {
-  "uid": "localtube-main",
-  "title": "LocalTube — System & Application",
-  "description": "Resource and application metrics for LocalTube video platform",
-  "tags": ["localtube"],
+  "uid": "modtube-main",
+  "title": "ModTube — System & Application",
+  "description": "Resource and application metrics for ModTube video platform",
+  "tags": ["modtube"],
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "30s",
@@ -66,7 +66,7 @@
       "id": 5, "type": "stat", "title": "HTTP Req/s",
       "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{job=\"localtube\"}[1m]))", "legendFormat": "req/s" }],
+      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count{job=\"modtube\"}[1m]))", "legendFormat": "req/s" }],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
@@ -81,7 +81,7 @@
       "id": 6, "type": "stat", "title": "Active Transcodings",
       "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "expr": "localtube_active_transcodings", "legendFormat": "active" }],
+      "targets": [{ "expr": "modtube_active_transcodings", "legendFormat": "active" }],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -98,7 +98,7 @@
       "id": 7, "type": "stat", "title": "Total Video Views",
       "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "expr": "localtube_video_views_total", "legendFormat": "views" }],
+      "targets": [{ "expr": "modtube_video_views_total", "legendFormat": "views" }],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -169,7 +169,7 @@
       "id": 21, "type": "gauge", "title": "JVM Heap Usage",
       "gridPos": { "x": 0, "y": 23, "w": 6, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "expr": "sum(jvm_memory_used_bytes{job=\"localtube\",area=\"heap\"}) / sum(jvm_memory_max_bytes{job=\"localtube\",area=\"heap\"}) * 100", "legendFormat": "Heap %" }],
+      "targets": [{ "expr": "sum(jvm_memory_used_bytes{job=\"modtube\",area=\"heap\"}) / sum(jvm_memory_max_bytes{job=\"modtube\",area=\"heap\"}) * 100", "legendFormat": "Heap %" }],
       "fieldConfig": {
         "defaults": {
           "unit": "percent", "min": 0, "max": 100,
@@ -187,9 +187,9 @@
       "gridPos": { "x": 6, "y": 23, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "sum(jvm_memory_used_bytes{job=\"localtube\",area=\"heap\"})", "legendFormat": "Heap Used" },
-        { "expr": "sum(jvm_memory_max_bytes{job=\"localtube\",area=\"heap\"})", "legendFormat": "Heap Max" },
-        { "expr": "sum(jvm_memory_used_bytes{job=\"localtube\",area=\"nonheap\"})", "legendFormat": "Non-Heap Used" }
+        { "expr": "sum(jvm_memory_used_bytes{job=\"modtube\",area=\"heap\"})", "legendFormat": "Heap Used" },
+        { "expr": "sum(jvm_memory_max_bytes{job=\"modtube\",area=\"heap\"})", "legendFormat": "Heap Max" },
+        { "expr": "sum(jvm_memory_used_bytes{job=\"modtube\",area=\"nonheap\"})", "legendFormat": "Non-Heap Used" }
       ],
       "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
       "options": { "tooltip": { "mode": "multi" } }
@@ -200,9 +200,9 @@
       "gridPos": { "x": 18, "y": 23, "w": 6, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "jvm_threads_live_threads{job=\"localtube\"}", "legendFormat": "Live" },
-        { "expr": "jvm_threads_daemon_threads{job=\"localtube\"}", "legendFormat": "Daemon" },
-        { "expr": "jvm_threads_peak_threads{job=\"localtube\"}", "legendFormat": "Peak" }
+        { "expr": "jvm_threads_live_threads{job=\"modtube\"}", "legendFormat": "Live" },
+        { "expr": "jvm_threads_daemon_threads{job=\"modtube\"}", "legendFormat": "Daemon" },
+        { "expr": "jvm_threads_peak_threads{job=\"modtube\"}", "legendFormat": "Peak" }
       ],
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 8 } } },
       "options": { "tooltip": { "mode": "multi" } }
@@ -215,7 +215,7 @@
       "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "sum by(status) (rate(http_server_requests_seconds_count{job=\"localtube\"}[1m]))", "legendFormat": "{{status}}" }
+        { "expr": "sum by(status) (rate(http_server_requests_seconds_count{job=\"modtube\"}[1m]))", "legendFormat": "{{status}}" }
       ],
       "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 8 } } },
       "options": { "tooltip": { "mode": "multi" } }
@@ -226,9 +226,9 @@
       "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "histogram_quantile(0.50, sum by(le)(rate(http_server_requests_seconds_bucket{job=\"localtube\"}[5m])))", "legendFormat": "P50" },
-        { "expr": "histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket{job=\"localtube\"}[5m])))", "legendFormat": "P95" },
-        { "expr": "histogram_quantile(0.99, sum by(le)(rate(http_server_requests_seconds_bucket{job=\"localtube\"}[5m])))", "legendFormat": "P99" }
+        { "expr": "histogram_quantile(0.50, sum by(le)(rate(http_server_requests_seconds_bucket{job=\"modtube\"}[5m])))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket{job=\"modtube\"}[5m])))", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, sum by(le)(rate(http_server_requests_seconds_bucket{job=\"modtube\"}[5m])))", "legendFormat": "P99" }
       ],
       "fieldConfig": {
         "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
@@ -248,10 +248,10 @@
       "gridPos": { "x": 0, "y": 41, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "hikaricp_connections_active{job=\"localtube\"}", "legendFormat": "Active" },
-        { "expr": "hikaricp_connections_idle{job=\"localtube\"}", "legendFormat": "Idle" },
-        { "expr": "hikaricp_connections_pending{job=\"localtube\"}", "legendFormat": "Pending" },
-        { "expr": "hikaricp_connections_max{job=\"localtube\"}", "legendFormat": "Max" }
+        { "expr": "hikaricp_connections_active{job=\"modtube\"}", "legendFormat": "Active" },
+        { "expr": "hikaricp_connections_idle{job=\"modtube\"}", "legendFormat": "Idle" },
+        { "expr": "hikaricp_connections_pending{job=\"modtube\"}", "legendFormat": "Pending" },
+        { "expr": "hikaricp_connections_max{job=\"modtube\"}", "legendFormat": "Max" }
       ],
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 8 } } },
       "options": { "tooltip": { "mode": "multi" } }
@@ -262,8 +262,8 @@
       "gridPos": { "x": 12, "y": 41, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "histogram_quantile(0.95, rate(hikaricp_connections_acquire_seconds_bucket{job=\"localtube\"}[5m]))", "legendFormat": "Acquire P95" },
-        { "expr": "histogram_quantile(0.50, rate(hikaricp_connections_acquire_seconds_bucket{job=\"localtube\"}[5m]))", "legendFormat": "Acquire P50" }
+        { "expr": "histogram_quantile(0.95, rate(hikaricp_connections_acquire_seconds_bucket{job=\"modtube\"}[5m]))", "legendFormat": "Acquire P95" },
+        { "expr": "histogram_quantile(0.50, rate(hikaricp_connections_acquire_seconds_bucket{job=\"modtube\"}[5m]))", "legendFormat": "Acquire P50" }
       ],
       "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 8 } } },
       "options": { "tooltip": { "mode": "multi" } }
@@ -276,9 +276,9 @@
       "gridPos": { "x": 0, "y": 50, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "rate(localtube_uploads_total[5m])", "legendFormat": "Attempts/s" },
-        { "expr": "rate(localtube_uploads_success[5m])", "legendFormat": "Success/s" },
-        { "expr": "rate(localtube_uploads_failed[5m])", "legendFormat": "Failed/s" }
+        { "expr": "rate(modtube_uploads_total[5m])", "legendFormat": "Attempts/s" },
+        { "expr": "rate(modtube_uploads_success[5m])", "legendFormat": "Success/s" },
+        { "expr": "rate(modtube_uploads_failed[5m])", "legendFormat": "Failed/s" }
       ],
       "fieldConfig": {
         "defaults": { "unit": "ops", "custom": { "lineWidth": 2, "fillOpacity": 8 } },
@@ -292,8 +292,8 @@
       "gridPos": { "x": 12, "y": 50, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "rate(localtube_video_views_total[5m])", "legendFormat": "Views/s" },
-        { "expr": "localtube_video_views_total", "legendFormat": "Total Views" }
+        { "expr": "rate(modtube_video_views_total[5m])", "legendFormat": "Views/s" },
+        { "expr": "modtube_video_views_total", "legendFormat": "Total Views" }
       ],
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
       "options": { "tooltip": { "mode": "multi" } }
@@ -304,9 +304,9 @@
       "gridPos": { "x": 0, "y": 58, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "localtube_active_transcodings", "legendFormat": "Active" },
-        { "expr": "rate(localtube_transcoding_success[5m])", "legendFormat": "Success/s" },
-        { "expr": "rate(localtube_transcoding_failed[5m])", "legendFormat": "Failed/s" }
+        { "expr": "modtube_active_transcodings", "legendFormat": "Active" },
+        { "expr": "rate(modtube_transcoding_success[5m])", "legendFormat": "Success/s" },
+        { "expr": "rate(modtube_transcoding_failed[5m])", "legendFormat": "Failed/s" }
       ],
       "fieldConfig": {
         "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 8 } },
@@ -320,9 +320,9 @@
       "gridPos": { "x": 12, "y": 58, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "histogram_quantile(0.50, rate(localtube_transcoding_duration_seconds_bucket[10m]))", "legendFormat": "P50" },
-        { "expr": "histogram_quantile(0.95, rate(localtube_transcoding_duration_seconds_bucket[10m]))", "legendFormat": "P95" },
-        { "expr": "histogram_quantile(0.99, rate(localtube_transcoding_duration_seconds_bucket[10m]))", "legendFormat": "P99" }
+        { "expr": "histogram_quantile(0.50, rate(modtube_transcoding_duration_seconds_bucket[10m]))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, rate(modtube_transcoding_duration_seconds_bucket[10m]))", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, rate(modtube_transcoding_duration_seconds_bucket[10m]))", "legendFormat": "P99" }
       ],
       "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 6 } } },
       "options": { "tooltip": { "mode": "multi" } }
@@ -335,9 +335,9 @@
       "gridPos": { "x": 0, "y": 67, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "expr": "localtube_disk_usage_bytes{type=\"uploads\"}", "legendFormat": "Uploads" },
-        { "expr": "localtube_disk_usage_bytes{type=\"hls\"}", "legendFormat": "HLS Segments" },
-        { "expr": "localtube_disk_usage_bytes{type=\"thumbnails\"}", "legendFormat": "Thumbnails" }
+        { "expr": "modtube_disk_usage_bytes{type=\"uploads\"}", "legendFormat": "Uploads" },
+        { "expr": "modtube_disk_usage_bytes{type=\"hls\"}", "legendFormat": "HLS Segments" },
+        { "expr": "modtube_disk_usage_bytes{type=\"thumbnails\"}", "legendFormat": "Thumbnails" }
       ],
       "fieldConfig": {
         "defaults": {

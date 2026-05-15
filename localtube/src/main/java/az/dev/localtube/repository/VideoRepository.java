@@ -3,6 +3,7 @@ package az.dev.localtube.repository;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -162,6 +163,25 @@ public interface VideoRepository extends JpaRepository<Video, String> {
     List<Video> findByTagsIn(@Param("tags") List<String> tags,
                              @Param("excludeId") String excludeId,
                              @Param("size") int size);
+
+    // ─── Title suggestions ───────────────────────────────────────────────────
+
+    @Query("SELECT v.title FROM Video v WHERE LOWER(v.title) LIKE LOWER(CONCAT('%', :query, '%')) AND v.visibility IN ('PUBLIC', 'UNLISTED') AND v.status = 'READY' ORDER BY v.views DESC")
+    List<String> findTitleSuggestions(@Param("query") String query, Pageable pageable);
+
+    // ─── Shorts ──────────────────────────────────────────────────────────────
+
+    @Query(nativeQuery = true, value = """
+            SELECT v.* FROM videos v
+            WHERE v.is_short = true
+              AND v.status = 'READY'
+              AND v.visibility IN (:visibilities)
+            ORDER BY v.views DESC NULLS LAST
+            LIMIT :size OFFSET :offset
+            """)
+    List<Video> findShortsPaged(@Param("visibilities") List<String> visibilities,
+                                @Param("offset") int offset,
+                                @Param("size") int size);
 
     // ─── Status update ───────────────────────────────────────────────────────
 

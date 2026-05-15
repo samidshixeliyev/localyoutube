@@ -1,9 +1,12 @@
 package az.dev.localtube.controller;
 
-import az.dev.localtube.config.security.LocalTubeUserDetails;
+import az.dev.localtube.config.security.ModTubeUserDetails;
 import az.dev.localtube.dto.request.AdminResetPasswordRequest;
+import az.dev.localtube.dto.request.CreateRoleRequest;
 import az.dev.localtube.dto.request.CreateUserRequest;
+import az.dev.localtube.dto.request.UpdateRoleRequest;
 import az.dev.localtube.dto.request.UpdateUserRequest;
+import az.dev.localtube.dto.response.PermissionResponse;
 import az.dev.localtube.dto.response.RoleResponse;
 import az.dev.localtube.dto.response.UserResponse;
 import az.dev.localtube.service.AdminService;
@@ -58,7 +61,7 @@ public class AdminController {
     @DeleteMapping("/users/{id}")
     public ResponseEntity<Map<String, String>> deleteUser(
             @PathVariable Long id,
-            @AuthenticationPrincipal LocalTubeUserDetails currentUser) {
+            @AuthenticationPrincipal ModTubeUserDetails currentUser) {
         adminService.deleteUser(id, currentUser.getUserId());
         return ResponseEntity.ok(Map.of("message", "User deleted successfully"));
     }
@@ -83,5 +86,28 @@ public class AdminController {
     @GetMapping("/roles/{id}")
     public ResponseEntity<RoleResponse> getRole(@PathVariable Long id) {
         return ResponseEntity.ok(adminService.getRoleById(id));
+    }
+
+    @GetMapping("/permissions")
+    public ResponseEntity<List<PermissionResponse>> getAllPermissions() {
+        return ResponseEntity.ok(adminService.getAllPermissions());
+    }
+
+    @PostMapping("/roles")
+    public ResponseEntity<RoleResponse> createRole(@Valid @RequestBody CreateRoleRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(adminService.createRole(request));
+    }
+
+    @PutMapping("/roles/{id}")
+    public ResponseEntity<RoleResponse> updateRole(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateRoleRequest request) {
+        return ResponseEntity.ok(adminService.updateRole(id, request));
+    }
+
+    @DeleteMapping("/roles/{id}")
+    public ResponseEntity<Map<String, String>> deleteRole(@PathVariable Long id) {
+        adminService.deleteRole(id);
+        return ResponseEntity.ok(Map.of("message", "Role deleted successfully"));
     }
 }

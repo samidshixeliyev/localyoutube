@@ -95,7 +95,7 @@ public class DataSeeder implements ApplicationRunner {
 
         User admin = new User();
         admin.setName("Admin");
-        admin.setSurname("LocalTube");
+        admin.setSurname("ModTube");
         admin.setEmail(adminEmail);
         admin.setPassword(passwordEncoder.encode(adminPassword));
         admin.setRole(superAdminRole);

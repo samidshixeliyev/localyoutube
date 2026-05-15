@@ -1,11 +1,11 @@
 package az.dev.localtube.service;
 
-import az.dev.localtube.config.security.LocalTubeUserDetails;
+import az.dev.localtube.config.security.ModTubeUserDetails;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.dto.VideoDto.*;
 import az.dev.localtube.exception.BadRequestException;
 import az.dev.localtube.exception.InsufficientStorageException;
-import az.dev.localtube.metrics.LocalTubeMetrics;
+import az.dev.localtube.metrics.ModTubeMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -28,7 +28,7 @@ public class UploadService {
 
     private final VideoService videoService;
     private final TranscodingService transcodingService;
-    private final LocalTubeMetrics metrics;
+    private final ModTubeMetrics metrics;
 
     private final Path uploadDir;
     private final Path tempDir;
@@ -47,7 +47,7 @@ public class UploadService {
     public UploadService(
             VideoService videoService,
             TranscodingService transcodingService,
-            LocalTubeMetrics metrics,
+            ModTubeMetrics metrics,
             @Value("${localtube.storage.upload-dir}") String uploadDirPath,
             @Value("${localtube.storage.temp-dir}") String tempDirPath,
             @Value("${localtube.storage.max-file-size}") long maxFileSize,
@@ -71,7 +71,7 @@ public class UploadService {
         log.info("Upload service initialized: upload={}, temp={}", uploadDir, tempDir);
     }
 
-    public InitUploadResponse initUpload(InitUploadRequest request, LocalTubeUserDetails user) 
+    public InitUploadResponse initUpload(InitUploadRequest request, ModTubeUserDetails user) 
             throws IOException {
         metrics.recordUploadAttempt();
 
@@ -230,7 +230,7 @@ public class UploadService {
         }
     }
 
-    public void uploadThumbnail(String videoId, MultipartFile file, LocalTubeUserDetails user) 
+    public void uploadThumbnail(String videoId, MultipartFile file, ModTubeUserDetails user) 
             throws IOException {
         var video = videoService.getVideo(videoId)
                 .orElseThrow(() -> new BadRequestException("Video not found: " + videoId));

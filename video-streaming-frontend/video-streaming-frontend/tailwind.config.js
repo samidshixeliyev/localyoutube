@@ -8,27 +8,46 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Army / military olive palette — replaces the old orange "primary"
         primary: {
-          50: '#fff7ed',
-          100: '#ffedd5',
-          200: '#fed7aa',
-          300: '#fdba74',
-          400: '#fb923c',
-          500: '#f97316',  // Main orange
-          600: '#ea580c',
-          700: '#c2410c',
-          800: '#9a3412',
-          900: '#7c2d12',
+          50:  '#f4f6ef',
+          100: '#e6ebda',
+          200: '#cdd7b5',
+          300: '#aebf87',
+          400: '#8fa45d',
+          500: '#6b7f3a',  // Main olive green
+          600: '#556430',  // Buttons / active states
+          700: '#404c25',
+          800: '#2e361a',
+          900: '#1c2210',
+          950: '#0e1208',
         },
-        accent: {
-          50: '#fefce8',
-          100: '#fef9c3',
-          200: '#fef08a',
-          300: '#fde047',  // Yellow accent
-          400: '#facc15',
-          500: '#eab308',
-          600: '#ca8a04',
+        // Tan / sand accent — from the right half of the MOD|TUBE patch
+        tan: {
+          50:  '#faf8f0',
+          100: '#f2edda',
+          200: '#e5dab5',
+          300: '#d4c288',
+          400: '#c4aa62',
+          500: '#b59448',
+          600: '#9a7b38',
+          700: '#7a602c',
+          800: '#5e4a22',
+          900: '#3d3016',
+        },
+        // Dark army backgrounds
+        army: {
+          900: '#181f11',
+          800: '#1e2618',
+          700: '#262f1e',
+          600: '#2e3a24',
+          500: '#3a4a2e',
         }
+      },
+      fontFamily: {
+        // system-only, no CDN fonts
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+        mono: ['"Courier New"', 'Courier', 'monospace'],
       },
     },
   },

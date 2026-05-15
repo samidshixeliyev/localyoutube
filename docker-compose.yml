@@ -1,10 +1,10 @@
 services:
-  localyoutube:
+  modtube:
     build:
       context: .
       dockerfile: Dockerfile
-    image: localyoutube:latest
-    container_name: localyoutube
+    image: modtube:latest
+    container_name: modtube
     restart: unless-stopped
     ports:
       - "4000:8080"   # Spring Boot — frontend + API
@@ -13,16 +13,16 @@ services:
       # PostgreSQL (internal)
       PGDATA: /var/lib/postgresql/data
       PGUSER: postgres
-      PGDB: localtube
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/localtube
+      PGDB: modtube
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/modtube
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: ""
       # JWT
       JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-in-production-min-32-chars}
-      # LocalTube admin seed
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@localtube.local}
+      # ModTube admin seed
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@modtube.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
-      # AO IDP
+      # AO IDP (set these in .env or override at deploy time)
       IDP_BASE_URL: ${IDP_BASE_URL:-https://13.61.159.58}
       IDP_CLIENT_ID: ${IDP_CLIENT_ID:-EFxbQK-ekDX1OkWov51cjg}
       IDP_REDIRECT_URI: ${IDP_REDIRECT_URI:-http://13.61.159.58:4000/}
@@ -35,21 +35,22 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_HTTP_PORT: "3000"
-      # Allow embedding dashboards in the admin panel iframe
       GF_SECURITY_ALLOW_EMBEDDING: "true"
       GF_SECURITY_COOKIE_SAMESITE: "none"
       GF_SECURITY_COOKIE_SECURE: "false"
-      # Anonymous read-only viewer so panels load without login
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
     volumes:
-      - /opt/newstube/videos:/data
-      - /opt/newstube/pgdata:/var/lib/postgresql/data
-      - /opt/newstube/grafana:/var/lib/grafana
-      - /opt/newstube/prometheus:/var/lib/prometheus
+      # ── All persistent data under a single base path ──────────────
+      # Change DATA_ROOT in .env or on the command-line to relocate
+      # everything at once:   DATA_ROOT=/mnt/data docker compose up -d
+      - ${DATA_ROOT:-/opt/modtube/data}/videos:/data
+      - ${DATA_ROOT:-/opt/modtube/data}/pgdata:/var/lib/postgresql/data
+      - ${DATA_ROOT:-/opt/modtube/data}/grafana:/var/lib/grafana
+      - ${DATA_ROOT:-/opt/modtube/data}/prometheus:/var/lib/prometheus
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]  # internal port stays 8080
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 5

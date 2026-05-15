@@ -2,10 +2,10 @@
 apiVersion: 1
 
 providers:
-  - name: 'LocalTube Dashboards'
+  - name: 'ModTube Dashboards'
     orgId: 1
-    folder: 'LocalTube'
-    folderUid: 'localtube'
+    folder: 'ModTube'
+    folderUid: 'modtube'
     type: file
     disableDeletion: false
     editable: true

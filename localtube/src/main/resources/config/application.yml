@@ -6,12 +6,12 @@ server:
 
 spring:
   application:
-    name: localtube
+    name: modtube
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/localtube}
-    username: ${SPRING_DATASOURCE_USERNAME:localtube}
-    password: ${SPRING_DATASOURCE_PASSWORD:localtube123}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/modtube}
+    username: ${SPRING_DATASOURCE_USERNAME:modtube}
+    password: ${SPRING_DATASOURCE_PASSWORD:modtube123}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -41,7 +41,7 @@ spring:
 jwt:
   secret: ${JWT_SECRET:4gTduyxJahQatgIkxwGErvADeIjfdulxI98B8bAGUOKStnBVTyngXfU5jM1rMbVR}
 
-localtube:
+modtube:
   storage:
     upload-dir: ${UPLOAD_DIR:/data/uploads}
     hls-dir: ${HLS_DIR:/data/hls}
@@ -65,13 +65,13 @@ localtube:
     logout-redirect-uri: ${IDP_LOGOUT_REDIRECT_URI:http://13.61.159.58:4000/logged_out}
 
   admin:
-    email: ${ADMIN_EMAIL:admin@localtube.local}
+    email: ${ADMIN_EMAIL:admin@modtube.local}
     password: ${ADMIN_PASSWORD:changeme}
 
 logging:
   level:
     root: INFO
-    az.dev.localtube: DEBUG
+    az.dev.modtube: DEBUG
 
 management:
   endpoints:

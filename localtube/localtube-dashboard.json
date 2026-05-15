@@ -460,7 +460,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "localtube_uploads_success_total",
+          "expr": "modtube_uploads_success_total",
           "legendFormat": "Uploads",
           "refId": "A"
         }
@@ -498,7 +498,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "localtube_active_transcodings",
+          "expr": "modtube_active_transcodings",
           "legendFormat": "Active",
           "refId": "A"
         }
@@ -529,7 +529,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "localtube_video_views_total",
+          "expr": "modtube_video_views_total",
           "legendFormat": "Views",
           "refId": "A"
         }
@@ -560,7 +560,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(localtube_disk_usage_bytes)",
+          "expr": "sum(modtube_disk_usage_bytes)",
           "legendFormat": "Storage",
           "refId": "A"
         }
@@ -599,7 +599,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(localtube_uploads_success_total[10m]) * 60",
+          "expr": "rate(modtube_uploads_success_total[10m]) * 60",
           "legendFormat": "Uploads / min",
           "refId": "A"
         }
@@ -638,7 +638,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "rate(localtube_video_views_total[5m]) * 60",
+          "expr": "rate(modtube_video_views_total[5m]) * 60",
           "legendFormat": "Views / min",
           "refId": "A"
         }
@@ -677,7 +677,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "localtube_disk_usage_bytes",
+          "expr": "modtube_disk_usage_bytes",
           "legendFormat": "{{type}}",
           "refId": "A"
         }
@@ -688,13 +688,13 @@
   "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["localtube"],
+  "tags": ["modtube"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "",
-  "title": "LocalTube Dashboard",
-  "uid": "localtube-main",
+  "title": "ModTube Dashboard",
+  "uid": "modtube-main",
   "version": 3,
   "weekStart": ""
 }

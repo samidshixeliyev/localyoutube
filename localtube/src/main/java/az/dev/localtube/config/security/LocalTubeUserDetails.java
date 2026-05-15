@@ -10,12 +10,12 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Getter
-public class LocalTubeUserDetails implements LocalTubePrincipal {
+public class ModTubeUserDetails implements ModTubePrincipal {
 
     private final User user;
     private final Collection<? extends GrantedAuthority> authorities;
 
-    public LocalTubeUserDetails(User user) {
+    public ModTubeUserDetails(User user) {
         this.user = user;
         this.authorities = buildAuthorities(user);
     }
@@ -53,7 +53,7 @@ public class LocalTubeUserDetails implements LocalTubePrincipal {
     @Override
     public boolean isEnabled() { return true; }
 
-    // LocalTubePrincipal implementation
+    // ModTubePrincipal implementation
     @Override
     public String getEmail() { return user.getEmail(); }
 

@@ -298,4 +298,21 @@ public class AdminService {
                 .createdAt(role.getCreatedAt())
                 .build();
     }
+
+    private Set<Permission> resolvePermissions(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return new HashSet<>();
+        return ids.stream()
+                .map(pid -> permissionRepository.findById(pid)
+                        .orElseThrow(() -> new BadRequestException("Permission not found: " + pid)))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private PermissionResponse toPermissionResponse(Permission p) {
+        return PermissionResponse.builder()
+                .id(p.getId())
+                .name(p.getName())
+                .description(p.getDescription())
+                .permissionType(p.getPermissionType())
+                .build();
+    }
 }

@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -160,6 +162,17 @@ public class VideoService {
 
     public List<Video> getSuggestionsByTags(List<String> tags, String excludeVideoId, int size) {
         return videoRepository.findByTags(tags, excludeVideoId, size);
+    }
+
+    public List<String> getTitleSuggestions(String query, int size) {
+        return videoRepository.findTitleSuggestions(query, PageRequest.of(0, size));
+    }
+
+    public List<Video> getShorts(int page, int size, String userEmail) {
+        List<String> visibilities = (userEmail != null)
+                ? List.of("PUBLIC", "UNLISTED")
+                : List.of("PUBLIC");
+        return videoRepository.findShortsPaged(visibilities, page * size, size);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

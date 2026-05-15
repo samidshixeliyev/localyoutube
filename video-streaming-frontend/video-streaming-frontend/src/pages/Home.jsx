@@ -1,62 +1,263 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import videoService from '../services/videoService';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { getVideos, getShorts } from '../services/api';
 import Navbar from '../components/Navbar';
-import { Play, Eye, Clock, Loader2 } from 'lucide-react';
+import { Play, Eye, Clock, Loader2, ChevronRight, Zap, Film, TrendingUp, Star } from 'lucide-react';
 
+/* ─── helpers ─────────────────────────────────────────────────── */
+const fmtViews = (v) => {
+  if (!v) return '0';
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)     return `${(v / 1_000).toFixed(1)}K`;
+  return `${v}`;
+};
+
+const fmtDur = (s) => {
+  if (!s) return '';
+  const m = Math.floor(s / 60);
+  const sec = (s % 60).toString().padStart(2, '0');
+  return `${m}:${sec}`;
+};
+
+const fmtAge = (ts) => {
+  if (!ts) return '';
+  const d = Math.floor((Date.now() - new Date(ts)) / 86400000);
+  if (d === 0)   return 'Bu gün';
+  if (d === 1)   return 'Dünən';
+  if (d < 7)     return `${d} gün əvvəl`;
+  if (d < 30)    return `${Math.floor(d / 7)} həftə əvvəl`;
+  if (d < 365)   return `${Math.floor(d / 30)} ay əvvəl`;
+  return `${Math.floor(d / 365)} il əvvəl`;
+};
+
+/* ─── VideoCard ───────────────────────────────────────────────── */
+function VideoCard({ video }) {
+  return (
+    <Link to={`/video/${video.id}`} className="group video-card block">
+      <div className="army-card overflow-hidden hover:shadow-md dark:hover:border-primary-700/50 transition-all duration-200">
+        {/* Thumbnail */}
+        <div className="relative aspect-video bg-army-900 overflow-hidden">
+          {video.thumbnailUrl ? (
+            <img
+              src={video.thumbnailUrl}
+              alt={video.title}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-army-800">
+              <Play className="h-10 w-10 text-primary-600/50" />
+            </div>
+          )}
+          {video.duration && (
+            <div className="absolute bottom-1.5 right-1.5 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded font-mono">
+              {fmtDur(video.duration)}
+            </div>
+          )}
+          {video.isShort && (
+            <div className="absolute top-1.5 left-1.5 bg-primary-600 text-white text-xs px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5">
+              <Zap className="h-3 w-3" />Short
+            </div>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="p-3">
+          <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-2
+                         group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors leading-snug mb-1.5">
+            {video.title}
+          </h3>
+          {video.uploaderName && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate mb-1">{video.uploaderName}</p>
+          )}
+          <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+            <span className="flex items-center gap-0.5"><Eye className="h-3 w-3" />{fmtViews(video.views)}</span>
+            <span>•</span>
+            <span>{fmtAge(video.uploadedAt)}</span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+/* ─── ShortCard ───────────────────────────────────────────────── */
+function ShortCard({ video }) {
+  return (
+    <Link to={`/video/${video.id}`} className="group flex-shrink-0 w-36">
+      <div className="relative overflow-hidden rounded-xl bg-army-900 border border-army-700 group-hover:border-primary-600/50 transition-all duration-200"
+           style={{ aspectRatio: '9/16' }}>
+        {video.thumbnailUrl ? (
+          <img src={video.thumbnailUrl} alt={video.title}
+               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Zap className="h-8 w-8 text-primary-500/50" />
+          </div>
+        )}
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+        <div className="absolute bottom-2 left-2 right-2">
+          <p className="text-white text-xs font-medium line-clamp-2 leading-tight">{video.title}</p>
+          <p className="text-white/60 text-xs mt-0.5 flex items-center gap-0.5">
+            <Eye className="h-2.5 w-2.5" />{fmtViews(video.views)}
+          </p>
+        </div>
+        {/* Play overlay */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="bg-primary-600/80 rounded-full p-2.5">
+            <Play className="h-5 w-5 text-white fill-white" />
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+/* ─── SectionHeader ───────────────────────────────────────────── */
+function SectionHeader({ icon: Icon, title, to, color = 'text-primary-600 dark:text-primary-400' }) {
+  const navigate = useNavigate();
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-2">
+        <div className="w-1 h-6 bg-primary-600 rounded-full" />
+        <Icon className={`h-5 w-5 ${color}`} />
+        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 tracking-tight">{title}</h2>
+      </div>
+      {to && (
+        <button onClick={() => navigate(to)}
+          className="flex items-center gap-1 text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors">
+          Hamısına bax <ChevronRight className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─── FeaturedBanner ──────────────────────────────────────────── */
+function FeaturedBanner({ video }) {
+  if (!video) return null;
+  return (
+    <Link to={`/video/${video.id}`} className="group block relative overflow-hidden rounded-2xl">
+      <div className="aspect-[21/9] bg-army-900">
+        {video.thumbnailUrl ? (
+          <img src={video.thumbnailUrl} alt={video.title}
+               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-army-800 to-primary-900">
+            <Film className="h-20 w-20 text-primary-600/30" />
+          </div>
+        )}
+      </div>
+      {/* Gradient */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+      {/* Label */}
+      <div className="absolute top-4 left-4">
+        <span className="inline-flex items-center gap-1.5 bg-primary-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+          <Star className="h-3 w-3" /> Seçilmiş
+        </span>
+      </div>
+      {/* Info */}
+      <div className="absolute bottom-0 left-0 right-0 p-6">
+        <h2 className="text-white text-xl sm:text-2xl font-black line-clamp-2 mb-2 drop-shadow-lg">{video.title}</h2>
+        <div className="flex items-center gap-3 text-white/70 text-sm">
+          {video.uploaderName && <span>{video.uploaderName}</span>}
+          <span className="flex items-center gap-1"><Eye className="h-3.5 w-3.5" />{fmtViews(video.views)} baxış</span>
+          {video.duration && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{fmtDur(video.duration)}</span>}
+        </div>
+      </div>
+      {/* Play button */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="bg-primary-600/90 rounded-full p-5 shadow-2xl">
+          <Play className="h-8 w-8 text-white fill-white" />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+/* ─── StatBadge ───────────────────────────────────────────────── */
+function StatBadge({ icon: Icon, label, value, color }) {
+  return (
+    <div className={`army-card px-4 py-3 flex items-center gap-3`}>
+      <div className={`p-2 rounded-lg ${color}`}>
+        <Icon className="h-5 w-5 text-white" />
+      </div>
+      <div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{label}</p>
+        <p className="text-xl font-black text-gray-900 dark:text-gray-100">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Home page ───────────────────────────────────────────────── */
 const Home = () => {
   const [videos, setVideos] = useState([]);
+  const [shorts, setShorts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  useEffect(() => { loadVideos(); }, [page]);
+  const PAGE_SIZE = 12;
 
-  const loadVideos = async () => {
+  const loadVideos = useCallback(async (p) => {
     try {
-      setLoading(true);
-      const data = await videoService.getPublicVideos(page, 12);
-      if (page === 0) setVideos(data);
+      p === 0 ? setLoading(true) : setLoadingMore(true);
+      const res = await getVideos(p, PAGE_SIZE);
+      const data = res.data?.content ?? res.data ?? [];
+      if (p === 0) setVideos(data);
       else setVideos(prev => [...prev, ...data]);
-      setHasMore(data.length === 12);
+      setHasMore(data.length === PAGE_SIZE);
       setError('');
-    } catch (err) {
-      setError('Failed to load videos. Please try again later.');
+    } catch {
+      setError('Videolar yüklənə bilmədi. Yenidən cəhd edin.');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
+  }, []);
+
+  useEffect(() => { loadVideos(0); }, [loadVideos]);
+
+  useEffect(() => {
+    getShorts(0, 10)
+      .then(r => setShorts(r.data?.content ?? r.data ?? []))
+      .catch(() => {});
+  }, []);
+
+  const handleLoadMore = () => {
+    const next = page + 1;
+    setPage(next);
+    loadVideos(next);
   };
 
-  const formatViews = (v) => {
-    if (!v) return '0 views';
-    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M views`;
-    if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K views`;
-    return `${v} views`;
-  };
+  // Separate shorts from regular for the main grid
+  const regularVideos = videos.filter(v => !v.isShort);
+  const featured = regularVideos[0] || null;
+  const gridVideos = regularVideos.slice(featured ? 1 : 0);
 
-  const formatDuration = (s) => {
-    if (!s) return '0:00';
-    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
-  };
-
-  const formatDate = (ts) => {
-    if (!ts) return '';
-    const d = Math.floor((Date.now() - new Date(ts)) / 86400000);
-    if (d === 0) return 'Today';
-    if (d === 1) return 'Yesterday';
-    if (d < 7) return `${d} days ago`;
-    if (d < 30) return `${Math.floor(d / 7)} weeks ago`;
-    if (d < 365) return `${Math.floor(d / 30)} months ago`;
-    return `${Math.floor(d / 365)} years ago`;
-  };
-
-  if (loading && page === 0) {
+  /* ── Loading skeleton ── */
+  if (loading) {
     return (
       <>
         <Navbar />
-        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-          <Loader2 className="h-12 w-12 animate-spin text-primary-600" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-pulse space-y-8">
+          {/* Featured skeleton */}
+          <div className="rounded-2xl bg-army-800 dark:bg-army-700" style={{ aspectRatio: '21/9' }} />
+          {/* Grid skeleton */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="army-card overflow-hidden">
+                <div className="aspect-video bg-army-700 dark:bg-army-600" />
+                <div className="p-3 space-y-2">
+                  <div className="h-3 bg-army-700 dark:bg-army-600 rounded w-3/4" />
+                  <div className="h-3 bg-army-700 dark:bg-army-600 rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </>
     );
@@ -65,95 +266,82 @@ const Home = () => {
   return (
     <>
       <Navbar />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">
-          Videoları kəşf et
-        </h1>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
 
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
-            <p className="text-red-600 dark:text-red-400">{error}</p>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center gap-3">
+            <div className="h-2 w-2 bg-red-500 rounded-full flex-shrink-0" />
+            <p className="text-red-700 dark:text-red-400 text-sm">{error}</p>
+            <button onClick={() => loadVideos(0)} className="ml-auto text-xs text-red-600 dark:text-red-400 underline font-medium">
+              Yenidən cəhd et
+            </button>
           </div>
         )}
 
-        {videos.length === 0 && !loading ? (
-          <div className="text-center py-12">
-            <Play className="h-16 w-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
+        {/* ── Stats bar ── */}
+        {videos.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatBadge icon={Film}     label="Ümumi video"  value={videos.length + (hasMore ? '+' : '')} color="bg-primary-600" />
+            <StatBadge icon={Zap}      label="Shorts"       value={shorts.length}                        color="bg-tan-500" />
+            <StatBadge icon={Eye}      label="Baxış (cəmi)" value={fmtViews(videos.reduce((a, v) => a + (v.views || 0), 0))} color="bg-primary-700" />
+            <StatBadge icon={TrendingUp} label="Bu həftə"   value={videos.filter(v => {
+              const d = Math.floor((Date.now() - new Date(v.uploadedAt)) / 86400000);
+              return d <= 7;
+            }).length}                                                                                    color="bg-army-600" />
+          </div>
+        )}
+
+        {/* ── Featured banner (most recent video) ── */}
+        {featured && <FeaturedBanner video={featured} />}
+
+        {/* ── Shorts row ── */}
+        {shorts.length > 0 && (
+          <section>
+            <SectionHeader icon={Zap} title="Shorts" to="/shorts" color="text-tan-500 dark:text-tan-400" />
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+              {shorts.map(v => <ShortCard key={v.id} video={v} />)}
+              {/* "Hamısı" card */}
+              <Link to="/shorts"
+                className="flex-shrink-0 w-36 rounded-xl border-2 border-dashed border-primary-600/30 dark:border-primary-700/50
+                           flex flex-col items-center justify-center gap-2 text-primary-600 dark:text-primary-400
+                           hover:border-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
+                style={{ aspectRatio: '9/16' }}>
+                <ChevronRight className="h-6 w-6" />
+                <span className="text-xs font-bold">Hamısı</span>
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {/* ── All videos grid ── */}
+        {gridVideos.length === 0 && !featured ? (
+          <div className="text-center py-20">
+            <Film className="h-16 w-16 text-gray-300 dark:text-army-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Hələki video yoxdur</h3>
-            <p className="text-gray-600 dark:text-gray-400">İlk videonu sən yüklə!</p>
+            <p className="text-gray-500 dark:text-gray-400">İlk videonu sən yüklə!</p>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {videos.map((video) => (
-                <Link key={video.id} to={`/video/${video.id}`} className="group">
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none dark:border dark:border-gray-700 overflow-hidden hover:shadow-xl dark:hover:border-gray-600 transition-all duration-300">
-                    {/* Thumbnail */}
-                    <div className="relative aspect-video bg-gray-900 overflow-hidden">
-                      {video.thumbnailUrl ? (
-                        <img
-                          src={video.thumbnailUrl}
-                          alt={video.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Play className="h-12 w-12 text-gray-600" />
-                        </div>
-                      )}
-                      {video.duration && (
-                        <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          <span>{formatDuration(video.duration)}</span>
-                        </div>
-                      )}
-                      {video.status !== 'ready' && (
-                        <div className="absolute top-2 left-2 bg-yellow-500 text-white text-xs px-2 py-1 rounded font-medium">
-                          {video.status === 'processing' ? 'Processing…' : 'Uploading…'}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Info */}
-                    <div className="p-4">
-                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                        {video.title}
-                      </h3>
-                      {video.uploaderName && (
-                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          <span className="truncate">{video.uploaderName}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <Eye className="h-3 w-3" />
-                          <span>{formatViews(video.views)}</span>
-                        </div>
-                        <span>•</span>
-                        <span>{formatDate(video.uploadedAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
+          <section>
+            <SectionHeader icon={Film} title="Bütün videolar" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {gridVideos.map(v => <VideoCard key={v.id} video={v} />)}
             </div>
 
             {hasMore && (
               <div className="text-center mt-8">
                 <button
-                  onClick={() => setPage(p => p + 1)}
-                  disabled={loading}
-                  className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? (
-                    <span className="flex items-center gap-2 justify-center">
-                      <Loader2 className="h-5 w-5 animate-spin" /> Yüklənir...
-                    </span>
-                  ) : 'Load More'}
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="inline-flex items-center gap-2 px-8 py-3 bg-primary-600 text-white text-sm font-semibold
+                             rounded-full hover:bg-primary-700 active:bg-primary-800
+                             disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg">
+                  {loadingMore
+                    ? <><Loader2 className="h-4 w-4 animate-spin" />Yüklənir…</>
+                    : 'Daha çox yüklə'}
                 </button>
               </div>
             )}
-          </>
+          </section>
         )}
       </div>
     </>

@@ -1,7 +1,7 @@
 package az.dev.localtube.service;
 
 import az.dev.localtube.domain.VideoStatus;
-import az.dev.localtube.metrics.LocalTubeMetrics;
+import az.dev.localtube.metrics.ModTubeMetrics;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
@@ -33,7 +33,7 @@ public class TranscodingService {
             Pattern.compile("time=(\\d+):(\\d+):(\\d+\\.\\d+)");
 
     private final VideoService videoService;
-    private final LocalTubeMetrics metrics;
+    private final ModTubeMetrics metrics;
     private final Path hlsDir;
     private final Path thumbnailDir;
     private final int segmentDuration;
@@ -48,7 +48,7 @@ public class TranscodingService {
     }
 
     public TranscodingService(VideoService videoService,
-                              LocalTubeMetrics metrics,
+                              ModTubeMetrics metrics,
                               @Value("${localtube.storage.hls-dir}") String hlsDirPath,
                               @Value("${localtube.storage.thumbnail-dir}") String thumbnailDirPath,
                               @Value("${localtube.transcoding.segment-duration}") int segmentDuration,

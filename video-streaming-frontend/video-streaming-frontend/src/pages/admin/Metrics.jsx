@@ -187,10 +187,10 @@ export default function Metrics() {
           instant('(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100'),
           instant('max((1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"}) * 100)'),
           instant('sum(rate(http_server_requests_seconds_count[5m]))'),
-          instant('localtube_uploads_success_total'),
-          instant('localtube_active_transcodings'),
-          instant('localtube_video_views_total'),
-          instant('sum(localtube_disk_usage_bytes)'),
+          instant('modtube_uploads_success_total'),
+          instant('modtube_active_transcodings'),
+          instant('modtube_video_views_total'),
+          instant('sum(modtube_disk_usage_bytes)'),
         ]);
       setStats({
         cpu:           scalar(cpu),
@@ -229,10 +229,10 @@ export default function Metrics() {
           range('histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket[5m])))', S, E, T),
           range('sum(jvm_memory_used_bytes{area="heap"})', S, E, T),
           range('sum(jvm_memory_max_bytes{area="heap"})', S, E, T),
-          range('rate(localtube_uploads_success_total[10m]) * 60', S, E, T),
-          range('rate(localtube_video_views_total[5m]) * 60', S, E, T),
-          range('localtube_disk_usage_bytes', S, E, T),
-          range('localtube_active_transcodings', S, E, T),
+          range('rate(modtube_uploads_success_total[10m]) * 60', S, E, T),
+          range('rate(modtube_video_views_total[5m]) * 60', S, E, T),
+          range('modtube_disk_usage_bytes', S, E, T),
+          range('modtube_active_transcodings', S, E, T),
         ]);
 
       // merge heapUsed + heapMax into one series
@@ -315,7 +315,7 @@ export default function Metrics() {
                 className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
                 <RefreshCw className="w-4 h-4" />
               </button>
-              <a href={`${GRAFANA_BASE}/d/localtube-main`} target="_blank" rel="noreferrer"
+              <a href={`${GRAFANA_BASE}/d/modtube-main`} target="_blank" rel="noreferrer"
                 className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
                 <ExternalLink className="w-4 h-4" /> Grafana
               </a>
@@ -331,11 +331,11 @@ export default function Metrics() {
                 <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-1">
                   Prometheus runs inside the container on port 9090. Run{' '}
                   <code className="bg-red-100 dark:bg-red-900/40 px-1 rounded font-mono">
-                    docker exec localyoutube supervisorctl status
+                    docker exec modtube supervisorctl status
                   </code>{' '}
                   on the VPS to check its status, or{' '}
                   <code className="bg-red-100 dark:bg-red-900/40 px-1 rounded font-mono">
-                    docker exec localyoutube tail -30 /var/log/supervisor/prometheus.log
+                    docker exec modtube tail -30 /var/log/supervisor/prometheus.log
                   </code>{' '}
                   to read its logs.
                 </p>

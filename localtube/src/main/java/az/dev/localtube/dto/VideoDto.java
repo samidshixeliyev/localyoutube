@@ -1,6 +1,7 @@
 package az.dev.localtube.dto;
 
 import az.dev.localtube.domain.VideoStatus;
+import az.dev.localtube.domain.VideoVisibility;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -164,11 +165,17 @@ public class VideoDto {
         
         // Tags
         private List<String> tags;
-        
+
+        // Visibility
+        @Builder.Default
+        private VideoVisibility visibility = VideoVisibility.PUBLIC;
+        private List<String> allowedEmails;
+        private boolean isShort;
+
         // Timestamps
         @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
         private LocalDateTime uploadedAt;
-        
+
         @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
         private LocalDateTime processedAt;
     }

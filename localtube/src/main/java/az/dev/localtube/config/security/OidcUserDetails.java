@@ -10,7 +10,7 @@ import java.util.List;
  * Principal for users authenticated via the AO IDP (OIDC / RS256 JWT).
  * These users have no local DB record — userId is always null.
  */
-public class OidcUserDetails implements LocalTubePrincipal {
+public class OidcUserDetails implements ModTubePrincipal {
 
     private final String email;
     private final String displayName;

@@ -1,4 +1,4 @@
-# LocalTube - Video Streaming Platform Frontend
+# ModTube - Video Streaming Platform Frontend
 
 A modern video streaming platform built with React, Vite, and Tailwind CSS with JWT authentication.
 

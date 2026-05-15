@@ -7,7 +7,7 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9100']
 
-  - job_name: 'localtube'
+  - job_name: 'modtube'
     metrics_path: '/actuator/prometheus'
     scrape_interval: 10s
     static_configs:

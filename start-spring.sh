@@ -10,5 +10,5 @@ echo "[spring] PostgreSQL ready. Starting Spring Boot..."
 exec /opt/java/bin/java \
     -Xmx512m \
     -Djava.security.egd=file:/dev/./urandom \
-    -jar /app/localtube.jar \
+    -jar /app/modtube.jar \
     --spring.config.location=classpath:/config/application.yml

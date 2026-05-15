@@ -1,6 +1,6 @@
 #!/bin/bash
 #═══════════════════════════════════════════════════════════════════════════════
-# LocalTube - Complete Deployment Script
+# ModTube - Complete Deployment Script
 # Builds and runs the entire stack with Docker
 #═══════════════════════════════════════════════════════════════════════════════
 set -e
@@ -17,7 +17,7 @@ NC='\033[0m'
 
 echo -e "${BLUE}"
 echo "═══════════════════════════════════════════════════════════════════"
-echo "  LocalTube - Video Streaming Platform Deployment"
+echo "  ModTube - Video Streaming Platform Deployment"
 echo "═══════════════════════════════════════════════════════════════════"
 echo -e "${NC}"
 
@@ -46,7 +46,7 @@ echo -e "${YELLOW}[2/6] Setting up environment...${NC}"
 if [ ! -f ".env" ]; then
     cat > .env << 'EOF'
 # ═══════════════════════════════════════════════════════════════════════════════
-# LocalTube Environment Configuration
+# ModTube Environment Configuration
 # These match application.yml environment variables exactly
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -101,10 +101,10 @@ services:
   # ═══════════════════════════════════════════════════════════════════════════
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: localtube-elasticsearch
+    container_name: modtube-elasticsearch
     environment:
       - node.name=elasticsearch
-      - cluster.name=localtube-cluster
+      - cluster.name=modtube-cluster
       - discovery.type=single-node
       - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
@@ -118,7 +118,7 @@ services:
     ports:
       - "9200:9200"
     networks:
-      - localtube-network
+      - modtube-network
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
@@ -131,7 +131,7 @@ services:
   # ═══════════════════════════════════════════════════════════════════════════
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
-    container_name: localtube-kibana
+    container_name: modtube-kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - xpack.security.enabled=false
@@ -139,7 +139,7 @@ services:
     ports:
       - "5601:5601"
     networks:
-      - localtube-network
+      - modtube-network
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -149,7 +149,7 @@ services:
   # ═══════════════════════════════════════════════════════════════════════════
   prometheus:
     image: prom/prometheus:v2.48.0
-    container_name: localtube-prometheus
+    container_name: modtube-prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -160,14 +160,14 @@ services:
     ports:
       - "9090:9090"
     networks:
-      - localtube-network
+      - modtube-network
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Grafana
   # ═══════════════════════════════════════════════════════════════════════════
   grafana:
     image: grafana/grafana:10.2.2
-    container_name: localtube-grafana
+    container_name: modtube-grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
@@ -178,18 +178,18 @@ services:
     ports:
       - "3000:3000"
     networks:
-      - localtube-network
+      - modtube-network
     depends_on:
       - prometheus
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # LocalTube Backend
+  # ModTube Backend
   # ═══════════════════════════════════════════════════════════════════════════
-  localtube-backend:
+  modtube-backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: localtube-backend
+    container_name: modtube-backend
     env_file:
       - .env
     ports:
@@ -200,7 +200,7 @@ services:
       - video_temp:/data/temp
       - video_thumbnails:/data/thumbnails
     networks:
-      - localtube-network
+      - modtube-network
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -209,7 +209,7 @@ services:
     restart: unless-stopped
 
 networks:
-  localtube-network:
+  modtube-network:
     driver: bridge
 
 volumes:
@@ -235,11 +235,11 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'localtube-backend'
+  - job_name: 'modtube-backend'
     metrics_path: '/actuator/prometheus'
     scrape_interval: 10s
     static_configs:
-      - targets: ['localtube-backend:8080']
+      - targets: ['modtube-backend:8080']
 EOF
 
 #───────────────────────────────────────────────────────────────────────────────
@@ -272,7 +272,7 @@ EOF
 #───────────────────────────────────────────────────────────────────────────────
 cat > Dockerfile << 'EOF'
 # ═══════════════════════════════════════════════════════════════════════════════
-# LocalTube Backend Dockerfile
+# ModTube Backend Dockerfile
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Stage 1: Build
@@ -290,19 +290,19 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create app user
-RUN groupadd -r localtube && useradd -r -g localtube localtube
+RUN groupadd -r modtube && useradd -r -g modtube modtube
 
 WORKDIR /app
 
 # Create directories
 RUN mkdir -p /data/uploads /data/hls /data/temp /data/thumbnails && \
-    chown -R localtube:localtube /data
+    chown -R modtube:modtube /data
 
 # Copy jar
 COPY --from=builder /app/build/libs/*.jar app.jar
-RUN chown localtube:localtube app.jar
+RUN chown modtube:modtube app.jar
 
-USER localtube
+USER modtube
 
 EXPOSE 8080
 
@@ -343,7 +343,7 @@ docker compose up -d
 echo ""
 echo -e "${GREEN}"
 echo "═══════════════════════════════════════════════════════════════════"
-echo "  ✓ LocalTube Deployed Successfully!"
+echo "  ✓ ModTube Deployed Successfully!"
 echo "═══════════════════════════════════════════════════════════════════"
 echo -e "${NC}"
 echo ""
@@ -355,7 +355,7 @@ echo "  • Prometheus:    http://localhost:9090"
 echo "  • Grafana:       http://localhost:3000 (${GRAFANA_ADMIN_USER:-admin}/${GRAFANA_ADMIN_PASSWORD:-admin123})"
 echo ""
 echo "Commands:"
-echo "  • View logs:     docker compose logs -f localtube-backend"
+echo "  • View logs:     docker compose logs -f modtube-backend"
 echo "  • Stop:          docker compose down"
 echo "  • Restart:       docker compose restart"
 echo ""

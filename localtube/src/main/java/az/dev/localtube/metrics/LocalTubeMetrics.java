@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 /**
- * Custom Prometheus metrics for LocalTube.
+ * Custom Prometheus metrics for ModTube.
  *
  * Metrics exposed at /actuator/prometheus:
  *   localtube_uploads_total              — counter, completed uploads
@@ -29,7 +29,7 @@ import java.util.stream.Stream;
  */
 @Slf4j
 @Component
-public class LocalTubeMetrics {
+public class ModTubeMetrics {
 
     private final MeterRegistry registry;
     private final Path uploadDir;
@@ -55,7 +55,7 @@ public class LocalTubeMetrics {
     private final AtomicLong diskUsageHls        = new AtomicLong(0);
     private final AtomicLong diskUsageThumbnails = new AtomicLong(0);
 
-    public LocalTubeMetrics(
+    public ModTubeMetrics(
             MeterRegistry registry,
             @Value("${localtube.storage.upload-dir}")    String uploadDirPath,
             @Value("${localtube.storage.hls-dir}")       String hlsDirPath,
@@ -99,7 +99,7 @@ public class LocalTubeMetrics {
         Gauge.builder("localtube_disk_usage_bytes", diskUsageThumbnails, AtomicLong::get)
                 .description("Bytes in thumbnails dir").tag("type", "thumbnails").register(registry);
 
-        log.info("[Metrics] LocalTube Micrometer metrics registered");
+        log.info("[Metrics] ModTube Micrometer metrics registered");
     }
 
     // ── Scheduled disk scanner (runs every 60 s) ──────────────────────────────

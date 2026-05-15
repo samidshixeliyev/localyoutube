@@ -28,7 +28,7 @@ public class OpenAPIConfig {
                                 .name("Apache 2.0")
                                 .url("https://www.apache.org/licenses/LICENSE-2.0.html")))
                 .servers(List.of(
-                        new Server().url("/").description("LocalTube API")
+                        new Server().url("/").description("ModTube API")
                 ));
     }
 }

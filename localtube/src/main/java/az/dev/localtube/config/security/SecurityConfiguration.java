@@ -52,8 +52,9 @@ public class SecurityConfiguration {
                         .requestMatchers("/assets/**", "/static/**").permitAll()
                         // SPA client-side routes — Spring serves index.html for all of these
                         .requestMatchers("/login", "/callback", "/logged_out",
-                                "/video/**", "/embed/**", "/search", "/upload", "/my-videos",
-                                "/change-password", "/admin/**").permitAll()
+                                "/video/**", "/embed/**", "/search", "/shorts",
+                                "/upload", "/my-videos", "/change-password",
+                                "/admin/**").permitAll()
 
                         // AUTHENTICATION - Public
                         .requestMatchers("/api/auth/login").permitAll()
@@ -80,6 +81,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/videos/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/comments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/videos/search").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/videos/suggestions").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/videos/shorts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/videos/*/suggestions").permitAll()
 
                         // Share endpoints - PUBLIC

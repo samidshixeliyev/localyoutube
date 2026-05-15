@@ -1,11 +1,11 @@
 package az.dev.localtube.controller;
 
-import az.dev.localtube.config.security.LocalTubePrincipal;
+import az.dev.localtube.config.security.ModTubePrincipal;
 import az.dev.localtube.domain.Comment;
 import az.dev.localtube.domain.Video;
 import az.dev.localtube.domain.VideoStatus;
 import az.dev.localtube.domain.VideoVisibility;
-import az.dev.localtube.metrics.LocalTubeMetrics;
+import az.dev.localtube.metrics.ModTubeMetrics;
 import az.dev.localtube.service.CommentService;
 import az.dev.localtube.service.VideoService;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +15,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import org.springframework.data.domain.PageRequest;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -30,13 +32,13 @@ public class VideoController {
 
     private final VideoService videoService;
     private final CommentService commentService;
-    private final LocalTubeMetrics metrics;
+    private final ModTubeMetrics metrics;
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> listVideos(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             if (user != null && user.isSuperAdmin()) {
                 List<Video> allVideos = videoService.getAllReadyVideos(page, size);
@@ -68,12 +70,44 @@ public class VideoController {
         }
     }
 
+    @GetMapping("/suggestions")
+    public ResponseEntity<List<String>> getSuggestions(
+            @RequestParam String query,
+            @RequestParam(defaultValue = "8") int size) {
+        try {
+            if (query == null || query.isBlank()) return ResponseEntity.ok(List.of());
+            List<String> titles = videoService.getTitleSuggestions(query, size);
+            return ResponseEntity.ok(titles);
+        } catch (Exception e) {
+            log.error("Error getting title suggestions", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/shorts")
+    public ResponseEntity<Map<String, Object>> getShorts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @AuthenticationPrincipal ModTubePrincipal user) {
+        try {
+            List<Video> shorts = videoService.getShorts(page, size, user != null ? user.getEmail() : null);
+            return ResponseEntity.ok(Map.of(
+                    "videos", shorts.stream().map(v -> toResponse(v, user)).collect(Collectors.toList()),
+                    "currentPage", page,
+                    "pageSize", size
+            ));
+        } catch (Exception e) {
+            log.error("Error getting shorts", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchVideos(
             @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             String userEmail = user != null ? user.getEmail() : null;
             List<Video> videos;
@@ -99,7 +133,7 @@ public class VideoController {
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getVideo(
             @PathVariable String id,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             var videoOpt = videoService.getVideo(id);
             if (videoOpt.isEmpty()) return ResponseEntity.notFound().build();
@@ -148,7 +182,7 @@ public class VideoController {
     @PostMapping("/{id}/like")
     public ResponseEntity<Map<String, Object>> likeVideo(
             @PathVariable String id,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             if (user == null) return ResponseEntity.status(401).body(Map.of("error", "Please login to like videos"));
             boolean success = videoService.toggleLike(id, user.getEmail());
@@ -163,7 +197,7 @@ public class VideoController {
     @GetMapping("/{id}/like-status")
     public ResponseEntity<Map<String, Boolean>> getLikeStatus(
             @PathVariable String id,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             if (user == null) return ResponseEntity.ok(Map.of("liked", false));
             boolean liked = videoService.isLikedByUser(id, user.getEmail());
@@ -176,7 +210,7 @@ public class VideoController {
     @DeleteMapping("/{id}/like")
     public ResponseEntity<Map<String, Object>> unlikeVideo(
             @PathVariable String id,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             if (user == null) return ResponseEntity.status(401).body(Map.of("error", "Please login"));
             if (videoService.isLikedByUser(id, user.getEmail())) {
@@ -194,7 +228,7 @@ public class VideoController {
     @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
     public ResponseEntity<?> deleteVideo(
             @PathVariable String id,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             var video = videoService.getVideo(id).orElse(null);
             if (video == null) return ResponseEntity.notFound().build();
@@ -216,7 +250,7 @@ public class VideoController {
     public ResponseEntity<Map<String, String>> uploadThumbnail(
             @PathVariable String id,
             @RequestParam("file") MultipartFile file,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             var video = videoService.getVideo(id).orElse(null);
             if (video == null) return ResponseEntity.notFound().build();
@@ -252,7 +286,7 @@ public class VideoController {
     public ResponseEntity<Comment> addComment(
             @PathVariable String id,
             @RequestBody Map<String, String> request,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             if (user == null) return ResponseEntity.status(401).build();
             var video = videoService.getVideo(id).orElse(null);
@@ -271,7 +305,7 @@ public class VideoController {
     public ResponseEntity<Void> deleteComment(
             @PathVariable String videoId,
             @PathVariable String commentId,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             if (user == null) return ResponseEntity.status(401).build();
             var comment = commentService.getComment(commentId).orElse(null);
@@ -292,7 +326,7 @@ public class VideoController {
     public ResponseEntity<?> updateVideo(
             @PathVariable String id,
             @RequestBody Map<String, Object> updates,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             var video = videoService.getVideo(id).orElse(null);
             if (video == null) return ResponseEntity.notFound().build();
@@ -321,7 +355,7 @@ public class VideoController {
     public ResponseEntity<?> setVideoPrivacy(
             @PathVariable String id,
             @RequestBody Map<String, Object> privacySettings,
-            @AuthenticationPrincipal LocalTubePrincipal user) {
+            @AuthenticationPrincipal ModTubePrincipal user) {
         try {
             var video = videoService.getVideo(id).orElse(null);
             if (video == null) return ResponseEntity.notFound().build();
@@ -361,7 +395,7 @@ public class VideoController {
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    private boolean canViewVideo(Video video, LocalTubePrincipal user) {
+    private boolean canViewVideo(Video video, ModTubePrincipal user) {
         if (video.getVisibility() == null) return true;
         if (user != null && user.isSuperAdmin()) return true;
         switch (video.getVisibility()) {
@@ -379,7 +413,7 @@ public class VideoController {
         }
     }
 
-    private Map<String, Object> toResponse(Video video, LocalTubePrincipal user) {
+    private Map<String, Object> toResponse(Video video, ModTubePrincipal user) {
         Map<String, Object> map = new HashMap<>();
         map.put("id", video.getId());
         map.put("title", video.getTitle());
@@ -403,6 +437,7 @@ public class VideoController {
         map.put("uploadedAt", video.getUploadedAt());
         map.put("processedAt", video.getProcessedAt());
         map.put("allowedEmails", video.getAllowedEmails());
+        map.put("isShort", video.isShort());
 
         if (user != null) {
             map.put("isLikedByCurrentUser", videoService.isLikedByUser(video.getId(), user.getEmail()));

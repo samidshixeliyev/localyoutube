@@ -85,10 +85,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         OidcUserDetails oidc = idpJwtValidator.toUserDetails(decoded);
 
         // Auto-provision IDP user in the local DB so admins can see and manage them.
-        // On success we use LocalTubeUserDetails so admin-assigned roles/permissions apply.
+        // On success we use ModTubeUserDetails so admin-assigned roles/permissions apply.
         try {
             var dbUser = idpUserProvisioningService.getOrCreate(oidc.getEmail(), oidc.getDisplayName());
-            var userDetails = new LocalTubeUserDetails(dbUser);
+            var userDetails = new ModTubeUserDetails(dbUser);
             UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                     userDetails, null, userDetails.getAuthorities());
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

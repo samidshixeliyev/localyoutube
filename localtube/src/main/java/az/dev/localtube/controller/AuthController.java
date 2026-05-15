@@ -1,7 +1,7 @@
 package az.dev.localtube.controller;
 
-import az.dev.localtube.config.security.LocalTubePrincipal;
-import az.dev.localtube.config.security.LocalTubeUserDetails;
+import az.dev.localtube.config.security.ModTubePrincipal;
+import az.dev.localtube.config.security.ModTubeUserDetails;
 import az.dev.localtube.dto.request.ChangePasswordRequest;
 import az.dev.localtube.dto.request.LoginRequest;
 import az.dev.localtube.dto.response.LoginResponse;
@@ -190,7 +190,7 @@ public class AuthController {
     @PostMapping("/change-password")
     public ResponseEntity<?> changePassword(
             @Valid @RequestBody ChangePasswordRequest request,
-            @AuthenticationPrincipal LocalTubeUserDetails userDetails) {
+            @AuthenticationPrincipal ModTubeUserDetails userDetails) {
         try {
             User user = userRepository.findUserByEmail(userDetails.getEmail())
                     .orElseThrow(() -> new RuntimeException("User not found"));
@@ -319,7 +319,7 @@ public class AuthController {
     @PostMapping("/idp/sync-profile")
     public ResponseEntity<?> syncIdpProfile(
             @RequestBody Map<String, String> claims,
-            @AuthenticationPrincipal LocalTubePrincipal principal) {
+            @AuthenticationPrincipal ModTubePrincipal principal) {
         try {
             if (principal == null) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

@@ -25,7 +25,7 @@ jobs:
           script: |
             set -e
 
-            DEPLOY_DIR=/opt/localyoutube
+            DEPLOY_DIR=/opt/modtube
 
             echo "=== Pulling latest code ==="
             if [ -d "$DEPLOY_DIR/.git" ]; then
@@ -36,7 +36,7 @@ jobs:
               sudo rm -rf "$DEPLOY_DIR"
               sudo mkdir -p "$DEPLOY_DIR"
               sudo chown ubuntu:ubuntu "$DEPLOY_DIR"
-              git clone https://github.com/samidshixeliyev/localyoutube.git "$DEPLOY_DIR"
+              git clone https://github.com/samidshixeliyev/modtube.git "$DEPLOY_DIR"
               cd "$DEPLOY_DIR"
             fi
 
@@ -56,4 +56,4 @@ jobs:
             done
 
             echo "=== Done ==="
-            docker ps --filter name=localyoutube --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            docker ps --filter name=modtube --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"

@@ -161,6 +161,32 @@ export const adminGetRoles = () =>
 export const adminGetRole = (id) =>
     api.get(`/admin/roles/${id}`);
 
+export const adminCreateRole = (data) =>
+    api.post('/admin/roles', data);
+
+export const adminUpdateRole = (id, data) =>
+    api.put(`/admin/roles/${id}`, data);
+
+export const adminDeleteRole = (id) =>
+    api.delete(`/admin/roles/${id}`);
+
+export const adminGetPermissions = () =>
+    api.get('/admin/permissions');
+
+// ═══════════════════════════════════════════════════════════════
+// SHORTS
+// ═══════════════════════════════════════════════════════════════
+
+export const getShorts = (page = 0, size = 12) =>
+    api.get('/videos/shorts', { params: { page, size } });
+
+// ═══════════════════════════════════════════════════════════════
+// SEARCH SUGGESTIONS
+// ═══════════════════════════════════════════════════════════════
+
+export const getSearchSuggestions = (query, size = 8) =>
+    api.get('/videos/suggestions', { params: { query, size } });
+
 // ═══════════════════════════════════════════════════════════════
 // ADMIN - SYSTEM SETTINGS (super-admin only)
 // ═══════════════════════════════════════════════════════════════

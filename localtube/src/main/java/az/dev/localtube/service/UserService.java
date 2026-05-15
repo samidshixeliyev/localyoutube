@@ -1,6 +1,6 @@
 package az.dev.localtube.service;
 
-import az.dev.localtube.config.security.LocalTubeUserDetails;
+import az.dev.localtube.config.security.ModTubeUserDetails;
 import az.dev.localtube.entity.User;
 import az.dev.localtube.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +22,8 @@ public class UserService implements UserDetailsService {
         User user = userRepository.findUserByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
 
-        // FIXED: Return LocalTubeUserDetails instead of Spring Security User
-        return new LocalTubeUserDetails(user);
+        // FIXED: Return ModTubeUserDetails instead of Spring Security User
+        return new ModTubeUserDetails(user);
     }
 
     public Optional<User> findByEmail(String email) {

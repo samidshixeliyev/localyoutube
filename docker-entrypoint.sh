@@ -3,7 +3,7 @@ set -e
 
 PGDATA=${PGDATA:-/var/lib/postgresql/data}
 PGUSER=${PGUSER:-postgres}
-PGDB=${PGDB:-localtube}
+PGDB=${PGDB:-modtube}
 
 # PostgreSQL 16 binaries path
 PG_BIN=/usr/lib/postgresql/16/bin
