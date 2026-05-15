@@ -13,7 +13,7 @@ RUN npm run build
 # ─────────────────────────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jdk-jammy AS backend-builder
 WORKDIR /app
-COPY localtube/ ./
+COPY modtube/ ./
 # Inject built frontend into Spring Boot static resources
 COPY --from=frontend-builder /frontend/dist ./src/main/resources/static/
 RUN chmod +x ./gradlew && ./gradlew clean bootJar -x test --no-daemon
@@ -118,7 +118,7 @@ COPY --from=backend-builder /app/build/libs/*.jar /app/modtube.jar
 # ── Dashboard JSON goes to /etc/grafana/dashboards — NOT under the bind-mounted
 #    /var/lib/grafana which gets replaced by the host volume at runtime.
 RUN mkdir -p /etc/grafana/dashboards
-COPY localtube/modtube-dashboard.json /etc/grafana/dashboards/modtube.json
+COPY modtube/modtube-dashboard.json /etc/grafana/dashboards/modtube.json
 
 # ── Copy configs ──────────────────────────────────────────────────────────────
 COPY prometheus.yml              /etc/prometheus/prometheus.yml
