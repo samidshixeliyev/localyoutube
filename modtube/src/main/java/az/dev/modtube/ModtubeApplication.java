@@ -11,7 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class ModtubeApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(LocaltubeApplication.class, args);
+        SpringApplication.run(ModtubeApplication.class, args);
     }
 
 }
