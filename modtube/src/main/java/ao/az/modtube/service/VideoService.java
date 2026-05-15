@@ -4,6 +4,7 @@ import ao.az.modtube.domain.Video;
 import ao.az.modtube.domain.VideoLike;
 import ao.az.modtube.domain.VideoStatus;
 import ao.az.modtube.exception.BadRequestException;
+import ao.az.modtube.repository.CommentRepository;
 import ao.az.modtube.repository.VideoLikeRepository;
 import ao.az.modtube.repository.VideoRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -32,16 +33,19 @@ public class VideoService {
 
     private final VideoRepository videoRepository;
     private final VideoLikeRepository videoLikeRepository;
+    private final CommentRepository commentRepository;
     private final Path uploadDir;
     private final Path hlsDir;
     private final Path thumbnailDir;
 
     public VideoService(VideoRepository videoRepository, VideoLikeRepository videoLikeRepository,
+                        CommentRepository commentRepository,
                         @Value("${modtube.storage.upload-dir}") String uploadDirPath,
                         @Value("${modtube.storage.hls-dir}") String hlsDirPath,
                         @Value("${modtube.storage.thumbnail-dir}") String thumbnailDirPath) {
         this.videoRepository = videoRepository;
         this.videoLikeRepository = videoLikeRepository;
+        this.commentRepository = commentRepository;
         this.uploadDir = Paths.get(uploadDirPath);
         this.hlsDir = Paths.get(hlsDirPath);
         this.thumbnailDir = Paths.get(thumbnailDirPath);
@@ -293,10 +297,27 @@ public class VideoService {
                 deleteDirectoryRecursive(Paths.get(video.getThumbnailPath()));
             }
 
+            commentRepository.deleteByVideoId(id);
             videoLikeRepository.deleteByVideoId(id);
             videoRepository.deleteById(id);
             log.info("Deleted video and files: {}", id);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Stats
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    public long countByStatus(VideoStatus status) {
+        return videoRepository.countByStatus(status);
+    }
+
+    public long getTotalViews() {
+        return videoRepository.sumViews();
+    }
+
+    public long getTotalFileSizeBytes() {
+        return videoRepository.sumFileSizeBytes();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

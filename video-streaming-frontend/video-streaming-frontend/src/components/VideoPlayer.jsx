@@ -32,14 +32,14 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        enableWorker: true,
+        enableWorker: false,       // avoids blob: worker CSP issues on offline/strict environments
         lowLatencyMode: false,
 
         // Buffer — larger values keep large-file playback smooth
         backBufferLength:    90,
-        maxBufferLength:     60,          // up from 30 — buffer 60 s ahead
-        maxMaxBufferLength:  120,         // ceiling for ABR growth
-        maxBufferSize:       100 * 1e6,   // 100 MB in-memory segment cache
+        maxBufferLength:     60,
+        maxMaxBufferLength:  120,
+        maxBufferSize:       100 * 1e6,
         maxBufferHole:       0.5,
 
         // Fragment loading — generous timeouts for large segments over LAN
@@ -59,11 +59,11 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
         abrEwmaSlowVoD:      9.0,
         abrBandWidthFactor:  0.9,
         abrBandWidthUpFactor: 0.6,
-        startLevel:          -1,          // let ABR pick initial quality
+        startLevel:          -1,
 
         nudgeMaxRetry:       5,
         enableSoftwareAES:   false,
-        startFragPrefetch:   true,  // pre-fetch first fragment of new level after switch
+        startFragPrefetch:   true,
       });
       
       hlsRef.current = hls;
@@ -78,47 +78,33 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
         if (autoPlay) {
           video.play().catch(() => {});
         }
-        console.log('[VideoPlayer] HLS manifest loaded, levels:', data.levels.length);
-        
+
         const levels = data.levels.map((level, index) => ({
           index,
           height: level.height,
           bitrate: level.bitrate,
           label: level.height ? `${level.height}p` : `Level ${index}`
         }));
-        
+
         setAvailableQualities(levels);
         setCurrentQuality(-1);
-        
-        console.log('[VideoPlayer] Available qualities:', levels);
       });
 
-      hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-        console.log('[VideoPlayer] Quality switched to level:', data.level);
+      hls.on(Hls.Events.LEVEL_SWITCHED, () => {
         setIsSwitchingQuality(false);
-        
-        if (hls.autoLevelEnabled) {
-          const currentLevel = hls.levels[data.level];
-          console.log('[VideoPlayer] Auto quality:', currentLevel.height + 'p');
-        }
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
-        console.error('[VideoPlayer] HLS error:', data);
-        
         if (data.fatal) {
           setIsLoading(false);
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.error('[VideoPlayer] Network error, trying to recover');
               hls.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.error('[VideoPlayer] Media error, trying to recover');
               hls.recoverMediaError();
               break;
             default:
-              console.error('[VideoPlayer] Fatal error, destroying HLS');
               hls.destroy();
               break;
           }

@@ -183,6 +183,14 @@ public interface VideoRepository extends JpaRepository<Video, String> {
                                 @Param("offset") int offset,
                                 @Param("size") int size);
 
+    // ─── Aggregate stats ─────────────────────────────────────────────────────
+
+    @Query(nativeQuery = true, value = "SELECT COALESCE(SUM(v.views), 0) FROM videos v")
+    long sumViews();
+
+    @Query(nativeQuery = true, value = "SELECT COALESCE(SUM(v.file_size), 0) FROM videos v WHERE v.file_size IS NOT NULL")
+    long sumFileSizeBytes();
+
     // ─── Status update ───────────────────────────────────────────────────────
 
     @Modifying

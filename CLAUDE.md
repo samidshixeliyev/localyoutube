@@ -296,4 +296,41 @@ localyoutube/
 
 ---
 
+### 2026-05-15 — Offline + Bugfix Session
+
+#### Problems found & fixed
+
+1. **Videos can't open**
+   - Root cause: CSP `worker-src 'self'` (implicit from `default-src 'self'`) blocks HLS.js from creating blob: Web Workers. In some browser/version combinations, the fallback path doesn't activate properly.
+   - Fix 1: Added `worker-src blob: 'self'` and `connect-src blob:` to the CSP in `index.html`.
+   - Fix 2: Set `enableWorker: false` in VideoPlayer's HLS config — avoids blob: workers entirely. On a local/offline LAN, the performance difference is negligible.
+   - Also removed `console.log` statements from VideoPlayer.
+
+2. **Deleting video doesn't delete comments**
+   - `VideoService.deleteVideo()` deleted files, likes, and the DB record — but not comments.
+   - Fix: Added `CommentRepository` injection to `VideoService`; now calls `commentRepository.deleteByVideoId(id)` before deleting the video record.
+
+3. **Internet calls on offline machine**
+   - `IdpJwtValidator` used a RestTemplate with NO connect/read timeout for JWKS fetches.
+   - If the IDP (auth.ao.az or VPS IP) is unreachable, every request with an RS256 JWT would stall the thread indefinitely.
+   - Fix: `buildRestTemplate()` now sets `connectTimeout=3s`, `readTimeout=5s` for both SSL-skip and normal modes. After 3–5 s, the IDP validation times out, throws, is caught by `JwtAuthenticationFilter`, and the request continues unauthenticated. Local (HS256) tokens still work offline.
+
+4. **Metrics `/api/admin/stats` missing**
+   - Frontend calls `GET /api/admin/stats` for the "Verilənlər Bazası" section but the endpoint didn't exist.
+   - Fix: Added `sumViews()` and `sumFileSizeBytes()` queries to `VideoRepository`; added `getTotalViews()`, `getTotalFileSizeBytes()`, `countByStatus()` to `VideoService`; added `GET /api/admin/stats` endpoint to `AdminController` returning `{totalVideos, totalViews, totalFileSizeBytes, activeTranscodings}`.
+
+5. **Icons broken (logo files were wrong)**
+   - Previous copy picked up incorrect files (5965 bytes each, both identical).
+   - Correct files: `modtube_logo_dark_mode.png` (1.6 MB) → `logo_dark.png`; `Gemini_Generated_Image_light.png` (1.6 MB) → `logo_light.png`.
+   - Fixed by re-copying from `C:\Users\samid.sixaliyev\Desktop\logo_extract\`.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens — 64px sidebar compresses content.
+- **Backend `isShorts` field**: `PUT /videos/{id}` needs `isShorts` and `GET /videos/shorts` should filter by it.
+- **Backend `upload.max-concurrent` setting**: new key, needs to be persisted in settings store.
+- **Offline deployment**: IDP URLs in docker-compose.yml still default to VPS (`13.61.159.58`). Override `IDP_BASE_URL`, `IDP_JWKS_URI`, `IDP_REDIRECT_URI`, `IDP_LOGOUT_REDIRECT_URI` in `.env` when deploying to an offline computer. Local auth (email/password) works without IDP.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*

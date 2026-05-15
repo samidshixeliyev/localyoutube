@@ -43,8 +43,11 @@ public class IdpJwtValidator {
                 NimbusJwtDecoder.withJwkSetUri(jwksUri);
 
         if (skipSslVerify) {
-            builder.restOperations(buildSslIgnoringRestTemplate());
+            builder.restOperations(buildRestTemplate(true));
             log.warn("IdpJwtValidator: SSL certificate verification DISABLED (skip-ssl-verify=true)");
+        } else {
+            // Still set short timeouts so an offline/unreachable IDP does not block requests
+            builder.restOperations(buildRestTemplate(false));
         }
 
         this.decoder = builder.build();
@@ -109,33 +112,43 @@ public class IdpJwtValidator {
         return given + " " + sn;
     }
 
-    private static RestTemplate buildSslIgnoringRestTemplate() {
+    private static RestTemplate buildRestTemplate(boolean skipSsl) {
         try {
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, new TrustManager[]{new X509TrustManager() {
-                public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                public void checkClientTrusted(X509Certificate[] c, String a) {}
-                public void checkServerTrusted(X509Certificate[] c, String a) {}
-            }}, new SecureRandom());
+            SimpleClientHttpRequestFactory factory;
 
-            SSLSocketFactory sf = sslContext.getSocketFactory();
-            HostnameVerifier hv = (host, session) -> true;
+            if (skipSsl) {
+                SSLContext sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(null, new TrustManager[]{new X509TrustManager() {
+                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                    public void checkClientTrusted(X509Certificate[] c, String a) {}
+                    public void checkServerTrusted(X509Certificate[] c, String a) {}
+                }}, new SecureRandom());
 
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory() {
-                @Override
-                protected void prepareConnection(java.net.HttpURLConnection conn, String method)
-                        throws java.io.IOException {
-                    if (conn instanceof HttpsURLConnection https) {
-                        https.setSSLSocketFactory(sf);
-                        https.setHostnameVerifier(hv);
+                SSLSocketFactory sf = sslContext.getSocketFactory();
+                HostnameVerifier hv = (host, session) -> true;
+
+                factory = new SimpleClientHttpRequestFactory() {
+                    @Override
+                    protected void prepareConnection(java.net.HttpURLConnection conn, String method)
+                            throws java.io.IOException {
+                        if (conn instanceof HttpsURLConnection https) {
+                            https.setSSLSocketFactory(sf);
+                            https.setHostnameVerifier(hv);
+                        }
+                        super.prepareConnection(conn, method);
                     }
-                    super.prepareConnection(conn, method);
-                }
-            };
+                };
+            } else {
+                factory = new SimpleClientHttpRequestFactory();
+            }
+
+            // Short timeouts so an offline/unreachable IDP never stalls a request thread
+            factory.setConnectTimeout(3_000);
+            factory.setReadTimeout(5_000);
 
             return new RestTemplate(factory);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to build SSL-ignoring RestTemplate", e);
+            throw new RuntimeException("Failed to build RestTemplate for IdpJwtValidator", e);
         }
     }
 }

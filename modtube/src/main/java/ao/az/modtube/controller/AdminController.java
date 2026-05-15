@@ -9,7 +9,9 @@ import ao.az.modtube.dto.request.UpdateUserRequest;
 import ao.az.modtube.dto.response.PermissionResponse;
 import ao.az.modtube.dto.response.RoleResponse;
 import ao.az.modtube.dto.response.UserResponse;
+import ao.az.modtube.domain.VideoStatus;
 import ao.az.modtube.service.AdminService;
+import ao.az.modtube.service.VideoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,26 @@ import java.util.Map;
 public class AdminController {
 
     private final AdminService adminService;
+    private final VideoService videoService;
+
+    // ═══════════════════════════════════════════════════════════════
+    // STATS
+    // ═══════════════════════════════════════════════════════════════
+
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getStats() {
+        try {
+            return ResponseEntity.ok(Map.of(
+                "totalVideos",        videoService.countAllReadyVideos(),
+                "totalViews",         videoService.getTotalViews(),
+                "totalFileSizeBytes", videoService.getTotalFileSizeBytes(),
+                "activeTranscodings", videoService.countByStatus(VideoStatus.PROCESSING)
+            ));
+        } catch (Exception e) {
+            log.error("Error fetching admin stats", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // USER ENDPOINTS
