@@ -333,4 +333,19 @@ localyoutube/
 
 ---
 
+### 2026-05-15 — SVG Logo Replacement
+
+#### What was done
+
+1. **ModTubeLogo replaced with inline SVG + text**
+   - `ModTubeLogo.jsx`: completely rewritten from PNG `<img>` to pure inline SVG + HTML text component.
+   - SVG shield: 28×32 viewBox, olive `#556430` fill, `#6b7f3a` inner highlight, white play triangle.
+   - Text: "MOD" in olive (`#556430` light / `#a3b96a` dark), "TUBE" in sand (`#9a7b38` light / `#c4aa62` dark).
+   - No PNG files required; works fully offline; crisp at any size.
+   - `mini` prop → icon-only mode (for collapsed/mobile Navbar).
+   - `size` prop scales icon width, font size, and gap proportionally.
+   - Security config (`SecurityConfiguration.java`) already has `permitAll()` for `/*.png` from previous fix; still applies for favicon.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*
