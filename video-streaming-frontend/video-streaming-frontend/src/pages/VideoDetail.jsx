@@ -7,111 +7,89 @@ import CommentSection from "../components/CommentSection";
 import VideoSuggestions from "../components/VideoSuggestion";
 import Navbar from "../components/Navbar";
 import {
-  ThumbsUp,
-  Eye,
-  Calendar,
-  Trash2,
-  Loader2,
-  Image,
-  Edit2,
-  Lock,
-  Globe,
-  Link2,
-  Users,
-  Save,
-  X,
-  Check,
-  Plus,
-  Hash,
-  Code2,
-  Copy,
-  CheckCheck
+  ThumbsUp, Eye, Calendar, Trash2, Loader2, Image,
+  Edit2, Lock, Globe, Link2, Users, Save, X, Check,
+  Plus, Hash, Code2, Copy, CheckCheck, ChevronDown, ChevronUp
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 
+/* ── visibility helpers ──────────────────────────────────────── */
+const VISIBILITY = {
+  PUBLIC:     { icon: Globe,  label: 'İctimai',      color: 'bg-green-500',  border: 'border-green-500' },
+  UNLISTED:   { icon: Link2,  label: 'Siyahısız',    color: 'bg-yellow-500', border: 'border-yellow-500' },
+  PRIVATE:    { icon: Lock,   label: 'Gizli',        color: 'bg-red-500',    border: 'border-red-500' },
+  RESTRICTED: { icon: Users,  label: 'Məhdud',       color: 'bg-purple-500', border: 'border-purple-500' },
+};
+const getVis = (v) => VISIBILITY[(v || 'PUBLIC').toUpperCase()] || VISIBILITY.PUBLIC;
+
+/* ── formatters ─────────────────────────────────────────────── */
+const fmtViews = (n) => {
+  if (!n) return '0';
+  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n/1_000).toFixed(1)}K`;
+  return `${n}`;
+};
+const fmtDate = (ts) => {
+  if (!ts) return '';
+  return new Date(ts).toLocaleDateString('az-AZ', { year:'numeric', month:'long', day:'numeric' });
+};
+
+/* ═══════════════════════════════════════════════════════════════ */
 const VideoDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated, user, hasPermission } = useAuth();
-  const [video, setVideo] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [liked, setLiked] = useState(false);
-  const [isLiking, setIsLiking] = useState(false);
-  const [viewIncremented, setViewIncremented] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const { isAuthenticated, user } = useAuth();
+
+  const [video,            setVideo]            = useState(null);
+  const [loading,          setLoading]          = useState(true);
+  const [error,            setError]            = useState('');
+  const [liked,            setLiked]            = useState(false);
+  const [isLiking,         setIsLiking]         = useState(false);
+  const [viewIncremented,  setViewIncremented]  = useState(false);
+  const [currentUser,      setCurrentUser]      = useState(null);
   const [showThumbnailUpload, setShowThumbnailUpload] = useState(false);
-  
-  // Inline editing states
+  const [descExpanded,     setDescExpanded]     = useState(false);
+
+  // Edit
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    title: '',
-    description: '',
-    visibility: 'public',
-    allowedEmails: [],
-    tags: []
-  });
+  const [editForm,  setEditForm]  = useState({ title:'', description:'', visibility:'PUBLIC', allowedEmails:[], tags:[] });
   const [emailInput, setEmailInput] = useState('');
-  const [tagInput, setTagInput] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [tagInput,   setTagInput]   = useState('');
+  const [saving,     setSaving]     = useState(false);
+
+  // Embed (admin only)
   const [showEmbedModal, setShowEmbedModal] = useState(false);
-  const [embedCopied, setEmbedCopied] = useState(false);
+  const [embedCopied,    setEmbedCopied]    = useState(false);
 
+  /* decode JWT -------------------------------------------------- */
   useEffect(() => {
-    const token = localStorage.getItem("jwt_token");
-    if (token) {
-      try {
-        const base64Url = token.split(".")[1];
-        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-        const jsonPayload = decodeURIComponent(
-          atob(base64)
-            .split("")
-            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-            .join(""),
-        );
-
-        const decoded = JSON.parse(jsonPayload);
-        const userEmail = decoded.email || decoded.sub || decoded.username;
-        const userPermissions = decoded.permissions || [];
-        const userRole = decoded.role || '';
-
-        setCurrentUser({
-          id: userEmail,
-          email: userEmail,
-          username: decoded.username || decoded.name || userEmail.split("@")[0],
-          permissions: userPermissions,
-          role: userRole,
-          hasAdminPermission: userPermissions.includes('admin-modtube') || 
-                             userPermissions.includes('super-admin') ||
-                             userRole === 'ADMIN' ||
-                             userRole === 'SUPER_ADMIN'
-        });
-      } catch (err) {
-        setCurrentUser(null);
-      }
-    } else {
-      setCurrentUser(null);
-    }
+    const token = localStorage.getItem('jwt_token');
+    if (!token) { setCurrentUser(null); return; }
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      const email = payload.email || payload.sub || payload.username;
+      const perms = payload.permissions || [];
+      const role  = payload.role || '';
+      setCurrentUser({
+        email,
+        username: payload.username || payload.name || email.split('@')[0],
+        permissions: perms,
+        role,
+        isAdmin: perms.includes('super-admin') || perms.includes('admin-modtube') ||
+                 role === 'ADMIN' || role === 'SUPER_ADMIN',
+      });
+    } catch { setCurrentUser(null); }
   }, []);
 
-  useEffect(() => {
-    loadVideo();
-  }, [id]);
+  /* load video -------------------------------------------------- */
+  useEffect(() => { loadVideo(); }, [id]);
 
   useEffect(() => {
-    const checkLikeStatus = async () => {
-      if (!currentUser || !id) return;
-
-      try {
-        const response = await videoService.getLikeStatus(id);
-        setLiked(response.liked);
-      } catch (err) {
-        setLiked(false);
-      }
-    };
-
-    checkLikeStatus();
+    if (!currentUser || !id) return;
+    videoService.getLikeStatus(id)
+      .then(r => setLiked(r.liked))
+      .catch(() => {});
   }, [id, currentUser]);
 
   const loadVideo = async () => {
@@ -120,189 +98,84 @@ const VideoDetail = () => {
       const data = await videoService.getVideo(id);
       setVideo(data);
       setEditForm({
-        title: data.title || '',
-        description: data.description || '',
-        visibility: data.visibility || 'public',
+        title:         data.title        || '',
+        description:   data.description  || '',
+        visibility:    (data.visibility  || 'PUBLIC').toUpperCase(),
         allowedEmails: data.allowedEmails || [],
-        tags: data.tags || []
+        tags:          data.tags          || [],
       });
-      setError("");
-    } catch (err) {
-      setError("Failed to load video. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError('Video yüklənə bilmədi. Yenidən cəhd edin.'); }
+    finally  { setLoading(false); }
   };
 
-  const handleTimeUpdate = (currentTime) => {
-    if (currentTime > 3 && !viewIncremented) {
+  const handleTimeUpdate = (t) => {
+    if (t > 3 && !viewIncremented) {
       videoService.incrementView(id).catch(() => {});
       setViewIncremented(true);
-      setVideo((prev) => ({ ...prev, views: (prev.views || 0) + 1 }));
+      setVideo(p => ({ ...p, views: (p.views || 0) + 1 }));
     }
   };
 
   const handleLike = async () => {
-    if (!currentUser) {
-      alert("Please login to like videos");
-      navigate("/login");
-      return;
-    }
-
+    if (!currentUser) { navigate('/login'); return; }
     if (isLiking) return;
     setIsLiking(true);
-
     try {
-      const response = await videoService.toggleLike(id);
-      setLiked(response.liked);
-      setVideo((prev) => ({
-        ...prev,
-        likes: response.likes,
-      }));
+      const r = await videoService.toggleLike(id);
+      setLiked(r.liked);
+      setVideo(p => ({ ...p, likes: r.likes }));
     } catch (err) {
-      if (err.response?.status === 401) {
-        alert("Please login to like videos");
-        navigate("/login");
-      } else {
-        alert("Failed to like video. Please try again.");
-      }
-    } finally {
-      setIsLiking(false);
-    }
+      if (err.response?.status === 401) navigate('/login');
+    } finally { setIsLiking(false); }
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Are you sure you want to delete this video? This action cannot be undone.")) {
-      return;
-    }
-
+    if (!window.confirm('Bu videonu silmək istədiyinizə əminsinizmi? Bu əməliyyat geri alına bilməz.')) return;
     try {
       await videoService.deleteVideo(id);
-      alert("Video deleted successfully");
-      navigate("/my-videos");
+      navigate('/my-videos');
     } catch (err) {
-      alert("Failed to delete video: " + (err.response?.data?.message || err.message));
+      alert('Video silinə bilmədi: ' + (err.response?.data?.message || err.message));
     }
-  };
-
-  const handleThumbnailUploadSuccess = () => {
-    loadVideo();
-    setShowThumbnailUpload(false);
   };
 
   const handleSaveEdit = async () => {
-    if (!editForm.title.trim()) {
-      alert('Title is required');
-      return;
+    if (!editForm.title.trim()) { alert('Başlıq tələb olunur'); return; }
+    if (editForm.visibility === 'RESTRICTED' && editForm.allowedEmails.length === 0) {
+      alert('Məhdud giriş üçün ən azı bir e-poçt əlavə edin'); return;
     }
-
-    if (editForm.visibility === 'restricted' && editForm.allowedEmails.length === 0) {
-      alert('Please add at least one email for restricted access');
-      return;
-    }
-
     setSaving(true);
-
     try {
-      await api.put(`/videos/${id}`, {
-        title: editForm.title,
-        description: editForm.description,
-        tags: editForm.tags
-      });
-
-      await api.post(`/videos/${id}/privacy`, {
-        visibility: editForm.visibility,
-        allowedUserEmails: editForm.allowedEmails
-      });
-
+      await api.put(`/videos/${id}`, { title: editForm.title, description: editForm.description, tags: editForm.tags });
+      await api.post(`/videos/${id}/privacy`, { visibility: editForm.visibility, allowedUserEmails: editForm.allowedEmails });
       await loadVideo();
       setIsEditing(false);
-      alert('Video updated successfully!');
-    } catch (err) {
-      alert('Failed to update video: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { alert('Yenilənə bilmədi: ' + (err.response?.data?.message || err.message)); }
+    finally { setSaving(false); }
   };
 
   const addEmail = () => {
-    const email = emailInput.trim().toLowerCase();
-    if (!email) return;
-    
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      alert('Please enter a valid email address');
-      return;
-    }
-    
-    if (editForm.allowedEmails.includes(email)) {
-      alert('This email is already added');
-      return;
-    }
-    
-    setEditForm(prev => ({
-      ...prev,
-      allowedEmails: [...prev.allowedEmails, email]
-    }));
+    const e = emailInput.trim().toLowerCase();
+    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { alert('Düzgün e-poçt daxil edin'); return; }
+    if (editForm.allowedEmails.includes(e)) return;
+    setEditForm(p => ({ ...p, allowedEmails: [...p.allowedEmails, e] }));
     setEmailInput('');
   };
-
-  const removeEmail = (email) => {
-    setEditForm(prev => ({
-      ...prev,
-      allowedEmails: prev.allowedEmails.filter(e => e !== email)
-    }));
-  };
-
-  const normalizeTag = (tag) => {
-    return tag.replace(/^#+/, '').trim().toLowerCase();
-  };
+  const removeEmail = (e) => setEditForm(p => ({ ...p, allowedEmails: p.allowedEmails.filter(x => x !== e) }));
 
   const addTag = () => {
-    const normalized = normalizeTag(tagInput);
-    if (!normalized) return;
-    
-    if (editForm.tags.includes(normalized)) {
-      alert('This tag is already added');
-      return;
-    }
-    
-    if (editForm.tags.length >= 10) {
-      alert('Maximum 10 tags allowed');
-      return;
-    }
-    
-    if (!/^[a-z0-9-]+$/.test(normalized)) {
-      alert('Tags can only contain letters, numbers, and hyphens');
-      return;
-    }
-    
-    setEditForm(prev => ({
-      ...prev,
-      tags: [...prev.tags, normalized]
-    }));
+    const t = tagInput.replace(/^#+/, '').trim().toLowerCase();
+    if (!t || editForm.tags.includes(t) || editForm.tags.length >= 10) return;
+    if (!/^[a-z0-9-]+$/.test(t)) { alert('Etiketlər yalnız hərf, rəqəm və tire içərə bilər'); return; }
+    setEditForm(p => ({ ...p, tags: [...p.tags, t] }));
     setTagInput('');
   };
-
-  const removeTag = (tag) => {
-    setEditForm(prev => ({
-      ...prev,
-      tags: prev.tags.filter(t => t !== tag)
-    }));
-  };
-
-  const handleTagInputChange = (e) => {
-    let value = e.target.value;
-    if (value && !value.startsWith('#')) {
-      value = '#' + value;
-    }
-    setTagInput(value);
-  };
+  const removeTag = (t) => setEditForm(p => ({ ...p, tags: p.tags.filter(x => x !== t) }));
 
   const getEmbedCode = () => {
-    const embedUrl = `${window.location.origin}/embed/${id}`;
-    return `<iframe\n  src="${embedUrl}"\n  width="640"\n  height="360"\n  frameborder="0"\n  allowfullscreen\n  allow="autoplay; fullscreen"\n></iframe>`;
+    const url = `${window.location.origin}/embed/${id}`;
+    return `<iframe\n  src="${url}"\n  width="640"\n  height="360"\n  frameborder="0"\n  allowfullscreen\n></iframe>`;
   };
-
   const handleCopyEmbed = () => {
     navigator.clipboard.writeText(getEmbedCode()).then(() => {
       setEmbedCopied(true);
@@ -310,160 +183,221 @@ const VideoDetail = () => {
     });
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "";
-    return new Date(timestamp).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
-
-  const formatViews = (views) => {
-    if (!views) return "0 views";
-    if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M views`;
-    if (views >= 1000) return `${(views / 1000).toFixed(1)}K views`;
-    return `${views} views`;
-  };
-
-  const getVisibilityInfo = () => {
-    if (!video.visibility || video.visibility === 'public') {
-      return { icon: Globe, text: 'Public', color: 'bg-green-500' };
-    }
-    
-    const visibilityMap = {
-      private: { icon: Lock, text: 'Private', color: 'bg-red-500' },
-      unlisted: { icon: Link2, text: 'Unlisted', color: 'bg-yellow-500' },
-      restricted: { icon: Users, text: 'Restricted', color: 'bg-purple-500' }
-    };
-    
-    return visibilityMap[video.visibility] || visibilityMap.public;
-  };
-
-  if (loading) {
-    return (
-      <>
-        <Navbar />
-        <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-          <Loader2 className="h-12 w-12 animate-spin text-primary-600" />
-        </div>
-      </>
-    );
-  }
-
-  if (error || !video) {
-    return (
-      <>
-        <Navbar />
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-          <p className="text-red-600 dark:text-red-400 mb-4">{error || "Video not found"}</p>
-          <button
-            onClick={() => navigate("/")}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            Go Home
-          </button>
-        </div>
-      </>
-    );
-  }
-
-  const isOwner = currentUser && (
-    currentUser.email === video.uploaderEmail ||
-    currentUser.id === video.uploaderEmail
+  /* ── loading / error states ─────────────────────────────────── */
+  if (loading) return (
+    <><Navbar />
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-army-950">
+        <Loader2 className="h-12 w-12 animate-spin text-primary-600" />
+      </div>
+    </>
   );
-  
-  const isAdmin = currentUser && currentUser.hasAdminPermission;
-  
+
+  if (error || !video) return (
+    <><Navbar />
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-army-950 gap-4">
+        <p className="text-red-500 dark:text-red-400">{error || 'Video tapılmadı'}</p>
+        <button onClick={() => navigate('/')}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+          Ana səhifəyə qayıt
+        </button>
+      </div>
+    </>
+  );
+
+  const isOwner = currentUser && (currentUser.email === video.uploaderEmail);
+  const isAdmin = currentUser?.isAdmin;
   const canEdit = isOwner || isAdmin;
+  const vis     = getVis(video.visibility);
+  const VisIcon = vis.icon;
 
-  const visibilityInfo = getVisibilityInfo();
-  const VisibilityIcon = visibilityInfo.icon;
+  const DESC_LIMIT = 200;
+  const longDesc = video.description && video.description.length > DESC_LIMIT;
 
+  /* ════════════════════════════════════════════════════════════ */
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Video Player */}
-            <div className="bg-black rounded-lg overflow-hidden shadow-xl">
-              {video.hlsUrl && video.status === "ready" ? (
-                <VideoPlayer
-                  hlsUrl={video.hlsUrl}
-                  onTimeUpdate={handleTimeUpdate}
-                />
-              ) : (
-                <div className="aspect-video flex items-center justify-center bg-gray-900">
-                  <div className="text-center text-white">
-                    <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
-                    <p className="text-lg">
-                      {video.status === "processing"
-                        ? "Video is being processed..."
-                        : video.status === "uploading"
-                        ? "Video is uploading..."
-                        : "Video not available"}
-                    </p>
+      <div className="min-h-screen bg-gray-50 dark:bg-army-950 transition-colors">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col lg:flex-row gap-6">
+
+            {/* ── MAIN COLUMN ─────────────────────────────────── */}
+            <div className="flex-1 min-w-0 space-y-4">
+
+              {/* Player */}
+              <div className="bg-black rounded-xl overflow-hidden shadow-2xl">
+                {video.hlsUrl && video.status?.toLowerCase() === 'ready' ? (
+                  <VideoPlayer hlsUrl={video.hlsUrl} onTimeUpdate={handleTimeUpdate} />
+                ) : (
+                  <div className="aspect-video flex items-center justify-center bg-army-900">
+                    <div className="text-center text-white/70">
+                      <Loader2 className="h-10 w-10 animate-spin mx-auto mb-3 text-primary-500" />
+                      <p className="text-sm">
+                        {video.status === 'PROCESSING' ? 'Video emal olunur…'
+                         : video.status === 'UPLOADING' ? 'Video yüklənir…'
+                         : 'Video mövcud deyil'}
+                      </p>
+                    </div>
                   </div>
+                )}
+              </div>
+
+              {/* Title row */}
+              {!isEditing && (
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50 leading-snug flex-1">
+                      {video.title}
+                    </h1>
+                    {/* visibility badge — only owner/admin sees it */}
+                    {canEdit && (
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-white text-xs font-semibold flex-shrink-0 ${vis.color}`}>
+                        <VisIcon className="h-3.5 w-3.5" />
+                        {vis.label}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Meta + actions row */}
+                  <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-gray-200 dark:border-army-700">
+                    <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <Eye className="h-4 w-4" />
+                        {fmtViews(video.views)} baxış
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="h-4 w-4" />
+                        {fmtDate(video.uploadedAt)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Like */}
+                      <button onClick={handleLike} disabled={isLiking}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-all ${
+                          liked
+                            ? 'bg-primary-600 text-white shadow'
+                            : 'bg-gray-100 dark:bg-army-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-army-700'
+                        } disabled:opacity-50`}>
+                        <ThumbsUp className={`h-4 w-4 ${liked ? 'fill-current' : ''}`} />
+                        {video.likes || 0}
+                      </button>
+
+                      {/* Embed — admin only */}
+                      {isAdmin && (
+                        <button onClick={() => setShowEmbedModal(true)}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 dark:bg-army-800 text-gray-700 dark:text-gray-300 rounded-full text-sm font-semibold hover:bg-gray-200 dark:hover:bg-army-700 transition-colors">
+                          <Code2 className="h-4 w-4" />
+                          Embed
+                        </button>
+                      )}
+
+                      {/* Owner / admin actions */}
+                      {canEdit && (
+                        <>
+                          <button onClick={() => setIsEditing(true)}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-full text-sm font-semibold hover:bg-primary-700 transition-colors shadow">
+                            <Edit2 className="h-4 w-4" />
+                            Redaktə
+                          </button>
+                          <button onClick={() => setShowThumbnailUpload(v => !v)}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-army-700 dark:bg-army-600 text-white rounded-full text-sm font-semibold hover:bg-army-600 dark:hover:bg-army-500 transition-colors">
+                            <Image className="h-4 w-4" />
+                          </button>
+                          <button onClick={handleDelete}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-full text-sm font-semibold hover:bg-red-700 transition-colors">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Uploader */}
+                  {video.uploaderName && (
+                    <div className="flex items-center gap-3 py-2">
+                      <div className="h-10 w-10 bg-gradient-to-br from-primary-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-base shadow flex-shrink-0">
+                        {video.uploaderName.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        {video.uploaderName}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Description */}
+                  {video.description && (
+                    <div className="bg-gray-100 dark:bg-army-800 rounded-xl p-4">
+                      <p className={`text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed ${
+                        !descExpanded && longDesc ? 'line-clamp-3' : ''
+                      }`}>
+                        {video.description}
+                      </p>
+                      {longDesc && (
+                        <button onClick={() => setDescExpanded(v => !v)}
+                          className="mt-2 flex items-center gap-1 text-xs font-semibold text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+                          {descExpanded ? <><ChevronUp className="h-3.5 w-3.5" />Daha az göstər</> : <><ChevronDown className="h-3.5 w-3.5" />Daha çox göstər</>}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {video.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {video.tags.map((t, i) => (
+                        <span key={i} className="bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 px-2.5 py-0.5 rounded-full text-xs font-medium">
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
 
-            {/* Video Info Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none dark:border dark:border-gray-700 p-6">
-              {isEditing ? (
-                <div className="space-y-4">
+              {/* ── EDIT FORM ─────────────────────────────────── */}
+              {isEditing && (
+                <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-200 dark:border-army-700 p-5 space-y-4">
+                  <h2 className="font-bold text-gray-900 dark:text-gray-100 text-lg">Videonu redaktə et</h2>
+
                   {/* Title */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
-                    <input
-                      type="text"
-                      value={editForm.title}
-                      onChange={(e) => setEditForm({...editForm, title: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    />
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Başlıq</label>
+                    <input value={editForm.title}
+                      onChange={e => setEditForm(p => ({...p, title: e.target.value}))}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500" />
                   </div>
 
                   {/* Description */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-                    <textarea
-                      value={editForm.description}
-                      onChange={(e) => setEditForm({...editForm, description: e.target.value})}
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Təsvir</label>
+                    <textarea value={editForm.description}
+                      onChange={e => setEditForm(p => ({...p, description: e.target.value}))}
                       rows={4}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    />
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 resize-none focus:ring-2 focus:ring-primary-500" />
                   </div>
 
                   {/* Tags */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Etiketlər</label>
                     <div className="flex gap-2 mb-2">
                       <div className="relative flex-1">
-                        <Hash className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                        <input
-                          type="text"
-                          value={tagInput}
-                          onChange={handleTagInputChange}
-                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                          placeholder="#example-tag"
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        />
+                        <Hash className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <input value={tagInput}
+                          onChange={e => { let v = e.target.value; if (v && !v.startsWith('#')) v='#'+v; setTagInput(v); }}
+                          onKeyDown={e => e.key==='Enter' && (e.preventDefault(), addTag())}
+                          placeholder="#nümunə"
+                          className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 text-sm" />
                       </div>
-                      <button onClick={addTag} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                      <button onClick={addTag} className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
                         <Plus className="h-4 w-4" />
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {editForm.tags.map(tag => (
-                        <span key={tag} className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 px-2 py-1 rounded text-sm">
-                          <Hash className="h-3 w-3" />
-                          {tag}
-                          <button onClick={() => removeTag(tag)} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200">
-                            <X className="h-3 w-3" />
-                          </button>
+                    <div className="flex flex-wrap gap-1.5">
+                      {editForm.tags.map(t => (
+                        <span key={t} className="inline-flex items-center gap-1 bg-primary-100 dark:bg-primary-900/40 text-primary-800 dark:text-primary-300 px-2 py-0.5 rounded-full text-xs font-medium">
+                          #{t}
+                          <button onClick={() => removeTag(t)}><X className="h-3 w-3" /></button>
                         </span>
                       ))}
                     </div>
@@ -471,276 +405,154 @@ const VideoDetail = () => {
 
                   {/* Visibility */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Visibility</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Görünürlük</label>
                     <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { value: 'public', icon: Globe, label: 'Public' },
-                        { value: 'unlisted', icon: Link2, label: 'Unlisted' },
-                        { value: 'private', icon: Lock, label: 'Private' },
-                        { value: 'restricted', icon: Users, label: 'Restricted' }
-                      ].map(option => {
-                        const Icon = option.icon;
+                      {Object.entries(VISIBILITY).map(([val, cfg]) => {
+                        const Icon = cfg.icon;
                         return (
-                          <label key={option.value} className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer ${
-                            editForm.visibility === option.value
-                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-                              : 'border-gray-200 dark:border-gray-600'
+                          <label key={val} className={`flex items-center gap-2 p-3 border-2 rounded-xl cursor-pointer transition-colors ${
+                            editForm.visibility === val
+                              ? `${cfg.border} bg-gray-50 dark:bg-army-900`
+                              : 'border-gray-200 dark:border-army-700 hover:border-gray-300 dark:hover:border-army-600'
                           }`}>
-                            <input
-                              type="radio"
-                              name="visibility"
-                              value={option.value}
-                              checked={editForm.visibility === option.value}
-                              onChange={(e) => setEditForm({...editForm, visibility: e.target.value})}
-                              className="sr-only"
-                            />
-                            <Icon className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{option.label}</span>
-                            {editForm.visibility === option.value && <Check className="h-4 w-4 ml-auto text-blue-500" />}
+                            <input type="radio" name="visibility" value={val} checked={editForm.visibility===val}
+                              onChange={e => setEditForm(p=>({...p, visibility:e.target.value}))} className="sr-only" />
+                            <Icon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{cfg.label}</span>
+                            {editForm.visibility===val && <Check className="h-3.5 w-3.5 ml-auto text-primary-600" />}
                           </label>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Restricted Emails */}
-                  {editForm.visibility === 'restricted' && (
-                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
-                      <label className="block text-sm font-medium text-purple-900 dark:text-purple-300 mb-2">Allowed Users</label>
+                  {/* Restricted emails */}
+                  {editForm.visibility === 'RESTRICTED' && (
+                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
+                      <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-2">İcazəli istifadəçilər</label>
                       <div className="flex gap-2 mb-3">
-                        <input
-                          type="email"
-                          value={emailInput}
-                          onChange={(e) => setEmailInput(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
+                        <input type="email" value={emailInput}
+                          onChange={e => setEmailInput(e.target.value)}
+                          onKeyDown={e => e.key==='Enter' && (e.preventDefault(), addEmail())}
                           placeholder="user@example.com"
-                          className="flex-1 px-3 py-2 border border-purple-300 dark:border-purple-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        />
-                        <button onClick={addEmail} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                          className="flex-1 px-3 py-2 border border-purple-300 dark:border-purple-700 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 text-sm" />
+                        <button onClick={addEmail} className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
                           <Plus className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="space-y-2">
-                        {editForm.allowedEmails.map(email => (
-                          <div key={email} className="flex items-center justify-between bg-white dark:bg-gray-700 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
-                            <span className="text-sm text-gray-900 dark:text-gray-100">{email}</span>
-                            <button onClick={() => removeEmail(email)} className="text-red-600 dark:text-red-400">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                      {editForm.allowedEmails.map(e => (
+                        <div key={e} className="flex items-center justify-between bg-white dark:bg-army-900 px-3 py-2 rounded-lg border border-gray-200 dark:border-army-700 mb-2">
+                          <span className="text-sm text-gray-900 dark:text-gray-100">{e}</span>
+                          <button onClick={() => removeEmail(e)} className="text-red-500 hover:text-red-700">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
 
-                  {/* Actions */}
-                  <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <button
-                      onClick={handleSaveEdit}
-                      disabled={saving}
-                      className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-                      {saving ? 'Saving...' : 'Save'}
+                  {/* Save / Cancel */}
+                  <div className="flex gap-3 pt-2 border-t border-gray-200 dark:border-army-700">
+                    <button onClick={handleSaveEdit} disabled={saving}
+                      className="flex items-center gap-2 px-5 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 font-medium text-sm">
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      {saving ? 'Saxlanılır…' : 'Yadda saxla'}
                     </button>
-                    <button
-                      onClick={() => setIsEditing(false)}
-                      disabled={saving}
-                      className="px-6 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                    >
-                      Cancel
+                    <button onClick={() => setIsEditing(false)} disabled={saving}
+                      className="px-5 py-2 border border-gray-300 dark:border-army-600 rounded-lg hover:bg-gray-50 dark:hover:bg-army-700 text-gray-700 dark:text-gray-300 font-medium text-sm">
+                      Ləğv et
                     </button>
                   </div>
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-start justify-between mb-4 gap-4">
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex-1">
-                      {video.title}
-                    </h1>
-                    <span className={`inline-flex items-center space-x-1 px-3 py-1 rounded-full text-white text-sm ${visibilityInfo.color} flex-shrink-0`}>
-                      <VisibilityIcon className="h-4 w-4" />
-                      <span>{visibilityInfo.text}</span>
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-6 text-gray-600 dark:text-gray-400 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center space-x-2">
-                      <Eye className="h-5 w-5" />
-                      <span className="font-medium">{formatViews(video.views)}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="h-5 w-5" />
-                      <span>{formatDate(video.uploadedAt)}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-                    <button
-                      onClick={handleLike}
-                      disabled={isLiking}
-                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
-                        liked ? "bg-primary-600 text-white shadow-md" : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                      } disabled:opacity-50`}
-                    >
-                      <ThumbsUp className={`h-5 w-5 ${liked ? 'fill-current' : ''}`} />
-                      <span className="font-medium">{video.likes || 0}</span>
-                    </button>
-
-                    {/* Embed button — only for public/unlisted videos */}
-                    {(video.visibility === 'public' || video.visibility === 'unlisted' || !video.visibility) && (
-                      <button
-                        onClick={() => setShowEmbedModal(true)}
-                        className="flex items-center space-x-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 font-medium"
-                      >
-                        <Code2 className="h-5 w-5" />
-                        <span>Embed</span>
-                      </button>
-                    )}
-
-                    {canEdit && (
-                      <>
-                        <button
-                          onClick={() => setIsEditing(true)}
-                          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md font-medium"
-                        >
-                          <Edit2 className="h-5 w-5" />
-                          <span>Edit</span>
-                        </button>
-
-                        <button
-                          onClick={() => setShowThumbnailUpload(!showThumbnailUpload)}
-                          className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-md font-medium"
-                        >
-                          <Image className="h-5 w-5" />
-                          <span>Thumbnail</span>
-                        </button>
-
-                        <button
-                          onClick={handleDelete}
-                          className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-md font-medium"
-                        >
-                          <Trash2 className="h-5 w-5" />
-                          <span>Delete</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  {video.uploaderName && (
-                    <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-                      <div className="flex items-center space-x-3">
-                        <div className="h-12 w-12 bg-gradient-to-br from-primary-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md">
-                          {video.uploaderName.charAt(0).toUpperCase()}
-                        </div>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-lg">
-                          {video.uploaderName}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {video.description && (
-                    <div className="mb-6">
-                      <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 text-lg">Description</h2>
-                      <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
-                        {video.description}
-                      </p>
-                    </div>
-                  )}
-
-                  {video.tags && video.tags.length > 0 && (
-                    <div>
-                      <div className="flex flex-wrap gap-2">
-                        {video.tags.map((tag, index) => (
-                          <span key={index} className="bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full text-sm text-gray-700 dark:text-gray-300">
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
               )}
+
+              {/* Thumbnail upload */}
+              {canEdit && showThumbnailUpload && (
+                <ThumbnailUpload videoId={id} currentThumbnail={video.thumbnailUrl}
+                  onUploadSuccess={() => { loadVideo(); setShowThumbnailUpload(false); }} />
+              )}
+
+              {/* Comments */}
+              <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-100 dark:border-army-700 p-5">
+                <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+                  Şərhlər
+                  {video.commentCount > 0 && (
+                    <span className="text-sm font-normal text-gray-500 dark:text-gray-400">· {video.commentCount}</span>
+                  )}
+                </h2>
+                <CommentSection videoId={id} currentUserId={currentUser?.email} />
+              </div>
             </div>
 
-            {canEdit && showThumbnailUpload && (
-              <ThumbnailUpload
-                videoId={id}
-                currentThumbnail={video.thumbnailUrl}
-                onUploadSuccess={handleThumbnailUploadSuccess}
-              />
-            )}
+            {/* ── SIDEBAR ─────────────────────────────────────── */}
+            <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 space-y-4">
 
-            <CommentSection
-              videoId={id}
-              currentUserId={currentUser?.email}
-            />
-          </div>
-
-          {/* Sidebar with Suggestions */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-24 space-y-6">
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none dark:border dark:border-gray-700 p-6">
-                <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 text-lg">
-                  Video Info
-                </h2>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Status:</span>
-                    <span className={`font-medium px-2 py-1 rounded ${
-                      video.status === 'ready' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' :
-                      video.status === 'processing' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300' :
-                      'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
-                    }`}>
-                      {video.status ? video.status.charAt(0).toUpperCase() + video.status.slice(1) : 'Unknown'}
-                    </span>
+              {/* Admin-only: tech info */}
+              {isAdmin && (
+                <div className="bg-army-800 dark:bg-army-900 border border-army-700 rounded-xl p-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-army-400 mb-3">Video məlumatı</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-army-400">Status</span>
+                      <span className={`font-medium px-2 py-0.5 rounded text-xs ${
+                        video.status?.toLowerCase()==='ready'
+                          ? 'bg-green-900/40 text-green-400'
+                          : 'bg-yellow-900/40 text-yellow-400'
+                      }`}>{video.status || 'Naməlum'}</span>
+                    </div>
+                    {video.durationSeconds && (
+                      <div className="flex justify-between">
+                        <span className="text-army-400">Müddət</span>
+                        <span className="text-gray-200">{Math.floor(video.durationSeconds/60)}:{String(video.durationSeconds%60).padStart(2,'0')}</span>
+                      </div>
+                    )}
+                    {video.fileSize && (
+                      <div className="flex justify-between">
+                        <span className="text-army-400">Ölçü</span>
+                        <span className="text-gray-200">{(video.fileSize/1024/1024).toFixed(1)} MB</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* SUGGESTIONS */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-none dark:border dark:border-gray-700 p-6">
+              {/* Video suggestions */}
+              <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-100 dark:border-army-700 p-4">
                 <VideoSuggestions videoId={id} tags={video.tags || []} />
               </div>
             </div>
           </div>
         </div>
       </div>
-      </div>
 
-      {/* Embed Code Modal */}
-      {showEmbedModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      {/* Embed modal — admin only */}
+      {showEmbedModal && isAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
              onClick={() => setShowEmbedModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-lg"
+          <div className="bg-white dark:bg-army-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-army-700 w-full max-w-lg"
                onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-army-700">
               <div className="flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-primary-600" />
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Embed Video</h3>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Video yerləşdirmə kodu</h3>
               </div>
               <button onClick={() => setShowEmbedModal(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-army-700">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-6">
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                Paste this code into your HTML page to embed the video:
+                Bu kodu HTML səhifənizdə istifadə edin:
               </p>
-              <pre className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 text-xs text-gray-800 dark:text-gray-200 font-mono whitespace-pre-wrap break-all overflow-x-auto">
+              <pre className="bg-gray-50 dark:bg-army-900 border border-gray-200 dark:border-army-700 rounded-lg p-4 text-xs text-gray-800 dark:text-gray-200 font-mono whitespace-pre-wrap break-all overflow-x-auto">
 {getEmbedCode()}
               </pre>
-              <button
-                onClick={handleCopyEmbed}
+              <button onClick={handleCopyEmbed}
                 className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                  embedCopied
-                    ? 'bg-green-600 text-white'
-                    : 'bg-primary-600 hover:bg-primary-700 text-white'
-                }`}
-              >
-                {embedCopied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> Copy code</>}
+                  embedCopied ? 'bg-green-600 text-white' : 'bg-primary-600 hover:bg-primary-700 text-white'
+                }`}>
+                {embedCopied ? <><CheckCheck className="h-4 w-4" />Kopyalandı!</> : <><Copy className="h-4 w-4" />Kodu kopyala</>}
               </button>
             </div>
           </div>

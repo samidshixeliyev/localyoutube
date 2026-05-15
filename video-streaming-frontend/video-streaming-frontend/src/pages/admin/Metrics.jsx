@@ -205,7 +205,11 @@ export default function Metrics() {
       setLastRefresh(new Date());
       setError(null);
     } catch (e) {
-      setError('Cannot reach Prometheus. Is the container running?');
+      if (e.response?.status === 403 || e.response?.status === 401) {
+        setError('Bu səhifəyə giriş icazəniz yoxdur. Yalnız super-admin istifadəçilər metrik məlumatlarına baxa bilər.');
+      } else {
+        setError('Prometheus əlçatmazdır. Konteyner işləyirmi? docker exec modtube supervisorctl status');
+      }
     } finally {
       setLoading(false);
     }
@@ -328,24 +332,13 @@ export default function Metrics() {
               <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-red-700 dark:text-red-400 font-medium">{error}</p>
-                <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-1">
-                  Prometheus runs inside the container on port 9090. Run{' '}
-                  <code className="bg-red-100 dark:bg-red-900/40 px-1 rounded font-mono">
-                    docker exec modtube supervisorctl status
-                  </code>{' '}
-                  on the VPS to check its status, or{' '}
-                  <code className="bg-red-100 dark:bg-red-900/40 px-1 rounded font-mono">
-                    docker exec modtube tail -30 /var/log/supervisor/prometheus.log
-                  </code>{' '}
-                  to read its logs.
-                </p>
               </div>
-              <button
-                onClick={refresh}
-                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors"
-              >
-                Retry
-              </button>
+              {!error.includes('icazə') && (
+                <button onClick={refresh}
+                  className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors">
+                  Yenidən cəhd et
+                </button>
+              )}
             </div>
           )}
 
