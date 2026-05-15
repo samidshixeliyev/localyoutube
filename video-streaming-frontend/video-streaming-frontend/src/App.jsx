@@ -50,8 +50,16 @@ function RootRoute() {
 }
 
 // Reads sidebar state and shifts the content area accordingly
+// Hides sidebar for login, callback, embed, and logged_out routes
 function SidebarAwareLayout({ children }) {
   const { isOpen } = useSidebar();
+  const location = useLocation();
+
+  const noSidebar = ['/login', '/callback', '/logged_out'].includes(location.pathname)
+    || location.pathname.startsWith('/embed/');
+
+  if (noSidebar) return <>{children}</>;
+
   return (
     <>
       <Sidebar />

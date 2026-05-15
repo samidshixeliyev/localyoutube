@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings } from 'lucide-react';
 
-const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0 }) => {
+const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, onEnded }) => {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const playerContainerRef = useRef(null);
@@ -75,6 +75,9 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0 }) => {
         if (startTime > 0) {
           video.currentTime = startTime;
         }
+        if (autoPlay) {
+          video.play().catch(() => {});
+        }
         console.log('[VideoPlayer] HLS manifest loaded, levels:', data.levels.length);
         
         const levels = data.levels.map((level, index) => ({
@@ -135,6 +138,9 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0 }) => {
         if (startTime > 0) {
           video.currentTime = startTime;
         }
+        if (autoPlay) {
+          video.play().catch(() => {});
+        }
       });
     }
   }, [hlsUrl, startTime]);
@@ -156,6 +162,7 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0 }) => {
 
     const handleEnded = () => {
       setIsPlaying(false);
+      if (onEnded) onEnded();
     };
 
     const handlePlay = () => {
@@ -179,7 +186,7 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0 }) => {
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
     };
-  }, [onTimeUpdate]);
+  }, [onTimeUpdate, onEnded]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {

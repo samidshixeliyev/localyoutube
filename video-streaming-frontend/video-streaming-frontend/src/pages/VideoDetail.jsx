@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import videoService from "../services/videoService";
 import VideoPlayer from "../components/VideoPlayer";
@@ -9,7 +9,8 @@ import Navbar from "../components/Navbar";
 import {
   ThumbsUp, Eye, Calendar, Trash2, Loader2, Image,
   Edit2, Lock, Globe, Link2, Users, Save, X, Check,
-  Plus, Hash, Code2, Copy, CheckCheck, ChevronDown, ChevronUp
+  Plus, Hash, Code2, Copy, CheckCheck, ChevronDown, ChevronUp,
+  Play, SkipForward
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useMiniPlayer } from "../context/MiniPlayerContext";
@@ -59,6 +60,10 @@ const VideoDetail = () => {
   const [currentUser,      setCurrentUser]      = useState(null);
   const [showThumbnailUpload, setShowThumbnailUpload] = useState(false);
   const [descExpanded,     setDescExpanded]     = useState(false);
+
+  // Autoplay next video
+  const [nextVideo, setNextVideo] = useState(null);
+  const [autoplayCountdown, setAutoplayCountdown] = useState(null);
 
   // Edit
   const [isEditing, setIsEditing] = useState(false);
@@ -176,6 +181,36 @@ const VideoDetail = () => {
     }
   };
 
+  // Autoplay-next handlers
+  const handleNextVideoReady = useCallback((v) => { setNextVideo(v); }, []);
+
+  const handleVideoEnded = useCallback(() => {
+    if (!nextVideo) return;
+    setAutoplayCountdown(5);
+  }, [nextVideo]);
+
+  useEffect(() => {
+    if (autoplayCountdown === null) return;
+    if (autoplayCountdown === 0) {
+      navigate(`/video/${nextVideo.id}`);
+      setAutoplayCountdown(null);
+      return;
+    }
+    const t = setTimeout(() => setAutoplayCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [autoplayCountdown, nextVideo, navigate]);
+
+  // Reset autoplay state when navigating to a new video
+  useEffect(() => {
+    setNextVideo(null);
+    setAutoplayCountdown(null);
+  }, [id]);
+
+  const cancelAutoplay = () => setAutoplayCountdown(null);
+  const playNextNow = () => {
+    if (nextVideo) navigate(`/video/${nextVideo.id}`);
+  };
+
   const handleLike = async () => {
     if (!currentUser) { navigate('/login'); return; }
     if (isLiking) return;
@@ -287,7 +322,13 @@ const VideoDetail = () => {
               {/* Player */}
               <div className="bg-black rounded-xl overflow-hidden shadow-2xl">
                 {video.hlsUrl && video.status?.toLowerCase() === 'ready' ? (
-                  <VideoPlayer hlsUrl={video.hlsUrl} onTimeUpdate={handleTimeUpdate} startTime={startTime} />
+                  <VideoPlayer
+                    hlsUrl={video.hlsUrl}
+                    onTimeUpdate={handleTimeUpdate}
+                    startTime={startTime}
+                    autoPlay={true}
+                    onEnded={handleVideoEnded}
+                  />
                 ) : (
                   <div className="aspect-video flex items-center justify-center bg-army-900">
                     <div className="text-center text-white/70">
@@ -301,6 +342,32 @@ const VideoDetail = () => {
                   </div>
                 )}
               </div>
+
+              {/* Autoplay next video countdown */}
+              {autoplayCountdown !== null && nextVideo && (
+                <div className="flex items-center gap-4 bg-army-800 border border-army-700 rounded-xl p-4">
+                  <div className="flex-shrink-0 w-24 h-[54px] rounded-lg overflow-hidden bg-army-900">
+                    {nextVideo.thumbnailUrl
+                      ? <img src={nextVideo.thumbnailUrl} alt={nextVideo.title} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center"><Play className="h-6 w-6 text-primary-500/60" /></div>
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-400 mb-0.5">{autoplayCountdown} saniyə sonra:</p>
+                    <p className="text-sm font-semibold text-gray-100 line-clamp-1">{nextVideo.title}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={cancelAutoplay}
+                      className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 border border-army-600 rounded-lg transition-colors">
+                      Ləğv et
+                    </button>
+                    <button onClick={playNextNow}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-semibold">
+                      <SkipForward className="h-3.5 w-3.5" />İndi oynat
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Title row */}
               {!isEditing && (
@@ -565,7 +632,7 @@ const VideoDetail = () => {
 
             {/* ── SIDEBAR ─────────────────────────────────────── */}
             <div className="lg:w-96 xl:w-[26rem] flex-shrink-0">
-              <VideoSuggestions videoId={id} tags={video.tags || []} />
+              <VideoSuggestions videoId={id} tags={video.tags || []} onNextVideoReady={handleNextVideoReady} />
             </div>
           </div>
         </div>

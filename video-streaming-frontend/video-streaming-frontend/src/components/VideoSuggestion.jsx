@@ -89,7 +89,7 @@ const SkeletonCard = () => (
 );
 
 /* ── Main component ─────────────────────────────────────────────── */
-const VideoSuggestions = ({ videoId, tags }) => {
+const VideoSuggestions = ({ videoId, tags, onNextVideoReady }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading]         = useState(true);
 
@@ -108,6 +108,7 @@ const VideoSuggestions = ({ videoId, tags }) => {
           const filtered = data.filter(v => v.id !== videoId);
           if (!cancelled && filtered.length > 0) {
             setSuggestions(filtered);
+            if (onNextVideoReady && filtered.length > 0) onNextVideoReady(filtered[0]);
             return;
           }
         }
@@ -117,7 +118,11 @@ const VideoSuggestions = ({ videoId, tags }) => {
         const data = Array.isArray(res.data?.videos)   ? res.data.videos
                    : Array.isArray(res.data?.content)  ? res.data.content
                    : Array.isArray(res.data)           ? res.data : [];
-        if (!cancelled) setSuggestions(data.filter(v => v.id !== videoId));
+        if (!cancelled) {
+          const filtered = data.filter(v => v.id !== videoId);
+          setSuggestions(filtered);
+          if (onNextVideoReady && filtered.length > 0) onNextVideoReady(filtered[0]);
+        }
       } catch {
         /* silent fail */
       } finally {

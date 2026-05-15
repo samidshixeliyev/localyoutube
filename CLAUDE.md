@@ -145,4 +145,155 @@ localyoutube/
 
 ---
 
+### 2026-05-15 — Major UI Overhaul Session
+
+#### What was done
+
+1. **Mini player size + timestamp resume**
+   - `MiniPlayer.jsx`: width 320 → 400px, updated drag bounds and initial position
+   - `VideoPlayer.jsx`: added `startTime` prop; seeks to it in `MANIFEST_PARSED` handler (HLS) and `loadedmetadata` (Safari native)
+   - `VideoDetail.jsx`: reads `?t=` query param via `useSearchParams`, passes as `startTime` to `VideoPlayer`
+   - `MiniPlayer.handleExpand()` already passes `?t=${time}` — the missing piece was VideoDetail reading it
+
+2. **Sign-out stops mini player**
+   - `UserDropdown.jsx`: `handleLogout` now calls `closeMiniPlayer()` before `logout()` — prevents restricted video playing after sign-out
+
+3. **UserDropdown fully Azerbaijani**
+   - "My Videos" → "Videolarım", "Upload Video" → "Video Yüklə", "Change Password" → "Şifrəni Dəyiş"
+   - "Metrics" → "Metriklər", "Settings" → "Parametrlər", "Manage Users" → "İstifadəçilər"
+   - "Manage Roles" → "Rollar", "Sign Out" → "Çıxış"
+   - Role badge dark mode added
+
+4. **Login page redesign**
+   - `max-w-sm` → `max-w-md`, icons for email/password fields, show/hide password toggle
+   - Larger padding, decorative circles in header, bigger "Sistemə Daxil Ol" button
+
+5. **Website icon redesigned**
+   - `ModTubeLogo.jsx`: new military shield with play triangle icon
+   - `index.html`: inline SVG data-URI favicon (shield shape)
+
+6. **UploadPage — full overhaul**
+   - Full Azerbaijani translation of all labels, placeholders, error messages
+   - Dark mode classes on all inputs/textareas/containers
+   - Shorts toggle (`isShorts` checkbox with "SHORTS" badge)
+   - Email autocomplete: fetches users from `adminGetUsers()`, shows dropdown filtered by typed query
+
+7. **VideoDetail — email autocomplete in edit form**
+   - Same `adminGetUsers()` autocomplete for restricted section in edit mode
+   - Dropdown closes on outside click
+
+8. **ChangePassword — dark mode + Azerbaijani**
+   - Full redesign with header strip, dark mode inputs, Azerbaijani
+
+9. **Metrics — dark mode chart colors**
+   - Added `useTheme()` hook; `gridColor`, `axisColor`, `tickColor` all adapt to dark/light
+   - Applied to all CartesianGrid, XAxis, YAxis across all 11 charts
+   - Card backgrounds use `dark:bg-army-800` (army theme)
+   - App metrics (uploads, views, transcodings) show `0` instead of `—` when null
+
+10. **RoleManagement — grouped permission categories**
+    - `PERMISSION_META` map with emoji icons, Azerbaijani descriptions, and categories
+    - Permissions grouped by: Sistem / İstifadəçi / Video / Digər
+    - Each category is collapsible, has "select all / deselect all" per category
+    - Shows "X seçilib" badge on the permissions section header
+
+11. **Multi-file parallel uploads + Settings**
+    - `UploadContext.jsx`: rewrote to support a queue of uploads
+      - `fetchUploadConfig()` reads both `maxParallelUploads` (chunks) and `maxConcurrentUploads` (files)
+      - Multiple files can upload simultaneously; excess is queued
+      - `isShorts` passed through to `updateVideo` API call
+    - `UploadManager.jsx`: shows all active uploads as a scrollable list, queue badge
+    - `IdpSettings.jsx`: Azerbaijani throughout, army theme dark mode, new `upload.max-concurrent` slider
+
+12. **Search query highlight in results**
+    - `VideoCard.jsx`: `HighlightText` component wraps title and uploader name
+    - Matched text shown with `bg-primary-200 dark:bg-primary-700/60` background
+    - `SearchResults.jsx`: passes `query` as `highlight` prop; Azerbaijani, dark mode
+
+#### Key notes for next session
+
+- Backend needs `maxConcurrentUploads` field in `GET /api/config/upload` response (maps from `upload.max-concurrent` setting) — currently falls back to 2
+- Backend needs `isShorts` field in video API (PUT `/videos/{id}`) and GET `/videos/shorts` should filter by it — check if backend already handles this
+- The `upload.max-concurrent` setting key is new — backend settings store needs to persist it
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens
+- **Embed page padding**: `/embed/:id` gets sidebar padding
+- **Grafana URL**: `/api/config/grafana` endpoint not verified with new settings UI
+
+---
+
+### 2026-05-15 — UI Overhaul Session 2 (Autoplay, Shorts Redesign, Logos, Fixes)
+
+#### What was done
+
+1. **Embed page sidebar padding fixed**
+   - `App.jsx` `SidebarAwareLayout`: checks `useLocation()` and skips sidebar + padding for `/login`, `/callback`, `/logged_out`, and `/embed/*` routes.
+
+2. **OAuth2 SSO button stuck on "Yönləndirilir…"**
+   - Root cause: BFcache — browser restores page from cache with `ssoLoading = true` after user closes OAuth2 provider tab or presses Back.
+   - Fix: `Login.jsx` listens for `pageshow` (`e.persisted`) and `visibilitychange` events to reset `ssoLoading` to `false`.
+
+3. **Sidebar visible on /login route**
+   - Fixed by the same `SidebarAwareLayout` `noSidebar` check described above.
+
+4. **DB-backed metrics section added to Metrics page**
+   - `services/api.js`: added `adminGetStats()` calling `GET /api/admin/stats`.
+   - `Metrics.jsx`: new "Verilənlər Bazası (Canlı)" section above Prometheus section with 4 cards: Yüklənmiş Videolar, Ümumi Baxışlar (DB), Video Yaddaş (DB), Aktiv Transkodlama.
+   - Backend must implement `GET /api/admin/stats` returning `{ totalVideos, totalViews, totalFileSizeBytes, activeTranscodings }`.
+   - Grafana link fixed: now points to root `/` instead of `/d/modtube-main`.
+
+5. **"Administratorla əlaqə saxlayın" removed from Login page**
+
+6. **UserForm dark mode + Azerbaijani rewrite**
+   - Complete rewrite: military header strip, dark mode inputs (`dark:bg-army-700 dark:border-army-600 dark:text-gray-100`), Azerbaijani labels (Ad, Soyad, E-poçt, Şifrə, Rol), `<Navbar />` included.
+
+7. **MiniPlayer redesign**
+   - Uses `Play, Pause, X, Maximize2` lucide icons (no more emoji).
+   - `duration` + `progress` state: live progress bar overlaid on video.
+   - Accent top border: `h-0.5 bg-primary-500`.
+   - Controls bar: `bg-gray-900/95`, title + current/total time display.
+   - Container: `rounded-xl overflow-hidden shadow-2xl border border-white/10`.
+
+8. **Video autoplay on click**
+   - `VideoPlayer.jsx`: added `autoPlay` prop (default `false`); when set, calls `video.play()` after `MANIFEST_PARSED` (HLS) and `loadedmetadata` (Safari native).
+   - `VideoDetail.jsx`: passes `autoPlay={true}` to `VideoPlayer`.
+
+9. **Next suggested video autoplay countdown**
+   - `VideoPlayer.jsx`: added `onEnded` prop; calls it when video ends.
+   - `VideoSuggestion.jsx`: added `onNextVideoReady` prop; passes `filtered[0]` (first suggestion) after loading.
+   - `VideoDetail.jsx`: `handleVideoEnded` starts a 5-second countdown; overlay shows thumbnail, title, countdown, "Ləğv et" and "İndi oynat" buttons. After 5s navigates to `nextVideo.id`. Countdown resets on video `id` change.
+
+10. **Shorts full redesign**
+    - `Shorts.jsx` complete rewrite: `ShortItem` component per video with own HLS instance and `IntersectionObserver`.
+    - Autoplay (muted) when 60% visible; pause when not. `loop` attribute on `<video>`.
+    - Poster thumbnail while video loads; tap-to-pause/play overlay.
+    - Progress bar at bottom of video.
+    - Right-side action buttons: like (heart), expand to full video (`Maximize2`), sound toggle.
+    - Page-level mute toggle in header.
+    - `no-scrollbar` utility class added to `index.css`.
+    - No time limit enforced on Shorts (backend already handles).
+
+11. **Logo PNG assets**
+    - `public/logo_dark.png` and `public/logo_light.png` copied from `C:\Users\samid.sixaliyev\Desktop\logo_extract\`.
+    - `ModTubeLogo.jsx`: rewritten to use `<img>` with theme-aware `src` (`dark ? /logo_dark.png : /logo_light.png`).
+    - `index.html`: favicon updated to `<link rel="icon" type="image/png" href="/logo_dark.png" />`.
+
+#### Key gotchas
+
+- **BFcache** preserves React state when navigating away and back via browser. Must listen for `pageshow` with `e.persisted` flag and reset loading states.
+- **`IntersectionObserver` per item** is required for Shorts — a shared observer was missing per-item pause/play granularity.
+- **`public/` folder** may not exist in the Vite project — create it with `New-Item -ItemType Directory -Force` before copying static assets.
+
+#### Known remaining issues (carried forward)
+
+- **Backend `/api/admin/stats` endpoint** — must be implemented. Frontend calls it gracefully and shows error state if unavailable.
+- **Mobile sidebar**: no hide logic on small screens — 64px sidebar compresses content.
+- **Grafana integration**: `/api/config/grafana` not fully verified on VPS.
+- **Backend `isShorts` field**: `PUT /videos/{id}` needs `isShorts` and `GET /videos/shorts` should filter by it.
+- **Backend `upload.max-concurrent` setting**: new key, needs to be persisted in settings store.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*

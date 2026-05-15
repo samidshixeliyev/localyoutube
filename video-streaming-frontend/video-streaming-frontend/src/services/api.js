@@ -197,6 +197,9 @@ export const adminGetSettings = () =>
 export const adminUpdateSettings = (data) =>
     api.put('/admin/settings', data);
 
+export const adminGetStats = () =>
+    api.get('/admin/stats');
+
 // ═══════════════════════════════════════════════════════════════
 // SHARE
 // ═══════════════════════════════════════════════════════════════

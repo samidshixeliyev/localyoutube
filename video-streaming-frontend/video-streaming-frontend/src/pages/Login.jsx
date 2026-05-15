@@ -39,6 +39,18 @@ const Login = () => {
     } finally { setLoading(false); }
   };
 
+  // Reset ssoLoading when returning from OAuth2 (bfcache restore or tab visibility)
+  useEffect(() => {
+    const onPageShow = (e) => { if (e.persisted) setSsoLoading(false); };
+    const onVisible  = () => { if (document.visibilityState === 'visible') setSsoLoading(false); };
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   const handleSso = async () => {
     setSsoLoading(true); setError('');
     try { await initiateIdpLogin(); }
@@ -169,12 +181,6 @@ const Login = () => {
         </div>
       </div>
 
-      <p className="mt-6 text-center text-xs text-gray-400 dark:text-gray-500">
-        Hesabınız yoxdur?{' '}
-        <a href="mailto:admin@modtube.local" className="text-primary-600 dark:text-primary-400 font-semibold hover:underline">
-          Administratorla əlaqə saxlayın
-        </a>
-      </p>
     </div>
   );
 };

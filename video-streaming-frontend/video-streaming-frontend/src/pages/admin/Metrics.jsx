@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import Navbar from '../../components/Navbar';
-import api from '../../services/api';
+import api, { adminGetStats } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 
 // ── Prometheus proxy helpers ──────────────────────────────────────────────────
@@ -179,6 +179,10 @@ export default function Metrics() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const timerRef = useRef(null);
 
+  // DB stats — from backend database (not Prometheus)
+  const [dbStats,   setDbStats]   = useState(null);
+  const [dbLoading, setDbLoading] = useState(true);
+
   // Grafana URL — fetched from admin settings; falls back to same-host:3000
   const [grafanaBase, setGrafanaBase] = useState('');
   useEffect(() => {
@@ -273,11 +277,25 @@ export default function Metrics() {
     finally { setChartsLoading(false); }
   }, [range_]);
 
+  // ── Fetch DB stats ────────────────────────────────────────────────────────
+  const fetchDbStats = useCallback(async () => {
+    setDbLoading(true);
+    try {
+      const res = await adminGetStats();
+      setDbStats(res.data);
+    } catch {
+      setDbStats(null);
+    } finally {
+      setDbLoading(false);
+    }
+  }, []);
+
   // ── Auto-refresh ──────────────────────────────────────────────────────────
   const refresh = useCallback(() => {
     fetchStats();
     fetchCharts();
-  }, [fetchStats, fetchCharts]);
+    fetchDbStats();
+  }, [fetchStats, fetchCharts, fetchDbStats]);
 
   useEffect(() => {
     refresh();
@@ -330,7 +348,7 @@ export default function Metrics() {
                 className="p-2 bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-army-700 transition-all">
                 <RefreshCw className="w-4 h-4" />
               </button>
-              <a href={`${GRAFANA_BASE}/d/modtube-main`} target="_blank" rel="noreferrer"
+              <a href={`${GRAFANA_BASE}/`} target="_blank" rel="noreferrer"
                 className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-all">
                 <ExternalLink className="w-4 h-4" /> Grafana
               </a>
@@ -363,6 +381,15 @@ export default function Metrics() {
               )}
             </div>
           )}
+
+          {/* ══ DB STATS ══════════════════════════════════════════════════════ */}
+          <Section>Verilənlər Bazası (Canlı)</Section>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard icon={Upload}       title="Yüklənmiş Videolar"   value={dbStats?.totalVideos}        unit="" color={C.orange} loading={dbLoading} hasError={!dbStats && !dbLoading} zeroDefault />
+            <StatCard icon={Eye}          title="Ümumi Baxışlar (DB)"  value={dbStats?.totalViews}         unit="" color={C.purple} loading={dbLoading} hasError={!dbStats && !dbLoading} zeroDefault />
+            <StatCard icon={Database}     title="Video Yaddaş (DB)"    value={dbStats?.totalFileSizeBytes != null ? dbStats.totalFileSizeBytes / 1e9 : null} unit=" GB" color={C.teal} loading={dbLoading} sub={dbStats?.totalFileSizeBytes != null ? fmtBytes(dbStats.totalFileSizeBytes) : null} hasError={!dbStats && !dbLoading} />
+            <StatCard icon={Clapperboard} title="Aktiv Transkodlama"   value={dbStats?.activeTranscodings} unit="" color={C.amber} loading={dbLoading} hasError={!dbStats && !dbLoading} zeroDefault />
+          </div>
 
           {/* ══ SYSTEM STATS ══════════════════════════════════════════════════ */}
           <Section>System</Section>
