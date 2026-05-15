@@ -50,6 +50,8 @@ public class SecurityConfiguration {
                         // ── Static frontend (React SPA) ──────────────────────
                         .requestMatchers("/", "/index.html", "/favicon.ico").permitAll()
                         .requestMatchers("/assets/**", "/static/**").permitAll()
+                        // Root-level static assets from Vite's public/ folder
+                        .requestMatchers("/*.png", "/*.jpg", "/*.jpeg", "/*.svg", "/*.ico", "/*.webp").permitAll()
                         // SPA client-side routes — Spring serves index.html for all of these
                         .requestMatchers("/login", "/callback", "/logged_out",
                                 "/video/**", "/embed/**", "/search", "/shorts",
