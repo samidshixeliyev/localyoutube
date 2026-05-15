@@ -28,7 +28,7 @@ import java.nio.charset.StandardCharsets;
 @Slf4j
 @RestController
 @RequestMapping("/api/admin/metrics")
-@PreAuthorize("hasAnyAuthority('super-admin', 'view-metrics')")
+@PreAuthorize("hasAnyAuthority('super-admin', 'view-metrics', 'ROLE_SUPER_ADMIN')")
 public class MetricsProxyController {
 
     private static final String PROM = "http://localhost:9090";

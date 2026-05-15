@@ -105,11 +105,12 @@ public class SecurityConfiguration {
 
                         // ADMIN — granular sub-routes (must precede the catch-all below)
                         // Users with view-metrics can reach the metrics proxy
-                        .requestMatchers("/api/admin/metrics/**").hasAnyAuthority("super-admin", "view-metrics")
+                        // ROLE_SUPER_ADMIN is included as fallback (role-based check mirrors permission-based)
+                        .requestMatchers("/api/admin/metrics/**").hasAnyAuthority("super-admin", "view-metrics", "ROLE_SUPER_ADMIN")
                         // Users with manage-settings can read/write settings
-                        .requestMatchers("/api/admin/settings/**").hasAnyAuthority("super-admin", "manage-settings")
+                        .requestMatchers("/api/admin/settings/**").hasAnyAuthority("super-admin", "manage-settings", "ROLE_SUPER_ADMIN")
                         // Everything else (user/role management etc.) — super-admin only
-                        .requestMatchers("/api/admin/**").hasAuthority("super-admin")
+                        .requestMatchers("/api/admin/**").hasAnyAuthority("super-admin", "ROLE_SUPER_ADMIN")
 
                         .requestMatchers("/api/upload/**").hasAnyAuthority("admin-modtube", "super-admin")
 

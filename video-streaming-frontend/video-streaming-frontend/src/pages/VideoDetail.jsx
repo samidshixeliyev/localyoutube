@@ -186,7 +186,7 @@ const VideoDetail = () => {
   /* ── loading / error states ─────────────────────────────────── */
   if (loading) return (
     <><Navbar />
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-army-950">
+      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-army-950">
         <Loader2 className="h-12 w-12 animate-spin text-primary-600" />
       </div>
     </>
@@ -194,7 +194,7 @@ const VideoDetail = () => {
 
   if (error || !video) return (
     <><Navbar />
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-army-950 gap-4">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 dark:bg-army-950 gap-4">
         <p className="text-red-500 dark:text-red-400">{error || 'Video tapılmadı'}</p>
         <button onClick={() => navigate('/')}
           className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
@@ -217,7 +217,7 @@ const VideoDetail = () => {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gray-50 dark:bg-army-950 transition-colors">
+      <div className="min-h-screen bg-gray-100 dark:bg-army-950 transition-colors">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col lg:flex-row gap-6">
 
@@ -517,7 +517,7 @@ const VideoDetail = () => {
               )}
 
               {/* Video suggestions */}
-              <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-100 dark:border-army-700 p-4">
+              <div>
                 <VideoSuggestions videoId={id} tags={video.tags || []} />
               </div>
             </div>

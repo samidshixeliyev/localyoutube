@@ -35,13 +35,19 @@ export default {
           800: '#5e4a22',
           900: '#3d3016',
         },
-        // Dark army backgrounds
+        // Dark army backgrounds (full scale — light to dark)
         army: {
-          900: '#181f11',
-          800: '#1e2618',
-          700: '#262f1e',
-          600: '#2e3a24',
+          50:  '#f2f5eb',
+          100: '#e4ebd4',
+          200: '#c8d6aa',
+          300: '#a6ba7a',
+          400: '#7f9b50',
           500: '#3a4a2e',
+          600: '#2e3a24',
+          700: '#262f1e',
+          800: '#1e2618',
+          900: '#181f11',
+          950: '#0d1009',
         }
       },
       fontFamily: {
