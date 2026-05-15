@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import videoService from "../services/videoService";
 import VideoPlayer from "../components/VideoPlayer";
@@ -12,6 +12,7 @@ import {
   Plus, Hash, Code2, Copy, CheckCheck, ChevronDown, ChevronUp
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useMiniPlayer } from "../context/MiniPlayerContext";
 import api from "../services/api";
 
 /* ── visibility helpers ──────────────────────────────────────── */
@@ -40,6 +41,12 @@ const VideoDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
+  const { activateMiniPlayer, closeMiniPlayer } = useMiniPlayer();
+
+  // Refs for mini-player activation on unmount
+  const videoDataRef = useRef(null);
+  const currentTimeRef = useRef(0);
+  const activateMiniPlayerRef = useRef(activateMiniPlayer);
 
   const [video,            setVideo]            = useState(null);
   const [loading,          setLoading]          = useState(true);
@@ -61,6 +68,29 @@ const VideoDetail = () => {
   // Embed (admin only)
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [embedCopied,    setEmbedCopied]    = useState(false);
+
+  // Keep activateMiniPlayer ref fresh
+  useEffect(() => { activateMiniPlayerRef.current = activateMiniPlayer; });
+  // Keep video data ref fresh
+  useEffect(() => { videoDataRef.current = video; }, [video]);
+
+  // Close mini player when entering a video page; activate it when leaving
+  useEffect(() => {
+    closeMiniPlayer();
+    return () => {
+      const v = videoDataRef.current;
+      const t = currentTimeRef.current;
+      if (v?.hlsUrl && v?.status?.toLowerCase() === 'ready' && t > 1) {
+        activateMiniPlayerRef.current({
+          videoId: id,
+          title: v.title,
+          hlsUrl: v.hlsUrl,
+          currentTime: t,
+        });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* decode JWT -------------------------------------------------- */
   useEffect(() => {
@@ -109,6 +139,7 @@ const VideoDetail = () => {
   };
 
   const handleTimeUpdate = (t) => {
+    currentTimeRef.current = t;
     if (t > 3 && !viewIncremented) {
       videoService.incrementView(id).catch(() => {});
       setViewIncremented(true);
@@ -485,41 +516,8 @@ const VideoDetail = () => {
             </div>
 
             {/* ── SIDEBAR ─────────────────────────────────────── */}
-            <div className="lg:w-96 xl:w-[26rem] flex-shrink-0 space-y-4">
-
-              {/* Admin-only: tech info */}
-              {isAdmin && (
-                <div className="bg-army-800 dark:bg-army-900 border border-army-700 rounded-xl p-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-army-400 mb-3">Video məlumatı</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-army-400">Status</span>
-                      <span className={`font-medium px-2 py-0.5 rounded text-xs ${
-                        video.status?.toLowerCase()==='ready'
-                          ? 'bg-green-900/40 text-green-400'
-                          : 'bg-yellow-900/40 text-yellow-400'
-                      }`}>{video.status || 'Naməlum'}</span>
-                    </div>
-                    {video.durationSeconds && (
-                      <div className="flex justify-between">
-                        <span className="text-army-400">Müddət</span>
-                        <span className="text-gray-200">{Math.floor(video.durationSeconds/60)}:{String(video.durationSeconds%60).padStart(2,'0')}</span>
-                      </div>
-                    )}
-                    {video.fileSize && (
-                      <div className="flex justify-between">
-                        <span className="text-army-400">Ölçü</span>
-                        <span className="text-gray-200">{(video.fileSize/1024/1024).toFixed(1)} MB</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Video suggestions */}
-              <div>
-                <VideoSuggestions videoId={id} tags={video.tags || []} />
-              </div>
+            <div className="lg:w-96 xl:w-[26rem] flex-shrink-0">
+              <VideoSuggestions videoId={id} tags={video.tags || []} />
             </div>
           </div>
         </div>

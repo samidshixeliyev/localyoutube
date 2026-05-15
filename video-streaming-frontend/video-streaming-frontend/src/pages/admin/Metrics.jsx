@@ -103,19 +103,20 @@ const ChartTooltip = ({ active, payload, label, unit = '' }) => {
 };
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading }) {
+function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading, hasError }) {
+  const unavailable = !loading && hasError && value == null;
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4">
       <div className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center"
-           style={{ backgroundColor: color + '18' }}>
-        <Icon className="w-5 h-5" style={{ color }} />
+           style={{ backgroundColor: (unavailable ? '#9ca3af' : color) + '18' }}>
+        <Icon className="w-5 h-5" style={{ color: unavailable ? '#9ca3af' : color }} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate">{title}</p>
         {loading ? (
           <div className="h-5 w-16 bg-gray-100 dark:bg-gray-700 rounded animate-pulse mt-1"/>
         ) : (
-          <p className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
+          <p className={`text-xl font-bold leading-tight ${unavailable ? 'text-gray-400 dark:text-gray-600' : 'text-gray-900 dark:text-gray-100'}`}>
             {value != null ? `${fmtNum(value, value < 10 ? 2 : 0)}${unit}` : '—'}
           </p>
         )}
@@ -206,9 +207,9 @@ export default function Metrics() {
       setError(null);
     } catch (e) {
       if (e.response?.status === 403 || e.response?.status === 401) {
-        setError('Bu səhifəyə giriş icazəniz yoxdur. Yalnız super-admin istifadəçilər metrik məlumatlarına baxa bilər.');
+        setError('permission');
       } else {
-        setError('Prometheus əlçatmazdır. Konteyner işləyirmi? docker exec modtube supervisorctl status');
+        setError('unavailable');
       }
     } finally {
       setLoading(false);
@@ -331,9 +332,20 @@ export default function Metrics() {
             <div className="mb-4 flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
               <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-red-700 dark:text-red-400 font-medium">{error}</p>
+                {error === 'permission' ? (
+                  <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+                    Bu səhifəyə giriş icazəniz yoxdur. Yalnız super-admin istifadəçilər metrik məlumatlarına baxa bilər.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-red-700 dark:text-red-400 font-medium">Prometheus əlçatmazdır — məlumatlar göstərilə bilmir.</p>
+                    <p className="text-xs text-red-600 dark:text-red-500 mt-0.5 font-mono">
+                      docker exec modtube supervisorctl status
+                    </p>
+                  </>
+                )}
               </div>
-              {!error.includes('icazə') && (
+              {error !== 'permission' && (
                 <button onClick={refresh}
                   className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors">
                   Yenidən cəhd et
@@ -345,19 +357,19 @@ export default function Metrics() {
           {/* ══ SYSTEM STATS ══════════════════════════════════════════════════ */}
           <Section>System</Section>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard icon={Cpu}        title="CPU Usage"     value={stats.cpu}    unit="%" color={cpuColor}  loading={loading} sub="5-min avg" />
-            <StatCard icon={MemoryStick} title="Memory Used"  value={stats.mem}    unit="%" color={memColor}  loading={loading} sub="of total RAM" />
-            <StatCard icon={HardDrive}   title="Disk Used"    value={stats.disk}   unit="%" color={diskColor} loading={loading} sub="largest partition" />
-            <StatCard icon={Globe}       title="HTTP Req/s"   value={stats.http}   unit="" color={C.sky}     loading={loading} sub="5-min rate" />
+            <StatCard icon={Cpu}         title="CPU Usage"    value={stats.cpu}  unit="%" color={cpuColor}  loading={loading} sub="5-min avg"        hasError={!!error} />
+            <StatCard icon={MemoryStick} title="Memory Used"  value={stats.mem}  unit="%" color={memColor}  loading={loading} sub="of total RAM"      hasError={!!error} />
+            <StatCard icon={HardDrive}   title="Disk Used"    value={stats.disk} unit="%" color={diskColor} loading={loading} sub="largest partition" hasError={!!error} />
+            <StatCard icon={Globe}       title="HTTP Req/s"   value={stats.http} unit=""  color={C.sky}     loading={loading} sub="5-min rate"        hasError={!!error} />
           </div>
 
           {/* ══ APP STATS ═════════════════════════════════════════════════════ */}
           <Section>Application</Section>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard icon={Upload}       title="Total Uploads"      value={stats.uploads}       unit="" color={C.orange} loading={loading} />
-            <StatCard icon={Clapperboard} title="Active Transcodings" value={stats.transcodings} unit="" color={stats.transcodings > 0 ? C.amber : C.green} loading={loading} />
-            <StatCard icon={Eye}          title="Total Views"         value={stats.views}         unit="" color={C.purple} loading={loading} />
-            <StatCard icon={Database}     title="Video Storage"       value={stats.storage != null ? stats.storage / 1e9 : null} unit=" GB" color={C.teal} loading={loading} sub={fmtBytes(stats.storage)} />
+            <StatCard icon={Upload}       title="Total Uploads"       value={stats.uploads}      unit="" color={C.orange} loading={loading} hasError={!!error} />
+            <StatCard icon={Clapperboard} title="Active Transcodings" value={stats.transcodings} unit="" color={stats.transcodings > 0 ? C.amber : C.green} loading={loading} hasError={!!error} />
+            <StatCard icon={Eye}          title="Total Views"         value={stats.views}        unit="" color={C.purple} loading={loading} hasError={!!error} />
+            <StatCard icon={Database}     title="Video Storage"       value={stats.storage != null ? stats.storage / 1e9 : null} unit=" GB" color={C.teal} loading={loading} sub={fmtBytes(stats.storage)} hasError={!!error} />
           </div>
 
           {/* ══ SYSTEM CHARTS ═════════════════════════════════════════════════ */}

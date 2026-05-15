@@ -4,8 +4,10 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { MiniPlayerProvider } from './context/MiniPlayerContext';
 import { UploadProvider } from './context/UploadContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { SidebarProvider, useSidebar } from './context/SidebarContext';
 import MiniPlayer from './components/MiniPlayer';
 import UploadManager from './components/UploadManager';
+import Sidebar from './components/Sidebar';
 import PrivateRoute from './components/PrivateRoute';
 
 // Eagerly-loaded (tiny, always needed)
@@ -29,7 +31,6 @@ const IdpSettings    = lazy(() => import('./pages/admin/IdpSettings'));
 const Metrics        = lazy(() => import('./pages/admin/Metrics'));
 const Embed          = lazy(() => import('./pages/Embed'));
 
-// Minimal full-page spinner shown while a lazy chunk loads
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-primary-50 dark:bg-army-900">
     <svg className="w-8 h-8 text-primary-600 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -39,8 +40,6 @@ const PageLoader = () => (
   </div>
 );
 
-// Root wrapper: if IDP redirected here with ?code=, handle OAuth2 callback;
-// otherwise render the normal Home page.
 function RootRoute() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -50,116 +49,133 @@ function RootRoute() {
   return <Home />;
 }
 
+// Reads sidebar state and shifts the content area accordingly
+function SidebarAwareLayout({ children }) {
+  const { isOpen } = useSidebar();
+  return (
+    <>
+      <Sidebar />
+      <div
+        className="min-h-screen bg-primary-50 dark:bg-army-900 transition-all duration-200"
+        style={{ paddingLeft: isOpen ? '240px' : '64px' }}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+
 function AppContent() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <UploadProvider>
-    <MiniPlayerProvider>
-      <div className="min-h-screen bg-primary-50 dark:bg-army-900 transition-colors duration-200">
-        <Suspense fallback={<PageLoader />}>
-        <Routes>
-          {/* Public */}
-          <Route path="/" element={<RootRoute />} />
-          <Route
-            path="/login"
-            element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
-          />
-          <Route path="/video/:id" element={<VideoDetail />} />
-          <Route path="/embed/:id" element={<Embed />} />
-          <Route path="/search" element={<SearchResults />} />
-          <Route path="/shorts" element={<Shorts />} />
-          <Route path="/callback" element={<OAuthCallback />} />
-          <Route path="/logged_out" element={<LoggedOut />} />
+    <SidebarProvider>
+      <UploadProvider>
+        <MiniPlayerProvider>
+          <SidebarAwareLayout>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                {/* Public */}
+                <Route path="/" element={<RootRoute />} />
+                <Route
+                  path="/login"
+                  element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
+                />
+                <Route path="/video/:id" element={<VideoDetail />} />
+                <Route path="/embed/:id" element={<Embed />} />
+                <Route path="/search" element={<SearchResults />} />
+                <Route path="/shorts" element={<Shorts />} />
+                <Route path="/callback" element={<OAuthCallback />} />
+                <Route path="/logged_out" element={<LoggedOut />} />
 
-          {/* Authenticated — any logged-in user */}
-          <Route
-            path="/change-password"
-            element={
-              <PrivateRoute>
-                <ChangePassword />
-              </PrivateRoute>
-            }
-          />
+                {/* Authenticated — any logged-in user */}
+                <Route
+                  path="/change-password"
+                  element={
+                    <PrivateRoute>
+                      <ChangePassword />
+                    </PrivateRoute>
+                  }
+                />
 
-          {/* admin-modtube OR super-admin */}
-          <Route
-            path="/upload"
-            element={
-              <PrivateRoute requiredPermission="admin-modtube">
-                <UploadPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/my-videos"
-            element={
-              <PrivateRoute requiredPermission="admin-modtube">
-                <MyVideos />
-              </PrivateRoute>
-            }
-          />
+                {/* admin-modtube OR super-admin */}
+                <Route
+                  path="/upload"
+                  element={
+                    <PrivateRoute requiredPermission="admin-modtube">
+                      <UploadPage />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/my-videos"
+                  element={
+                    <PrivateRoute requiredPermission="admin-modtube">
+                      <MyVideos />
+                    </PrivateRoute>
+                  }
+                />
 
-          {/* Super-admin only */}
-          <Route
-            path="/admin/users"
-            element={
-              <PrivateRoute requiredPermission="super-admin">
-                <UserManagement />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/users/new"
-            element={
-              <PrivateRoute requiredPermission="super-admin">
-                <UserForm />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/users/:id/edit"
-            element={
-              <PrivateRoute requiredPermission="super-admin">
-                <UserForm />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/roles"
-            element={
-              <PrivateRoute requiredPermission="super-admin">
-                <RoleManagement />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/settings"
-            element={
-              <PrivateRoute requiredPermission={['super-admin', 'manage-settings']}>
-                <IdpSettings />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/admin/metrics"
-            element={
-              <PrivateRoute requiredPermission={['super-admin', 'view-metrics']}>
-                <Metrics />
-              </PrivateRoute>
-            }
-          />
+                {/* Super-admin only */}
+                <Route
+                  path="/admin/users"
+                  element={
+                    <PrivateRoute requiredPermission="super-admin">
+                      <UserManagement />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/users/new"
+                  element={
+                    <PrivateRoute requiredPermission="super-admin">
+                      <UserForm />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/users/:id/edit"
+                  element={
+                    <PrivateRoute requiredPermission="super-admin">
+                      <UserForm />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/roles"
+                  element={
+                    <PrivateRoute requiredPermission="super-admin">
+                      <RoleManagement />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/settings"
+                  element={
+                    <PrivateRoute requiredPermission={['super-admin', 'manage-settings']}>
+                      <IdpSettings />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/metrics"
+                  element={
+                    <PrivateRoute requiredPermission={['super-admin', 'view-metrics']}>
+                      <Metrics />
+                    </PrivateRoute>
+                  }
+                />
 
-          {/* 404 */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        </Suspense>
-
-        <MiniPlayer />
-      </div>
-      <UploadManager />
-    </MiniPlayerProvider>
-    </UploadProvider>
+                {/* 404 */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+            <MiniPlayer />
+          </SidebarAwareLayout>
+          <UploadManager />
+        </MiniPlayerProvider>
+      </UploadProvider>
+    </SidebarProvider>
   );
 }
 
