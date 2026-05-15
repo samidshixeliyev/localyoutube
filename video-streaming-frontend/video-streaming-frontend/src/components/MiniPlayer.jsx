@@ -9,7 +9,7 @@ export default function MiniPlayer() {
     const videoRef = useRef(null);
     const hlsRef = useRef(null);
     const [isDragging, setIsDragging] = useState(false);
-    const [position, setPosition] = useState({ x: window.innerWidth - 340, y: window.innerHeight - 230 });
+    const [position, setPosition] = useState({ x: window.innerWidth - 420, y: window.innerHeight - 290 });
     const dragOffset = useRef({ x: 0, y: 0 });
 
     const { active, videoId, title, hlsUrl, currentTime, isPlaying } = miniPlayerState;
@@ -90,8 +90,8 @@ export default function MiniPlayer() {
         if (!isDragging) return;
         const handleMove = (e) => {
             setPosition({
-                x: Math.max(0, Math.min(window.innerWidth - 320, e.clientX - dragOffset.current.x)),
-                y: Math.max(0, Math.min(window.innerHeight - 200, e.clientY - dragOffset.current.y)),
+                x: Math.max(0, Math.min(window.innerWidth - 410, e.clientX - dragOffset.current.x)),
+                y: Math.max(0, Math.min(window.innerHeight - 260, e.clientY - dragOffset.current.y)),
             });
         };
         const handleUp = () => setIsDragging(false);
@@ -117,7 +117,7 @@ export default function MiniPlayer() {
                 position: 'fixed',
                 left: position.x,
                 top: position.y,
-                width: 320,
+                width: 400,
                 zIndex: 9999,
                 borderRadius: '8px',
                 overflow: 'hidden',

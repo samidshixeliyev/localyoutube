@@ -105,4 +105,44 @@ localyoutube/
 
 ---
 
+### 2026-05-15 — VPS Deployment & Metrics Backend Fix
+
+#### What was done
+
+1. **Deployed all UI changes to VPS via Git**
+   - Pushed 2 commits to `master`: `8b6df05` (all UI changes) + `a6990a5` (backend metrics fix)
+   - On VPS (`ubuntu@13.61.159.58`, path `projects/modtube/`):
+     ```
+     git pull origin master
+     docker compose build --no-cache
+     docker compose up -d --force-recreate
+     ```
+   - Container came up healthy (`{"status":"UP"}`).
+
+2. **Root cause of Metrics 400 error found and fixed**
+   - **Symptom**: Metrics page showed "Prometheus unreachable" for all cards.
+   - **Investigation**: Prometheus IS running inside container (port 9090, PID 34). Spring Boot logs showed `400 Bad Request` on PromQL queries.
+   - **Root cause**: `RestTemplate.getForObject(String url, Class)` double-encodes already-percent-encoded characters. `%28` → `%2528`. Prometheus decodes once to `%28`, PromQL parser sees `%` as modulo operator with `28` as operand → `bad number or duration syntax: "28"`.
+   - **Fix**: Changed `proxy()` to use `URI.create(url)` instead of a raw String URL — prevents RestTemplate from re-encoding. Also changed `enc()` to replace `+` with `%20` for RFC-compliant URI query params.
+   - File: `modtube/src/main/java/ao/az/modtube/controller/MetricsProxyController.java`
+
+3. **Verified metrics fix end-to-end on VPS**
+   - Simple query (`up`): returns `success` with both targets up (node_exporter + modtube).
+   - Complex CPU query with encoded brackets/braces: returns `success` with real value (`~27.9%` CPU usage).
+   - Confirmed no more 400 errors.
+
+#### Key gotchas
+
+- `RestTemplate.getForObject(String, Class)` silently re-encodes percent-encoded strings. Always use `URI.create(url)` overload when the URL is already encoded.
+- `URLEncoder.encode()` uses `+` for spaces (application/x-www-form-urlencoded), not `%20` (RFC 3986). For URI query params, always `.replace("+", "%20")`.
+- `supervisord` socket path may differ from default — `unix:///var/run/supervisor.sock no such file` is a misleading error; check `docker exec modtube bash -c 'ps aux'` to confirm supervisord is PID 1 and all children are running.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: No hide logic on small screens — 64px sidebar compresses content on mobile.
+- **Embed page padding**: `/embed/:id` gets `SidebarAwareLayout` padding, which breaks clean embed.
+- **Grafana integration**: `/api/config/grafana` endpoint not yet verified on VPS.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*

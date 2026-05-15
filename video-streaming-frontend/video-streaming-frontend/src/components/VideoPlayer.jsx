@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings } from 'lucide-react';
 
-const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
+const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0 }) => {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const playerContainerRef = useRef(null);
@@ -72,6 +72,9 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
       
       hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
         setIsLoading(false);
+        if (startTime > 0) {
+          video.currentTime = startTime;
+        }
         console.log('[VideoPlayer] HLS manifest loaded, levels:', data.levels.length);
         
         const levels = data.levels.map((level, index) => ({
@@ -129,9 +132,12 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate }) => {
       video.src = hlsUrl;
       video.addEventListener('loadedmetadata', () => {
         setIsLoading(false);
+        if (startTime > 0) {
+          video.currentTime = startTime;
+        }
       });
     }
-  }, [hlsUrl]);
+  }, [hlsUrl, startTime]);
 
   useEffect(() => {
     const video = videoRef.current;

@@ -1,97 +1,72 @@
 import React from 'react';
 
 /**
- * ModTube army-patch logo.
- * Mirrors the physical patch: olive-green left half | tan right half,
- * with "MOD" / "TUBE" text and a stitched border.
- *
+ * ModTube logo — military shield with play button.
  * Props:
- *   size   – number, controls height (width = height * 2)
- *   mini   – render only the icon patch (square)
+ *   size   – controls height (width derived from viewBox ratio)
+ *   mini   – render square icon only (for favicon / small spaces)
  */
 export default function ModTubeLogo({ size = 36, mini = false, className = '' }) {
   if (mini) {
-    // Square icon version for favicon / small spaces
     return (
       <svg
-        width={size}
-        height={size}
+        width={size} height={size}
         viewBox="0 0 40 40"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
+        fill="none" xmlns="http://www.w3.org/2000/svg"
         className={className}
       >
-        {/* Border */}
-        <rect x="1" y="1" width="38" height="38" rx="4" fill="#1a1f14" />
-        {/* Left green half */}
-        <rect x="3" y="3" width="17" height="34" rx="2" fill="#4a5a3a" />
-        {/* Right tan half */}
-        <rect x="20" y="3" width="17" height="34" rx="2" fill="#c4a86a" />
-        {/* M */}
-        <text x="11" y="26" fontSize="18" fontWeight="900" textAnchor="middle"
-          fill="#1a1f14" fontFamily="Arial,Helvetica,sans-serif">M</text>
-        {/* T */}
-        <text x="28.5" y="26" fontSize="18" fontWeight="900" textAnchor="middle"
-          fill="#1a1f14" fontFamily="Arial,Helvetica,sans-serif">T</text>
-        {/* Stitching dots */}
-        {[6,10,14,18,22,26,30,34].map(x => (
-          <circle key={x} cx={x} cy={2} r="0.8" fill="#6b7f3a" opacity="0.6" />
-        ))}
+        {/* Shield background */}
+        <path d="M20 2 L36 8 L36 22 C36 31 20 38 20 38 C20 38 4 31 4 22 L4 8 Z"
+          fill="#3a4a2e" />
+        {/* Shield inner */}
+        <path d="M20 5 L33 10 L33 22 C33 29.5 20 35.5 20 35.5 C20 35.5 7 29.5 7 22 L7 10 Z"
+          fill="#4a5a3a" />
+        {/* Play triangle */}
+        <path d="M16 15 L16 26 L27 20.5 Z" fill="#c4a86a" />
+        {/* Top accent bar */}
+        <rect x="12" y="7" width="16" height="2" rx="1" fill="#c4a86a" opacity="0.6" />
       </svg>
     );
   }
 
-  // Full horizontal patch logo
   const h = size;
-  const w = size * 2.8;
+  const w = Math.round(size * 3.2);
   return (
     <svg
-      width={w}
-      height={h}
-      viewBox="0 0 112 40"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
+      width={w} height={h}
+      viewBox="0 0 128 40"
+      fill="none" xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {/* Outer border / stitching frame */}
-      <rect x="0.5" y="0.5" width="111" height="39" rx="3.5" fill="#1a1f14" stroke="#3a4a2e" strokeWidth="1"/>
-      {/* Stitching dashes top */}
-      {Array.from({length:20},(_,i)=>(
-        <line key={`t${i}`} x1={4+i*5.5} y1="2" x2={7+i*5.5} y2="2"
-          stroke="#4a5a3a" strokeWidth="0.8" strokeLinecap="round"/>
-      ))}
-      {/* Stitching dashes bottom */}
-      {Array.from({length:20},(_,i)=>(
-        <line key={`b${i}`} x1={4+i*5.5} y1="38" x2={7+i*5.5} y2="38"
-          stroke="#4a5a3a" strokeWidth="0.8" strokeLinecap="round"/>
-      ))}
+      {/* Background pill */}
+      <rect x="0.5" y="0.5" width="127" height="39" rx="6" fill="#1a1f14" stroke="#3a4a2e" strokeWidth="1"/>
 
-      {/* Left olive-green half */}
-      <rect x="2" y="2" width="53" height="36" rx="2" fill="#4a5a3a"/>
-      {/* Right tan/sand half */}
-      <rect x="57" y="2" width="53" height="36" rx="2" fill="#c4a86a"/>
+      {/* Shield icon */}
+      <path d="M12 5 L24 9 L24 19 C24 25 18 29 12 31 C6 29 0.5 25 0.5 19 L0.5 9 Z"
+        transform="translate(8,4) scale(0.7)"
+        fill="#4a5a3a" />
+      <path d="M12 7 L22 10.5 L22 19 C22 24 17 27.5 12 29 C7 27.5 2.5 24 2.5 19 L2.5 10.5 Z"
+        transform="translate(8,4) scale(0.7)"
+        fill="#3a4a2e" />
+      <path d="M10 13 L10 22 L18 17.5 Z"
+        transform="translate(8,4) scale(0.7)"
+        fill="#c4a86a" />
 
-      {/* Centre divider */}
-      <rect x="54" y="2" width="4" height="36" fill="#1a1f14"/>
+      {/* MOD text */}
+      <text x="32" y="26" fontSize="17" fontWeight="900" textAnchor="start"
+        fill="#e8ead4" fontFamily="'Arial Black',Arial,sans-serif" letterSpacing="1">MOD</text>
 
-      {/* "MOD" text */}
-      <text x="28" y="23" fontSize="15" fontWeight="900" textAnchor="middle"
-        fill="#e8ead4" fontFamily="Arial Black,Arial,sans-serif"
-        letterSpacing="1">MOD</text>
+      {/* Divider */}
+      <rect x="73" y="8" width="2" height="24" rx="1" fill="#3a4a2e" />
 
-      {/* "TUBE" box */}
-      <rect x="60" y="10" width="46" height="20" rx="2" fill="#1a1f14"/>
-      <text x="83" y="24" fontSize="12" fontWeight="900" textAnchor="middle"
-        fill="#c4a86a" fontFamily="Arial Black,Arial,sans-serif"
-        letterSpacing="0.5">TUBE</text>
+      {/* TUBE box */}
+      <rect x="78" y="10" width="44" height="20" rx="4" fill="#4a5a3a" />
+      <text x="100" y="25" fontSize="13" fontWeight="900" textAnchor="middle"
+        fill="#c4a86a" fontFamily="'Arial Black',Arial,sans-serif" letterSpacing="1">TUBE</text>
 
-      {/* "LOCAL MILITARY CHANNEL" below — small */}
-      <text x="28" y="33" fontSize="4.5" fontWeight="700" textAnchor="middle"
-        fill="#c4a86a" fontFamily="Arial,sans-serif" letterSpacing="0.5"
-        opacity="0.85">LOCAL MILITARY</text>
-      <text x="83" y="33" fontSize="4.5" fontWeight="700" textAnchor="middle"
-        fill="#4a5a3a" fontFamily="Arial,sans-serif" letterSpacing="0.5"
-        opacity="0.85">CHANNEL</text>
+      {/* Tagline */}
+      <text x="100" y="36" fontSize="4" fontWeight="600" textAnchor="middle"
+        fill="#6b7f3a" fontFamily="Arial,sans-serif" letterSpacing="1">MILITARY MEDIA</text>
     </svg>
   );
 }

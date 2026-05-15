@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import videoService from "../services/videoService";
 import VideoPlayer from "../components/VideoPlayer";
 import ThumbnailUpload from "../components/ThumbnailUpload";
@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useMiniPlayer } from "../context/MiniPlayerContext";
-import api from "../services/api";
+import api, { adminGetUsers } from "../services/api";
 
 /* ── visibility helpers ──────────────────────────────────────── */
 const VISIBILITY = {
@@ -40,6 +40,8 @@ const fmtDate = (ts) => {
 const VideoDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const startTime = parseInt(searchParams.get('t') || '0', 10) || 0;
   const { isAuthenticated, user } = useAuth();
   const { activateMiniPlayer, closeMiniPlayer } = useMiniPlayer();
 
@@ -68,6 +70,33 @@ const VideoDetail = () => {
   // Embed (admin only)
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [embedCopied,    setEmbedCopied]    = useState(false);
+
+  // Email autocomplete for restricted edit
+  const [emailSuggestions, setEmailSuggestions] = useState([]);
+  const [showEmailSug,     setShowEmailSug]     = useState(false);
+  const emailSugRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (emailSugRef.current && !emailSugRef.current.contains(e.target)) setShowEmailSug(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const fetchEmailSuggestions = async (q) => {
+    if (q.length < 2) { setEmailSuggestions([]); setShowEmailSug(false); return; }
+    try {
+      const res = await adminGetUsers();
+      const users = (res.data || []).filter(u =>
+        u.email?.toLowerCase().includes(q.toLowerCase()) ||
+        u.fullName?.toLowerCase().includes(q.toLowerCase()) ||
+        u.name?.toLowerCase().includes(q.toLowerCase())
+      ).slice(0, 5);
+      setEmailSuggestions(users);
+      setShowEmailSug(users.length > 0);
+    } catch { setEmailSuggestions([]); }
+  };
 
   // Keep activateMiniPlayer ref fresh
   useEffect(() => { activateMiniPlayerRef.current = activateMiniPlayer; });
@@ -258,7 +287,7 @@ const VideoDetail = () => {
               {/* Player */}
               <div className="bg-black rounded-xl overflow-hidden shadow-2xl">
                 {video.hlsUrl && video.status?.toLowerCase() === 'ready' ? (
-                  <VideoPlayer hlsUrl={video.hlsUrl} onTimeUpdate={handleTimeUpdate} />
+                  <VideoPlayer hlsUrl={video.hlsUrl} onTimeUpdate={handleTimeUpdate} startTime={startTime} />
                 ) : (
                   <div className="aspect-video flex items-center justify-center bg-army-900">
                     <div className="text-center text-white/70">
@@ -462,12 +491,31 @@ const VideoDetail = () => {
                     <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
                       <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-2">İcazəli istifadəçilər</label>
                       <div className="flex gap-2 mb-3">
-                        <input type="email" value={emailInput}
-                          onChange={e => setEmailInput(e.target.value)}
-                          onKeyDown={e => e.key==='Enter' && (e.preventDefault(), addEmail())}
-                          placeholder="user@example.com"
-                          className="flex-1 px-3 py-2 border border-purple-300 dark:border-purple-700 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 text-sm" />
-                        <button onClick={addEmail} className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                        <div className="relative flex-1" ref={emailSugRef}>
+                          <input type="email" value={emailInput}
+                            onChange={e => { setEmailInput(e.target.value); fetchEmailSuggestions(e.target.value); }}
+                            onKeyDown={e => e.key==='Enter' && (e.preventDefault(), addEmail())}
+                            onFocus={() => emailInput.length >= 2 && emailSuggestions.length > 0 && setShowEmailSug(true)}
+                            placeholder="user@example.com"
+                            className="w-full px-3 py-2 border border-purple-300 dark:border-purple-700 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                          {showEmailSug && emailSuggestions.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-army-800 border border-purple-200 dark:border-purple-700 rounded-xl shadow-lg z-20 overflow-hidden">
+                              {emailSuggestions.map(u => (
+                                <button key={u.email} type="button"
+                                  onMouseDown={() => {
+                                    if (!editForm.allowedEmails.includes(u.email))
+                                      setEditForm(p => ({ ...p, allowedEmails: [...p.allowedEmails, u.email] }));
+                                    setEmailInput(''); setShowEmailSug(false);
+                                  }}
+                                  className="w-full text-left px-3 py-2.5 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors border-b border-gray-100 dark:border-army-700 last:border-0">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{u.fullName || u.name || u.email}</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">{u.email}</p>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={addEmail} className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex-shrink-0">
                           <Plus className="h-4 w-4" />
                         </button>
                       </div>

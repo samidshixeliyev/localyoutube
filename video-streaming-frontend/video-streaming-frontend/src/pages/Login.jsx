@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ModTubeLogo from '../components/ModTubeLogo';
+import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 
-/**
- * Login page — any registered user can log in with email + password.
- * SSO (AO ID) button shown only when IDP is enabled in admin settings.
- */
 const Login = () => {
   const [form, setForm] = useState({ email: '', password: '' });
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
@@ -48,41 +46,44 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100
-                    dark:from-army-900 dark:to-army-800
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-primary-100 to-army-100
+                    dark:from-army-950 dark:via-army-900 dark:to-army-800
                     flex flex-col items-center justify-center p-4 transition-colors duration-200">
 
       {/* Branding */}
       <div className="mb-8 flex flex-col items-center gap-3">
-        <ModTubeLogo size={44} />
-        <p className="text-xs font-semibold text-primary-700 dark:text-primary-400 tracking-widest uppercase">
-          Lokal Hərbi Kanal
+        <ModTubeLogo size={52} />
+        <p className="text-xs font-bold text-primary-700 dark:text-primary-400 tracking-widest uppercase">
+          Lokal Hərbi Media Platforması
         </p>
       </div>
 
       {/* Card */}
-      <div className="w-full max-w-sm bg-white dark:bg-army-800 rounded-2xl
-                      shadow-xl dark:border dark:border-army-700 overflow-hidden">
+      <div className="w-full max-w-md bg-white dark:bg-army-800 rounded-2xl
+                      shadow-2xl dark:border dark:border-army-700 overflow-hidden">
 
-        {/* Header strip — army green */}
-        <div className="bg-gradient-to-r from-primary-700 to-primary-600 px-8 py-5 text-center">
-          <p className="text-xs font-bold tracking-widest uppercase text-primary-200 mb-1">Sistemə giriş</p>
-          <h1 className="text-xl font-black text-white tracking-tight">ModTube</h1>
-          <div className="mt-2 inline-flex items-center gap-2 bg-black/20 rounded-full px-3 py-1">
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"/>
-            <span className="text-xs text-white/80">media.platform</span>
+        {/* Header strip */}
+        <div className="bg-gradient-to-r from-primary-800 to-primary-600 px-10 py-7 text-center relative overflow-hidden">
+          {/* decorative circles */}
+          <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-white/5" />
+          <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-black/10" />
+          <p className="text-xs font-bold tracking-widest uppercase text-primary-200 mb-1 relative">Sistemə giriş</p>
+          <h1 className="text-2xl font-black text-white tracking-tight relative">ModTube</h1>
+          <div className="mt-3 inline-flex items-center gap-2 bg-black/25 rounded-full px-4 py-1.5 relative">
+            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"/>
+            <span className="text-xs text-white/90 font-medium">Sistem aktiv</span>
           </div>
         </div>
 
         {/* Body */}
-        <div className="px-8 py-7">
+        <div className="px-10 py-8">
 
           {error && (
-            <div className="mb-5 flex items-start gap-2 bg-red-50 dark:bg-red-900/20
-                            border border-red-200 dark:border-red-800 rounded-lg px-3 py-2.5">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+            <div className="mb-6 flex items-start gap-2.5 bg-red-50 dark:bg-red-900/20
+                            border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                 stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                className="flex-shrink-0 mt-px">
+                className="flex-shrink-0 mt-0.5">
                 <circle cx="12" cy="12" r="10"/>
                 <line x1="15" y1="9" x2="9" y2="15"/>
                 <line x1="9" y1="9" x2="15" y2="15"/>
@@ -91,67 +92,77 @@ const Login = () => {
             </div>
           )}
 
-          {/* Email + password form — always visible */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 E-poçt ünvanı
               </label>
-              <input
-                name="email" type="email" autoComplete="email" required
-                value={form.email} onChange={handleChange}
-                placeholder="istifadeci@misal.com"
-                className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg
-                           text-sm text-gray-900 dark:text-gray-100
-                           placeholder-gray-400 dark:placeholder-gray-500
-                           bg-white dark:bg-army-700
-                           outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
-              />
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  name="email" type="email" autoComplete="email" required
+                  value={form.email} onChange={handleChange}
+                  placeholder="istifadeci@misal.com"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-army-600 rounded-xl
+                             text-sm text-gray-900 dark:text-gray-100
+                             placeholder-gray-400 dark:placeholder-gray-500
+                             bg-white dark:bg-army-700
+                             outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                />
+              </div>
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Şifrə
               </label>
-              <input
-                name="password" type="password" autoComplete="current-password" required
-                value={form.password} onChange={handleChange}
-                placeholder="••••••••"
-                className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg
-                           text-sm text-gray-900 dark:text-gray-100
-                           placeholder-gray-400 dark:placeholder-gray-500
-                           bg-white dark:bg-army-700
-                           outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
-              />
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  name="password" type={showPass ? 'text' : 'password'} autoComplete="current-password" required
+                  value={form.password} onChange={handleChange}
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-11 py-3 border border-gray-300 dark:border-army-600 rounded-xl
+                             text-sm text-gray-900 dark:text-gray-100
+                             placeholder-gray-400 dark:placeholder-gray-500
+                             bg-white dark:bg-army-700
+                             outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+                />
+                <button type="button" onClick={() => setShowPass(v => !v)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                  {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
+
             <button type="submit" disabled={loading || ssoLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5
-                         bg-primary-600 text-white text-sm font-semibold rounded-lg
+              className="w-full flex items-center justify-center gap-2 px-4 py-3
+                         bg-primary-600 text-white text-sm font-bold rounded-xl
                          hover:bg-primary-700 hover:-translate-y-px active:translate-y-0
-                         transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none shadow-sm">
+                         transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none shadow-md mt-2">
               {loading
                 ? <><svg className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" viewBox="0 0 24 24"/>Yüklənir…</>
-                : 'Daxil ol'}
+                : 'Sistemə Daxil Ol'}
             </button>
           </form>
 
-          {/* SSO — only when enabled */}
           {idpEnabled && (
             <>
-              <div className="flex items-center gap-3 my-5">
+              <div className="flex items-center gap-3 my-6">
                 <hr className="flex-1 border-gray-200 dark:border-army-600"/>
-                <span className="text-xs text-gray-400 dark:text-gray-500">və ya</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">VƏ YA</span>
                 <hr className="flex-1 border-gray-200 dark:border-army-600"/>
               </div>
               <button type="button" onClick={handleSso} disabled={ssoLoading || loading}
                 className="w-full flex items-center justify-center gap-2.5 px-4 py-3
-                           bg-tan-500 text-white font-semibold rounded-xl shadow-sm
+                           bg-tan-500 text-white font-bold rounded-xl shadow-md
                            hover:bg-tan-600 hover:-translate-y-px active:translate-y-0
                            transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none">
                 {ssoLoading
                   ? <svg className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" viewBox="0 0 24 24"/>
-                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 }
-                {ssoLoading ? 'Yönləndirilir…' : 'AO ID ilə daxil ol'}
+                {ssoLoading ? 'Yönləndirilir…' : 'AO ID ilə Daxil Ol'}
               </button>
             </>
           )}
@@ -160,8 +171,8 @@ const Login = () => {
 
       <p className="mt-6 text-center text-xs text-gray-400 dark:text-gray-500">
         Hesabınız yoxdur?{' '}
-        <a href="mailto:admin@modtube.local" className="text-primary-600 font-medium hover:underline">
-          Administratorla əlaqə
+        <a href="mailto:admin@modtube.local" className="text-primary-600 dark:text-primary-400 font-semibold hover:underline">
+          Administratorla əlaqə saxlayın
         </a>
       </p>
     </div>

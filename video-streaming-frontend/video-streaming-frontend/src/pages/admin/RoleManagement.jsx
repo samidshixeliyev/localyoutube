@@ -16,6 +16,22 @@ import {
 /* ─── helpers ─────────────────────────────────────────────────── */
 const SYSTEM_ROLES = ['super-admin'];
 
+/* Permission metadata — enriches backend permissions with category, icon, description.
+   Unknown permissions fall back to DEFAULT_META so the UI stays robust. */
+const PERMISSION_META = {
+  'super-admin':       { category: 'Sistem', icon: '🛡️', desc: 'Tam sistem girişi — bütün icazələri əhatə edir' },
+  'admin-modtube':     { category: 'Video',  icon: '🎬', desc: 'Video yükləmə, redaktə və silmə' },
+  'view-private':      { category: 'Video',  icon: '🔒', desc: 'Gizli videoları izləmək' },
+  'view-metrics':      { category: 'Sistem', icon: '📊', desc: 'Prometheus metrik panelini görmək' },
+  'manage-settings':   { category: 'Sistem', icon: '⚙️', desc: 'Sistem parametrlərinə dəyişiklik etmək' },
+  'manage-users':      { category: 'İstifadəçi', icon: '👥', desc: 'İstifadəçiləri yaratmaq, redaktə etmək və silmək' },
+  'manage-roles':      { category: 'İstifadəçi', icon: '🎭', desc: 'Rolları idarə etmək' },
+  'upload-video':      { category: 'Video',  icon: '📤', desc: 'Video yükləmək' },
+  'delete-video':      { category: 'Video',  icon: '🗑️', desc: 'İstənilən videonu silmək' },
+  'view-reports':      { category: 'Sistem', icon: '📋', desc: 'Hesabatları görmək' },
+};
+const DEFAULT_META = { category: 'Digər', icon: '🔑', desc: '' };
+
 function PermBadge({ name }) {
   const isSuper = name === 'super-admin';
   const isAdmin = name === 'admin-modtube';
@@ -59,12 +75,46 @@ function RoleFormModal({ mode, role, permissions, onClose, onSaved }) {
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [expandedCats, setExpandedCats] = useState({});
 
   const togglePerm = (id) => {
     setSelectedPerms(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
+
+  const toggleCat = (cat) =>
+    setExpandedCats(prev => ({ ...prev, [cat]: !isCatExpanded(cat) }));
+  const isCatExpanded = (cat) => expandedCats[cat] !== false; // default expanded
+
+  const selectAllInCat = (perms) => {
+    const ids = perms.map(p => p.id);
+    setSelectedPerms(prev => Array.from(new Set([...prev, ...ids])));
+  };
+  const deselectAllInCat = (perms) => {
+    const ids = new Set(perms.map(p => p.id));
+    setSelectedPerms(prev => prev.filter(id => !ids.has(id)));
+  };
+  const allSelectedInCat = (perms) => perms.length > 0 && perms.every(p => selectedPerms.includes(p.id));
+
+  /* Group permissions by category from PERMISSION_META */
+  const groupedPerms = permissions.reduce((acc, perm) => {
+    const meta = PERMISSION_META[perm.name] || DEFAULT_META;
+    if (!acc[meta.category]) acc[meta.category] = [];
+    acc[meta.category].push({ ...perm, meta });
+    return acc;
+  }, {});
+
+  /* Stable category order: known categories first, then anything else (incl. "Digər") */
+  const CATEGORY_ORDER = ['Sistem', 'İstifadəçi', 'Video', 'Digər'];
+  const orderedCategories = Object.keys(groupedPerms).sort((a, b) => {
+    const ai = CATEGORY_ORDER.indexOf(a);
+    const bi = CATEGORY_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -149,31 +199,78 @@ function RoleFormModal({ mode, role, permissions, onClose, onSaved }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              İcazələr
-            </label>
-            <div className="border border-gray-200 dark:border-army-600 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                İcazələr
+              </label>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full
+                               bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
+                {selectedPerms.length} seçilib
+              </span>
+            </div>
+
+            <div className="border border-gray-200 dark:border-army-600 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
               {permissions.length === 0 ? (
                 <p className="p-3 text-sm text-gray-400 dark:text-gray-500">İcazə tapılmadı</p>
-              ) : permissions.map(perm => (
-                <label
-                  key={perm.id}
-                  className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-primary-50 dark:hover:bg-army-700 border-b border-gray-100 dark:border-army-700 last:border-0 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedPerms.includes(perm.id)}
-                    onChange={() => togglePerm(perm.id)}
-                    className="mt-0.5 rounded border-gray-300 dark:border-army-600 text-primary-600 focus:ring-primary-500"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{perm.name}</p>
-                    {perm.description && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{perm.description}</p>
-                    )}
+              ) : orderedCategories.map(cat => {
+                const perms = groupedPerms[cat];
+                const expanded = isCatExpanded(cat);
+                const selectedCount = perms.filter(p => selectedPerms.includes(p.id)).length;
+                const allSelected = allSelectedInCat(perms);
+                return (
+                  <div key={cat} className="border-b border-gray-100 dark:border-army-700 last:border-0">
+                    {/* Category header */}
+                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-army-900/40">
+                      <button
+                        type="button"
+                        onClick={() => toggleCat(cat)}
+                        className="flex items-center gap-2 flex-1 text-left text-sm font-bold text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                      >
+                        {expanded
+                          ? <ChevronUp className="h-4 w-4" />
+                          : <ChevronDown className="h-4 w-4" />}
+                        <span>{cat}</span>
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          ({selectedCount}/{perms.length} seçilib)
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => allSelected ? deselectAllInCat(perms) : selectAllInCat(perms)}
+                        className="text-xs font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors px-2 py-1 rounded hover:bg-primary-50 dark:hover:bg-primary-900/20"
+                      >
+                        {allSelected ? 'Hamısını sil' : 'Hamısını seç'}
+                      </button>
+                    </div>
+
+                    {/* Category items */}
+                    {expanded && perms.map(perm => {
+                      const desc = PERMISSION_META[perm.name]?.desc || perm.description || '';
+                      const icon = perm.meta.icon;
+                      return (
+                        <label
+                          key={perm.id}
+                          className="flex items-start gap-3 px-4 py-2.5 cursor-pointer hover:bg-primary-50 dark:hover:bg-army-700 border-t border-gray-100 dark:border-army-700 transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedPerms.includes(perm.id)}
+                            onChange={() => togglePerm(perm.id)}
+                            className="mt-0.5 rounded border-gray-300 dark:border-army-600 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="text-base leading-none mt-0.5" aria-hidden="true">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{perm.name}</p>
+                            {desc && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
                   </div>
-                </label>
-              ))}
+                );
+              })}
             </div>
           </div>
 

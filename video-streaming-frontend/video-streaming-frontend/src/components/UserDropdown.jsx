@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useMiniPlayer } from '../context/MiniPlayerContext';
 import { LogOut, Video, Key, Users, Shield, Upload, Settings, BarChart2 } from 'lucide-react';
 
 const UserDropdown = () => {
     const { user, logout, hasPermission } = useAuth();
+    const { closeMiniPlayer } = useMiniPlayer();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
     const timeoutRef = useRef(null);
@@ -44,7 +46,9 @@ const UserDropdown = () => {
 
     const handleLogout = () => {
         setIsOpen(false);
+        closeMiniPlayer();
         logout();
+        navigate('/login');
     };
 
     return (
@@ -67,16 +71,16 @@ const UserDropdown = () => {
 
             {/* Dropdown */}
             {isOpen && (
-                <div className="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-army-800 rounded-xl shadow-2xl border border-gray-100 dark:border-army-700 z-50 overflow-hidden">
                     {/* User Info */}
-                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-army-700 bg-gray-50 dark:bg-army-900">
                         <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
-                            {user?.fullName || user?.name || 'User'}
+                            {user?.fullName || user?.name || 'İstifadəçi'}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{user?.email}</p>
                         <span className={`inline-block mt-1.5 text-xs px-2 py-0.5 rounded-full font-medium
-                            ${isSuperAdmin ? 'bg-red-100 text-red-700' : isAdmin ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'}`}>
-                            {isSuperAdmin ? '⭐ Super Admin' : isAdmin ? '🔧 Admin' : '👤 User'}
+                            ${isSuperAdmin ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : isAdmin ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300' : 'bg-gray-100 text-gray-600 dark:bg-army-700 dark:text-gray-400'}`}>
+                            {isSuperAdmin ? '⭐ Super Admin' : isAdmin ? '🔧 Admin' : '👤 İstifadəçi'}
                         </span>
                     </div>
 
@@ -87,44 +91,44 @@ const UserDropdown = () => {
                                 <Link
                                     to="/my-videos"
                                     onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
                                 >
                                     <Video className="h-4 w-4 text-gray-400" />
-                                    My Videos
+                                    Videolarım
                                 </Link>
                                 <Link
                                     to="/upload"
                                     onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
                                 >
                                     <Upload className="h-4 w-4 text-gray-400" />
-                                    Upload Video
+                                    Video Yüklə
                                 </Link>
-                                <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                                <div className="border-t border-gray-100 dark:border-army-700 my-1" />
                             </>
                         )}
 
                         <Link
                             to="/change-password"
                             onClick={() => setIsOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
                         >
                             <Key className="h-4 w-4 text-gray-400" />
-                            Change Password
+                            Şifrəni Dəyiş
                         </Link>
 
                         {(canViewMetrics || canManageSettings || isSuperAdmin) && (
-                            <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                            <div className="border-t border-gray-100 dark:border-army-700 my-1" />
                         )}
 
                         {canViewMetrics && (
                             <Link
                                 to="/admin/metrics"
                                 onClick={() => setIsOpen(false)}
-                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
                             >
                                 <BarChart2 className="h-4 w-4 text-gray-400" />
-                                Metrics
+                                Metriklər
                             </Link>
                         )}
 
@@ -132,10 +136,10 @@ const UserDropdown = () => {
                             <Link
                                 to="/admin/settings"
                                 onClick={() => setIsOpen(false)}
-                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
                             >
                                 <Settings className="h-4 w-4 text-gray-400" />
-                                Settings
+                                Parametrlər
                             </Link>
                         )}
 
@@ -144,29 +148,29 @@ const UserDropdown = () => {
                                 <Link
                                     to="/admin/users"
                                     onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
                                 >
                                     <Users className="h-4 w-4 text-gray-400" />
-                                    Manage Users
+                                    İstifadəçilər
                                 </Link>
                                 <Link
                                     to="/admin/roles"
                                     onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
                                 >
                                     <Shield className="h-4 w-4 text-gray-400" />
-                                    Manage Roles
+                                    Rollar
                                 </Link>
                             </>
                         )}
 
-                        <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                        <div className="border-t border-gray-100 dark:border-army-700 my-1" />
                         <button
                             onClick={handleLogout}
-                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 w-full transition-colors"
+                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 w-full transition-colors"
                         >
                             <LogOut className="h-4 w-4" />
-                            Sign Out
+                            Çıxış
                         </button>
                     </div>
                 </div>

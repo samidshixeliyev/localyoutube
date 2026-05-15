@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import Navbar from '../../components/Navbar';
 import api from '../../services/api';
+import { useTheme } from '../../context/ThemeContext';
 
 // ── Prometheus proxy helpers ──────────────────────────────────────────────────
 
@@ -91,8 +92,8 @@ const C = {
 const ChartTooltip = ({ active, payload, label, unit = '' }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
-      <p className="text-gray-400 mb-1">{fmtTime(label)}</p>
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-gray-500 dark:text-gray-400 mb-1">{fmtTime(label)}</p>
       {payload.map((p, i) => (
         <p key={i} style={{ color: p.color }} className="font-medium">
           {p.name}: {typeof p.value === 'number' ? p.value.toFixed(2) : p.value}{unit}
@@ -103,10 +104,14 @@ const ChartTooltip = ({ active, payload, label, unit = '' }) => {
 };
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading, hasError }) {
+function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading, hasError, zeroDefault = false }) {
   const unavailable = !loading && hasError && value == null;
+  // If zeroDefault is true and value is null (and no error), display 0 instead of "—"
+  const displayValue = value != null
+    ? `${fmtNum(value, value < 10 ? 2 : 0)}${unit}`
+    : (zeroDefault && !hasError ? `0${unit}` : '—');
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 flex items-center gap-4">
+    <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-200 dark:border-army-700 shadow-sm p-4 flex items-center gap-4">
       <div className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center"
            style={{ backgroundColor: (unavailable ? '#9ca3af' : color) + '18' }}>
         <Icon className="w-5 h-5" style={{ color: unavailable ? '#9ca3af' : color }} />
@@ -114,10 +119,10 @@ function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading, ha
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate">{title}</p>
         {loading ? (
-          <div className="h-5 w-16 bg-gray-100 dark:bg-gray-700 rounded animate-pulse mt-1"/>
+          <div className="h-5 w-16 bg-gray-100 dark:bg-army-700 rounded animate-pulse mt-1"/>
         ) : (
           <p className={`text-xl font-bold leading-tight ${unavailable ? 'text-gray-400 dark:text-gray-600' : 'text-gray-900 dark:text-gray-100'}`}>
-            {value != null ? `${fmtNum(value, value < 10 ? 2 : 0)}${unit}` : '—'}
+            {displayValue}
           </p>
         )}
         {sub && <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{sub}</p>}
@@ -129,8 +134,8 @@ function StatCard({ icon: Icon, title, value, unit = '', color, sub, loading, ha
 // ── ChartCard ─────────────────────────────────────────────────────────────────
 function ChartCard({ title, children, loading, empty }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+    <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-200 dark:border-army-700 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-army-700 flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{title}</p>
       </div>
       <div className="p-4" style={{ height: 220 }}>
@@ -160,6 +165,11 @@ const Section = ({ children }) => (
 
 export default function Metrics() {
   const navigate = useNavigate();
+  const { dark } = useTheme();
+  const gridColor = dark ? '#374151' : '#e5e7eb';
+  const axisColor = dark ? '#4b5563' : '#d1d5db';
+  const tickColor = dark ? '#9ca3af' : '#6b7280';
+
   const [range_,  setRange]   = useState(TIME_RANGES[1]); // 1h default
   const [stats,   setStats]   = useState({});
   const [charts,  setCharts]  = useState({});
@@ -284,13 +294,13 @@ export default function Metrics() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 transition-colors duration-200">
+      <div className="min-h-screen bg-primary-50 dark:bg-army-900 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
           {/* ── Header ── */}
           <div className="flex items-center gap-4 mb-6">
             <button onClick={() => navigate('/admin/users')}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-all">
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-army-700 rounded-lg transition-all">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex-1">
@@ -305,23 +315,23 @@ export default function Metrics() {
             </div>
             <div className="flex items-center gap-2">
               {/* Time range */}
-              <div className="flex bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <div className="flex bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg overflow-hidden">
                 {TIME_RANGES.map(r => (
                   <button key={r.label} onClick={() => setRange(r)}
                     className={`px-3 py-1.5 text-sm font-medium transition-colors ${
                       range_.label === r.label
                         ? 'bg-primary-600 text-white'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-army-700'}`}>
                     {r.label}
                   </button>
                 ))}
               </div>
               <button onClick={refresh}
-                className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                className="p-2 bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-army-700 transition-all">
                 <RefreshCw className="w-4 h-4" />
               </button>
               <a href={`${GRAFANA_BASE}/d/modtube-main`} target="_blank" rel="noreferrer"
-                className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-all">
                 <ExternalLink className="w-4 h-4" /> Grafana
               </a>
             </div>
@@ -366,9 +376,9 @@ export default function Metrics() {
           {/* ══ APP STATS ═════════════════════════════════════════════════════ */}
           <Section>Application</Section>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard icon={Upload}       title="Total Uploads"       value={stats.uploads}      unit="" color={C.orange} loading={loading} hasError={!!error} />
-            <StatCard icon={Clapperboard} title="Active Transcodings" value={stats.transcodings} unit="" color={stats.transcodings > 0 ? C.amber : C.green} loading={loading} hasError={!!error} />
-            <StatCard icon={Eye}          title="Total Views"         value={stats.views}        unit="" color={C.purple} loading={loading} hasError={!!error} />
+            <StatCard icon={Upload}       title="Total Uploads"       value={stats.uploads}      unit="" color={C.orange} loading={loading} hasError={!!error} zeroDefault />
+            <StatCard icon={Clapperboard} title="Active Transcodings" value={stats.transcodings} unit="" color={stats.transcodings > 0 ? C.amber : C.green} loading={loading} hasError={!!error} zeroDefault />
+            <StatCard icon={Eye}          title="Total Views"         value={stats.views}        unit="" color={C.purple} loading={loading} hasError={!!error} zeroDefault />
             <StatCard icon={Database}     title="Video Storage"       value={stats.storage != null ? stats.storage / 1e9 : null} unit=" GB" color={C.teal} loading={loading} sub={fmtBytes(stats.storage)} hasError={!!error} />
           </div>
 
@@ -385,9 +395,9 @@ export default function Metrics() {
                       <stop offset="95%" stopColor={C.orange} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis domain={[0,100]} unit="%" tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis domain={[0,100]} unit="%" tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip unit="%" />} />
                   <Area type="monotone" dataKey="CPU %" stroke={C.orange} fill="url(#gCpu)" strokeWidth={2} dot={false} />
                 </AreaChart>
@@ -403,9 +413,9 @@ export default function Metrics() {
                       <stop offset="95%" stopColor={C.blue} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} formatter={v => fmtBytes(v)} />
                   <Area type="monotone" dataKey="Used" stroke={C.blue} fill="url(#gMem)" strokeWidth={2} dot={false} />
                 </AreaChart>
@@ -420,9 +430,9 @@ export default function Metrics() {
             <ChartCard title="HTTP Requests / s  (by status)" loading={chartsLoading} empty={!charts.http?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={charts.http} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
                   {charts.http?.length > 0 &&
@@ -446,9 +456,9 @@ export default function Metrics() {
                       <stop offset="95%" stopColor={C.purple} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis unit="s" tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis unit="s" tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip unit="s" />} />
                   <Area type="monotone" dataKey="p95" stroke={C.purple} fill="url(#gP95)" strokeWidth={2} dot={false} />
                 </AreaChart>
@@ -464,9 +474,9 @@ export default function Metrics() {
                       <stop offset="95%" stopColor={C.sky} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip formatter={v => fmtBytes(v)} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
                   <Area type="monotone" dataKey="used" stroke={C.sky}  fill="url(#gHeap)" strokeWidth={2} dot={false} />
@@ -484,9 +494,9 @@ export default function Metrics() {
                       <stop offset="95%" stopColor={C.amber} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Area type="stepAfter" dataKey="Active" stroke={C.amber} fill="url(#gTrans)" strokeWidth={2} dot={false} />
                 </AreaChart>
@@ -501,9 +511,9 @@ export default function Metrics() {
             <ChartCard title="Upload Rate  (uploads / min)" loading={chartsLoading} empty={!charts.uploadRate?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={charts.uploadRate} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Bar dataKey="Uploads/min" fill={C.orange} radius={[2,2,0,0]} />
                 </BarChart>
@@ -513,9 +523,9 @@ export default function Metrics() {
             <ChartCard title="Video Views / min" loading={chartsLoading} empty={!charts.viewRate?.length}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={charts.viewRate} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Bar dataKey="Views/min" fill={C.purple} radius={[2,2,0,0]} />
                 </BarChart>
@@ -540,9 +550,9 @@ export default function Metrics() {
                       <stop offset="95%" stopColor={C.sky} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10 }} stroke="#d1d5db" />
-                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10 }} stroke="#d1d5db" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip formatter={v => fmtBytes(v)} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
                   <Area type="monotone" dataKey="uploads"    stroke={C.orange} fill="url(#gUploads)" strokeWidth={2} dot={false} stackId="s" />
