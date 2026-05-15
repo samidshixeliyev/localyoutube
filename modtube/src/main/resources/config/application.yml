@@ -71,7 +71,7 @@ modtube:
 logging:
   level:
     root: INFO
-    az.dev.modtube: DEBUG
+    ao.az.modtube: DEBUG
 
 management:
   endpoints:
