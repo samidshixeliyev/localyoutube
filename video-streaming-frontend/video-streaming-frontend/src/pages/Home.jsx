@@ -206,10 +206,14 @@ const Home = () => {
     try {
       p === 0 ? setLoading(true) : setLoadingMore(true);
       const res = await getVideos(p, PAGE_SIZE);
-      const data = res.data?.content ?? res.data ?? [];
+      const data = Array.isArray(res.data?.videos) ? res.data.videos
+                 : Array.isArray(res.data?.content) ? res.data.content
+                 : Array.isArray(res.data) ? res.data : [];
+      const total = res.data?.totalElements ?? 0;
+      const totalPages = res.data?.totalPages ?? 1;
       if (p === 0) setVideos(data);
       else setVideos(prev => [...prev, ...data]);
-      setHasMore(data.length === PAGE_SIZE);
+      setHasMore(p + 1 < totalPages && data.length > 0);
       setError('');
     } catch {
       setError('Videolar yüklənə bilmədi. Yenidən cəhd edin.');
@@ -223,7 +227,9 @@ const Home = () => {
 
   useEffect(() => {
     getShorts(0, 10)
-      .then(r => setShorts(r.data?.content ?? r.data ?? []))
+      .then(r => setShorts(Array.isArray(r.data?.videos) ? r.data.videos
+                         : Array.isArray(r.data?.content) ? r.data.content
+                         : Array.isArray(r.data) ? r.data : []))
       .catch(() => {});
   }, []);
 

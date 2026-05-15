@@ -104,7 +104,9 @@ const Shorts = () => {
     try {
       p === 0 ? setLoading(true) : setLoadingMore(true);
       const res = await getShorts(p, PAGE_SIZE);
-      const data = res.data?.content ?? res.data ?? [];
+      const data = Array.isArray(res.data?.videos) ? res.data.videos
+                 : Array.isArray(res.data?.content) ? res.data.content
+                 : Array.isArray(res.data) ? res.data : [];
       if (p === 0) setShorts(data);
       else setShorts(prev => [...prev, ...data]);
       setHasMore(data.length === PAGE_SIZE);
