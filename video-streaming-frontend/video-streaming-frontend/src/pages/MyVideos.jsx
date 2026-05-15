@@ -33,25 +33,26 @@ const MyVideos = () => {
     <>
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">My Videos</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">Mənim videolarım</h1>
 
         {videos.length === 0 ? (
           <div className="text-center py-12">
             <UploadIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg mb-2">No videos uploaded yet</p>
-            <p className="text-gray-400 mb-6">Start sharing your content with the world!</p>
+            <p className="text-gray-500 text-lg mb-2">Heç bir video yüklənməyib</p>
+            <p className="text-gray-400 mb-6">Öz videolarıvı Orduyla paylaş</p>
             <Link
               to="/upload"
               className="inline-flex items-center space-x-2 px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
               <UploadIcon className="h-5 w-5" />
-              <span>Upload Your First Video</span>
+              <span>İlk Videovu Yüklə</span>
             </Link>
           </div>
         ) : (
           <>
             <p className="text-gray-600 mb-6">
-              You have {videos.length} video{videos.length !== 1 ? 's' : ''}
+              {/* You have {videos.length} video{videos.length !== 1 ? 's' : ''} */}
+              Sizin {videos.length} videonuz var.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {videos.map((video) => (

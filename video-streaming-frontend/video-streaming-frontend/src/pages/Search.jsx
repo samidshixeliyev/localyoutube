@@ -52,11 +52,11 @@ const Search = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Search Results
+            Axtarış nəticələri
           </h1>
           {query && (
             <p className="text-gray-600">
-              Showing results for: <span className="font-semibold">"{query}"</span>
+              Nəticələr göstərilir: <span className="font-semibold">"{query}"</span>
             </p>
           )}
         </div>
@@ -72,7 +72,7 @@ const Search = () => {
               onClick={searchVideos}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
-              Retry
+              Yenidən cəhd et
             </button>
           </div>
         ) : videos.length === 0 ? (
@@ -82,7 +82,7 @@ const Search = () => {
               {query ? 'No videos found' : 'Enter a search query'}
             </p>
             {query && (
-              <p className="text-gray-400">Try searching with different keywords</p>
+              <p className="text-gray-400">Fərqli açar sözlərlə axtarış edin</p>
             )}
           </div>
         ) : (

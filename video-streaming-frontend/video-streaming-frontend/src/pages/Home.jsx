@@ -67,7 +67,7 @@ const Home = () => {
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">
-          Discover Videos
+          Videoları kəşf et
         </h1>
 
         {error && (
@@ -79,8 +79,8 @@ const Home = () => {
         {videos.length === 0 && !loading ? (
           <div className="text-center py-12">
             <Play className="h-16 w-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">No videos yet</h3>
-            <p className="text-gray-600 dark:text-gray-400">Be the first to upload a video!</p>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Hələki video yoxdur</h3>
+            <p className="text-gray-600 dark:text-gray-400">İlk videonu sən yüklə!</p>
           </div>
         ) : (
           <>
@@ -147,7 +147,7 @@ const Home = () => {
                 >
                   {loading ? (
                     <span className="flex items-center gap-2 justify-center">
-                      <Loader2 className="h-5 w-5 animate-spin" /> Loading…
+                      <Loader2 className="h-5 w-5 animate-spin" /> Yüklənir...
                     </span>
                   ) : 'Load More'}
                 </button>

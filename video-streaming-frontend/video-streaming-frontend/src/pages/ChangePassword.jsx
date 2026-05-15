@@ -43,7 +43,7 @@ const ChangePassword = () => {
     return (
         <div className="max-w-md mx-auto mt-16 px-4">
             <div className="bg-white rounded-xl shadow-md p-8">
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">Change Password</h2>
+                <h2 className="text-xl font-semibold text-gray-900 mb-6">Şifrəni dəyiş</h2>
 
                 {error && (
                     <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">{error}</div>
@@ -65,7 +65,7 @@ const ChangePassword = () => {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Yeni şifrə</label>
                         <input
                             type="password"
                             value={form.newPassword}
@@ -77,7 +77,7 @@ const ChangePassword = () => {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Yeni şifrəni təsdiqlə</label>
                         <input
                             type="password"
                             value={form.confirmPassword}
@@ -90,7 +90,7 @@ const ChangePassword = () => {
                     <div className="flex gap-3 pt-2">
                         <button type="button" onClick={() => navigate(-1)}
                             className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">
-                            Cancel
+                            İmtina et
                         </button>
                         <button type="submit" disabled={loading}
                             className="flex-1 px-5 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-medium

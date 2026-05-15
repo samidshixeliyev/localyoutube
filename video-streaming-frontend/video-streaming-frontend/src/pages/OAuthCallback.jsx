@@ -135,7 +135,7 @@ const OAuthCallback = () => {
         borderTopColor: '#5eead4', borderRadius: '50%',
         animation: 'spin 0.7s linear infinite', marginBottom: '1rem'
       }} />
-      <p style={{ fontSize: '0.85rem', color: '#2dd4bf' }}>Completing sign-in…</p>
+      <p style={{ fontSize: '0.85rem', color: '#2dd4bf' }}>Giriş tamamlanır…</p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );

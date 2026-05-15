@@ -48,7 +48,7 @@ const Embed = () => {
     return (
       <div className="w-full h-screen bg-black flex flex-col items-center justify-center gap-3">
         <AlertCircle className="h-10 w-10 text-red-400" />
-        <p className="text-white/70 text-sm">{error || 'Video not found.'}</p>
+        <p className="text-white/70 text-sm">{error || 'Video tapılmadı.'}</p>
       </div>
     );
   }
