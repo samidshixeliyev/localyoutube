@@ -37,15 +37,15 @@ public class AuthController {
     private final SystemSettingService settings;
 
     // Fallback defaults (used if DB not yet migrated or setting missing)
-    @Value("${localtube.idp.base-url:https://13.61.159.58}")
+    @Value("${modtube.idp.base-url:https://13.61.159.58}")
     private String defaultIdpBaseUrl;
-    @Value("${localtube.idp.client-id:EFxbQK-ekDX1OkWov51cjg}")
+    @Value("${modtube.idp.client-id:EFxbQK-ekDX1OkWov51cjg}")
     private String defaultIdpClientId;
-    @Value("${localtube.idp.issuer:https://auth.ao.az}")
+    @Value("${modtube.idp.issuer:https://auth.ao.az}")
     private String defaultIdpIssuer;
-    @Value("${localtube.idp.redirect-uri:http://13.61.159.58:4000/}")
+    @Value("${modtube.idp.redirect-uri:http://13.61.159.58:4000/}")
     private String defaultIdpRedirectUri;
-    @Value("${localtube.idp.logout-redirect-uri:http://13.61.159.58:4000/logged_out}")
+    @Value("${modtube.idp.logout-redirect-uri:http://13.61.159.58:4000/logged_out}")
     private String defaultIdpLogoutRedirectUri;
 
     // Live values — read from DB on every request so admin changes take effect immediately

@@ -49,10 +49,10 @@ public class TranscodingService {
 
     public TranscodingService(VideoService videoService,
                               ModTubeMetrics metrics,
-                              @Value("${localtube.storage.hls-dir}") String hlsDirPath,
-                              @Value("${localtube.storage.thumbnail-dir}") String thumbnailDirPath,
-                              @Value("${localtube.transcoding.segment-duration}") int segmentDuration,
-                              @Value("${localtube.transcoding.qualities}") List<String> qualities) {
+                              @Value("${modtube.storage.hls-dir}") String hlsDirPath,
+                              @Value("${modtube.storage.thumbnail-dir}") String thumbnailDirPath,
+                              @Value("${modtube.transcoding.segment-duration}") int segmentDuration,
+                              @Value("${modtube.transcoding.qualities}") List<String> qualities) {
         this.videoService = videoService;
         this.metrics = metrics;
         this.hlsDir = Paths.get(hlsDirPath);

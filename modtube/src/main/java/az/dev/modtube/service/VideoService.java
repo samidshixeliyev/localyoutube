@@ -37,9 +37,9 @@ public class VideoService {
     private final Path thumbnailDir;
 
     public VideoService(VideoRepository videoRepository, VideoLikeRepository videoLikeRepository,
-                        @Value("${localtube.storage.upload-dir}") String uploadDirPath,
-                        @Value("${localtube.storage.hls-dir}") String hlsDirPath,
-                        @Value("${localtube.storage.thumbnail-dir}") String thumbnailDirPath) {
+                        @Value("${modtube.storage.upload-dir}") String uploadDirPath,
+                        @Value("${modtube.storage.hls-dir}") String hlsDirPath,
+                        @Value("${modtube.storage.thumbnail-dir}") String thumbnailDirPath) {
         this.videoRepository = videoRepository;
         this.videoLikeRepository = videoLikeRepository;
         this.uploadDir = Paths.get(uploadDirPath);

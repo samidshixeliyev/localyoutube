@@ -33,8 +33,8 @@ public class IdpJwtValidator {
     private final SystemSettingService settings;
 
     public IdpJwtValidator(
-            @Value("${localtube.idp.jwks-uri}") String jwksUri,
-            @Value("${localtube.idp.skip-ssl-verify:true}") boolean skipSslVerify,
+            @Value("${modtube.idp.jwks-uri}") String jwksUri,
+            @Value("${modtube.idp.skip-ssl-verify:true}") boolean skipSslVerify,
             SystemSettingService settings) {
 
         this.settings = settings;

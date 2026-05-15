@@ -21,7 +21,7 @@ public class HlsController {
 
     private final Path hlsDir;
 
-    public HlsController(@Value("${localtube.storage.hls-dir}") String hlsDirPath) {
+    public HlsController(@Value("${modtube.storage.hls-dir}") String hlsDirPath) {
         this.hlsDir = Paths.get(hlsDirPath);
     }
 

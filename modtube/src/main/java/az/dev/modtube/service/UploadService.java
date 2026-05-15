@@ -48,11 +48,11 @@ public class UploadService {
             VideoService videoService,
             TranscodingService transcodingService,
             ModTubeMetrics metrics,
-            @Value("${localtube.storage.upload-dir}") String uploadDirPath,
-            @Value("${localtube.storage.temp-dir}") String tempDirPath,
-            @Value("${localtube.storage.max-file-size}") long maxFileSize,
-            @Value("${localtube.storage.min-disk-free}") long minDiskFree,
-            @Value("${localtube.storage.allowed-extensions}") List<String> allowedExtensions
+            @Value("${modtube.storage.upload-dir}") String uploadDirPath,
+            @Value("${modtube.storage.temp-dir}") String tempDirPath,
+            @Value("${modtube.storage.max-file-size}") long maxFileSize,
+            @Value("${modtube.storage.min-disk-free}") long minDiskFree,
+            @Value("${modtube.storage.allowed-extensions}") List<String> allowedExtensions
     ) {
         this.videoService = videoService;
         this.transcodingService = transcodingService;

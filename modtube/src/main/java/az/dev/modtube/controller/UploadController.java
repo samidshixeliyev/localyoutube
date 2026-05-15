@@ -42,9 +42,9 @@ public class UploadController {
     public UploadController(VideoService videoService,
                             TranscodingService transcodingService,
                             ModTubeMetrics metrics,
-                            @Value("${localtube.storage.upload-dir}") String uploadDirPath,
-                            @Value("${localtube.storage.max-file-size}") long maxFileSize,
-                            @Value("${localtube.storage.min-disk-free}") long minDiskFree) throws IOException {
+                            @Value("${modtube.storage.upload-dir}") String uploadDirPath,
+                            @Value("${modtube.storage.max-file-size}") long maxFileSize,
+                            @Value("${modtube.storage.min-disk-free}") long minDiskFree) throws IOException {
         this.videoService = videoService;
         this.transcodingService = transcodingService;
         this.metrics = metrics;

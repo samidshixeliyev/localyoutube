@@ -28,10 +28,10 @@ public class DataSeeder implements ApplicationRunner {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    @Value("${localtube.admin.email:admin@localtube.local}")
+    @Value("${modtube.admin.email:admin@modtube.local}")
     private String adminEmail;
 
-    @Value("${localtube.admin.password:changeme}")
+    @Value("${modtube.admin.password:changeme}")
     private String adminPassword;
 
     @Override

@@ -8,13 +8,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
-    @Value("${localtube.storage.upload-dir}")
+    @Value("${modtube.storage.upload-dir}")
     private String uploadDir;
 
-    @Value("${localtube.storage.hls-dir}")
+    @Value("${modtube.storage.hls-dir}")
     private String hlsDir;
 
-    @Value("${localtube.storage.thumbnail-dir}")
+    @Value("${modtube.storage.thumbnail-dir}")
     private String thumbnailDir;
 
     @Override
