@@ -71,7 +71,7 @@ public class VideoController {
     }
 
     @GetMapping("/suggestions")
-    public ResponseEntity<List<String>> getSuggestions(
+    public ResponseEntity<List<String>> getTitleSuggestions(
             @RequestParam String query,
             @RequestParam(defaultValue = "8") int size) {
         try {
