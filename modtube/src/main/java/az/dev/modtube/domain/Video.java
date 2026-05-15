@@ -136,7 +136,6 @@ public class Video implements Persistable<String> {
     private String restrictionNote;
 
     @Builder.Default
-    @Builder.Default
     @Column(name = "is_short")
     private boolean isShort = false;
 
