@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
@@ -67,7 +68,11 @@ public class MetricsProxyController {
 
     private ResponseEntity<String> proxy(String url) {
         try {
-            String body = http.getForObject(url, String.class);
+            // Use URI.create() so RestTemplate does NOT re-encode the already-percent-encoded
+            // query string. Passing a raw String URL causes RestTemplate to double-encode
+            // '%' → '%25', which garbles PromQL expressions like "(..." → "%28..." → "%2528..."
+            // and Prometheus then sees '%28' as the modulo operator + number, giving 400 errors.
+            String body = http.getForObject(URI.create(url), String.class);
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body);
@@ -80,6 +85,7 @@ public class MetricsProxyController {
     }
 
     private static String enc(String s) {
-        return URLEncoder.encode(s, StandardCharsets.UTF_8);
+        // URLEncoder uses '+' for spaces; replace with '%20' for RFC-compliant URI query params.
+        return URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }
