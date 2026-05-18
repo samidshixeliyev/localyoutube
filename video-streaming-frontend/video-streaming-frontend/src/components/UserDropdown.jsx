@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useMiniPlayer } from '../context/MiniPlayerContext';
-import { LogOut, Video, Key, Users, Shield, Upload, Settings, BarChart2 } from 'lucide-react';
+import { LogOut, Key, Users, Shield, Settings, BarChart2 } from 'lucide-react';
 
 const UserDropdown = () => {
     const { user, logout, hasPermission } = useAuth();
@@ -86,27 +86,6 @@ const UserDropdown = () => {
 
                     {/* Menu Items */}
                     <div className="py-1">
-                        {isAdmin && (
-                            <>
-                                <Link
-                                    to="/my-videos"
-                                    onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
-                                >
-                                    <Video className="h-4 w-4 text-gray-400" />
-                                    Videolarım
-                                </Link>
-                                <Link
-                                    to="/upload"
-                                    onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
-                                >
-                                    <Upload className="h-4 w-4 text-gray-400" />
-                                    Video Yüklə
-                                </Link>
-                                <div className="border-t border-gray-100 dark:border-army-700 my-1" />
-                            </>
-                        )}
 
                         <Link
                             to="/change-password"

@@ -12,8 +12,8 @@ import { useTheme } from '../context/ThemeContext';
 export default function ModTubeLogo({ size = 36, mini = false, className = '' }) {
   const { dark } = useTheme();
 
-  const oliveText = dark ? '#a3c46a' : '#4a6227';
-  const sandText  = dark ? '#d4b96a' : '#7a5c20';
+  const modText  = dark ? '#f3f4f6' : '#111827';
+  const tubeText = dark ? '#9ca3af' : '#6b7280';
 
   const iconW = Math.round(size * 0.875);
   const fs    = Math.round(size * 0.50);
@@ -32,8 +32,8 @@ export default function ModTubeLogo({ size = 36, mini = false, className = '' })
     >
       <defs>
         <linearGradient id={gradId} x1="14" y1="0" x2="14" y2="32" gradientUnits="userSpaceOnUse">
-          <stop offset="0%"   stopColor={dark ? '#7a9e48' : '#6a8c3a'} />
-          <stop offset="100%" stopColor={dark ? '#3d5a22' : '#3a5220'} />
+          <stop offset="0%"   stopColor="#e02020" />
+          <stop offset="100%" stopColor="#8b0f0f" />
         </linearGradient>
       </defs>
 
@@ -55,7 +55,7 @@ export default function ModTubeLogo({ size = 36, mini = false, className = '' })
       <path
         d="M8 6 Q14 4 20 6"
         fill="none"
-        stroke="rgba(255,255,255,0.25)"
+        stroke="rgba(255,255,255,0.30)"
         strokeWidth="1.2"
         strokeLinecap="round"
       />
@@ -95,10 +95,10 @@ export default function ModTubeLogo({ size = 36, mini = false, className = '' })
     >
       <ShieldIcon />
       <span style={{ display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
-        <span style={{ fontSize: fs, fontWeight: 900, letterSpacing: '0.04em', color: oliveText }}>
+        <span style={{ fontSize: fs, fontWeight: 900, letterSpacing: '0.04em', color: modText }}>
           MOD
         </span>
-        <span style={{ fontSize: fs, fontWeight: 400, letterSpacing: '0.01em', color: sandText }}>
+        <span style={{ fontSize: fs, fontWeight: 400, letterSpacing: '0.01em', color: tubeText }}>
           TUBE
         </span>
       </span>
