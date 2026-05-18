@@ -9,7 +9,7 @@ const VISIBILITY_BADGES = {
     unlisted:   { label: 'Siyahısız', classes: 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-army-700 dark:text-gray-400 dark:border-army-600' },
 };
 
-/** Renders text with `query` substrings wrapped in a highlight span */
+/** Renders text with `query` substrings in bold primary colour */
 function HighlightText({ text, query }) {
     if (!query || !text) return <>{text}</>;
     const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -18,7 +18,7 @@ function HighlightText({ text, query }) {
         <>
             {parts.map((part, i) =>
                 part.toLowerCase() === query.toLowerCase()
-                    ? <mark key={i} className="bg-primary-200 dark:bg-primary-700/60 text-primary-900 dark:text-primary-100 rounded px-0.5 not-italic">{part}</mark>
+                    ? <strong key={i} className="font-bold text-primary-600 dark:text-primary-400">{part}</strong>
                     : part
             )}
         </>
