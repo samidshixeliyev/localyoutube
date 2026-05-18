@@ -73,10 +73,12 @@ const fmtUptime = s  => {
 // ── Time range config ─────────────────────────────────────────────────────────
 
 const TIME_RANGES = [
-  { label: '30d', seconds: 1800,  step: 30  },
-  { label: '1s',  seconds: 3600,  step: 60  },
-  { label: '6s',  seconds: 21600, step: 360 },
-  { label: '24s', seconds: 86400, step: 1440},
+  { label: '1d',  seconds: 60,    step: 10,   rateWin: '30s' },
+  { label: '5d',  seconds: 300,   step: 15,   rateWin: '1m'  },
+  { label: '30d', seconds: 1800,  step: 30,   rateWin: '2m'  },
+  { label: '1s',  seconds: 3600,  step: 60,   rateWin: '5m'  },
+  { label: '6s',  seconds: 21600, step: 360,  rateWin: '10m' },
+  { label: '24s', seconds: 86400, step: 1440, rateWin: '30m' },
 ];
 
 // ── Colour palette ────────────────────────────────────────────────────────────
@@ -190,7 +192,7 @@ export default function Metrics() {
   const axisColor = dark ? '#4b5563' : '#d1d5db';
   const tickColor = dark ? '#9ca3af' : '#6b7280';
 
-  const [range_, setRange]         = useState(TIME_RANGES[1]);
+  const [range_, setRange]         = useState(TIME_RANGES[3]);
   const [stats,   setStats]        = useState({});
   const [charts,  setCharts]       = useState({});
   const [loading, setLoading]      = useState(true);
@@ -222,7 +224,7 @@ export default function Metrics() {
           instant('node_load1'),
           instant('node_load5'),
           instant('time() - node_boot_time_seconds'),
-          instant('jvm_threads_live_threads'),
+          instant('jvm_threads_live'),
           instant('process_open_fds{job="modtube-backend"}'),
           instant('sum(rate(node_disk_read_bytes_total[5m]))'),
           instant('sum(rate(node_disk_written_bytes_total[5m]))'),
@@ -261,28 +263,29 @@ export default function Metrics() {
       const now   = Math.floor(Date.now() / 1000);
       const start = now - range_.seconds;
       const step  = range_.step;
+      const rw    = range_.rateWin;
       const S = String(start), E = String(now), T = String(step);
 
       const [cpuTs, memTs, httpTs, p95Ts, heapUsed, heapMax,
              uploadRate, viewRate, diskTs, transTs,
              netInTs, netOutTs, loadTs, diskRdTs, diskWrTs, errRateTs] =
         await Promise.all([
-          range('100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)', S, E, T),
+          range(`100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[${rw}])) * 100)`, S, E, T),
           range('node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes', S, E, T),
-          range('sum by(status)(rate(http_server_requests_seconds_count[5m]))', S, E, T),
-          range('histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket[5m])))', S, E, T),
+          range(`sum by(status)(rate(http_server_requests_seconds_count[${rw}]))`, S, E, T),
+          range(`histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket[${rw}])))`, S, E, T),
           range('sum(jvm_memory_used_bytes{area="heap"})', S, E, T),
           range('sum(jvm_memory_max_bytes{area="heap"})', S, E, T),
-          range('rate(localtube_uploads_success_total[10m]) * 60', S, E, T),
-          range('rate(localtube_video_views_total[5m]) * 60', S, E, T),
+          range(`rate(localtube_uploads_success_total[${rw}]) * 60`, S, E, T),
+          range(`rate(localtube_video_views_total[${rw}]) * 60`, S, E, T),
           range('localtube_disk_usage_bytes', S, E, T),
           range('localtube_active_transcodings', S, E, T),
-          range('sum(rate(node_network_receive_bytes_total{device!="lo"}[5m]))', S, E, T),
-          range('sum(rate(node_network_transmit_bytes_total{device!="lo"}[5m]))', S, E, T),
+          range(`sum(rate(node_network_receive_bytes_total{device!="lo"}[${rw}]))`, S, E, T),
+          range(`sum(rate(node_network_transmit_bytes_total{device!="lo"}[${rw}]))`, S, E, T),
           range('node_load1', S, E, T),
-          range('sum(rate(node_disk_read_bytes_total[5m]))', S, E, T),
-          range('sum(rate(node_disk_written_bytes_total[5m]))', S, E, T),
-          range('sum(rate(http_server_requests_seconds_count{status=~"[45].."}[5m])) / sum(rate(http_server_requests_seconds_count[5m])) * 100', S, E, T),
+          range(`sum(rate(node_disk_read_bytes_total[${rw}]))`, S, E, T),
+          range(`sum(rate(node_disk_written_bytes_total[${rw}]))`, S, E, T),
+          range(`sum(rate(http_server_requests_seconds_count{status=~"[45].."}[${rw}])) / sum(rate(http_server_requests_seconds_count[${rw}])) * 100`, S, E, T),
         ]);
 
       const heapData = (() => {
@@ -342,6 +345,11 @@ export default function Metrics() {
     timerRef.current = setInterval(refresh, 30_000);
     return () => clearInterval(timerRef.current);
   }, [refresh]);
+
+  // ── Tick formatter — shows seconds for very short ranges ─────────────────
+  const tickFmt = range_.step < 60
+    ? ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // ── Derived colours ───────────────────────────────────────────────────────
   const cpuColor  = stats.cpu  > 85 ? C.red : stats.cpu  > 70 ? C.amber : C.green;
@@ -474,7 +482,7 @@ export default function Metrics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis domain={[0,100]} unit="%" tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip unit="%" />} />
                   <Area type="monotone" dataKey="CPU %" stroke={C.orange} fill="url(#gCpu)" strokeWidth={2} dot={false} />
@@ -492,7 +500,7 @@ export default function Metrics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip fmtVal={fmtBytes} />} />
                   <Area type="monotone" dataKey="İstifadə" stroke={C.blue} fill="url(#gMem)" strokeWidth={2} dot={false} />
@@ -504,7 +512,7 @@ export default function Metrics() {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={charts.net} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip fmtVal={fmtBps} />} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
@@ -518,7 +526,7 @@ export default function Metrics() {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={charts.diskIo} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip fmtVal={fmtBps} />} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
@@ -538,7 +546,7 @@ export default function Metrics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Area type="monotone" dataKey="Yük" stroke={C.indigo} fill="url(#gLoad)" strokeWidth={2} dot={false} />
@@ -556,7 +564,7 @@ export default function Metrics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Area type="stepAfter" dataKey="Aktiv" stroke={C.amber} fill="url(#gTrans)" strokeWidth={2} dot={false} />
@@ -573,7 +581,7 @@ export default function Metrics() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={charts.http} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
@@ -597,7 +605,7 @@ export default function Metrics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis unit="s" tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip unit="s" />} />
                   <Area type="monotone" dataKey="P95" stroke={C.purple} fill="url(#gP95)" strokeWidth={2} dot={false} />
@@ -615,7 +623,7 @@ export default function Metrics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis domain={[0,100]} unit="%" tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip unit="%" />} />
                   <Area type="monotone" dataKey="Xəta %" stroke={C.red} fill="url(#gErr)" strokeWidth={2} dot={false} />
@@ -633,7 +641,7 @@ export default function Metrics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip fmtVal={fmtBytes} />} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
@@ -652,7 +660,7 @@ export default function Metrics() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={charts.uploadRate} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Bar dataKey="Yüklənmə/dəq" fill={C.orange} radius={[2,2,0,0]} />
@@ -664,7 +672,7 @@ export default function Metrics() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={charts.viewRate} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip />} />
                   <Bar dataKey="Baxış/dəq" fill={C.purple} radius={[2,2,0,0]} />
@@ -690,7 +698,7 @@ export default function Metrics() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="ts" tickFormatter={fmtTime} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <YAxis tickFormatter={v => fmtBytes(v)} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
                   <Tooltip content={<ChartTooltip fmtVal={fmtBytes} />} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
