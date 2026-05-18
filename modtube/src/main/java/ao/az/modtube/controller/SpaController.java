@@ -17,10 +17,12 @@ public class SpaController {
             "/callback",
             "/logged_out",
             "/search",
+            "/shorts",
             "/upload",
             "/my-videos",
             "/change-password",
             "/video/**",
+            "/embed/**",
             "/admin/**"
     })
     public String forwardToIndex(HttpServletRequest request) {
