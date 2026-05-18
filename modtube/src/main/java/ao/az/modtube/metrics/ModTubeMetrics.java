@@ -17,7 +17,7 @@ import java.util.stream.Stream;
  * Custom Prometheus metrics for ModTube.
  *
  * Metrics exposed at /actuator/prometheus:
- *   localtube_uploads_total              — counter, completed uploads
+ *   localtube_uploads_attempts_total     — counter, upload attempts
  *   localtube_uploads_success_total      — counter, successful uploads
  *   localtube_uploads_failed_total       — counter, failed uploads
  *   localtube_video_views_total          — counter, video detail opens
@@ -67,7 +67,7 @@ public class ModTubeMetrics {
         this.thumbnailDir = Paths.get(thumbnailDirPath);
 
         // ── Upload Metrics ────────────────────────────────────────────────────
-        this.uploadsTotal   = Counter.builder("localtube_uploads_total")
+        this.uploadsTotal   = Counter.builder("localtube_uploads_attempts")
                 .description("Total upload attempts").register(registry);
         this.uploadsSuccess = Counter.builder("localtube_uploads_success")
                 .description("Successful uploads").register(registry);
@@ -75,7 +75,7 @@ public class ModTubeMetrics {
                 .description("Failed uploads").register(registry);
 
         // ── Video View Metrics ────────────────────────────────────────────────
-        this.videoViewsTotal = Counter.builder("localtube_video_views_total")
+        this.videoViewsTotal = Counter.builder("localtube_video_views")
                 .description("Total video views").register(registry);
 
         // ── Transcoding Metrics ───────────────────────────────────────────────
