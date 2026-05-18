@@ -348,4 +348,52 @@ localyoutube/
 
 ---
 
+---
+
+### 2026-05-18 — Permissions, Port Fix, Rate Limiting, UI Bugs
+
+#### What was done
+
+1. **Port: Spring Boot moved from 8080 → 4000**
+   - `application.yml`: `server.port: ${SERVER_PORT:4000}` (default changed)
+   - `docker-compose.yml`: port mapping changed from `4000:8080` → `4000:4000`
+   - `prometheus.yml`: scrape target fixed from `modtube-backend:8080` → `localhost:4000`
+   - Health check URL updated to `localhost:4000`
+   - Other containers on same Docker host can now reach the app on port 4000 directly
+
+2. **Permissions — DB seeded + dynamic management**
+   - `V2__add_permissions.sql`: Seeds all 12 permissions (super-admin, admin-modtube, view-metrics, manage-settings, view-reports, manage-users, manage-roles, upload-video, delete-video, view-private, manage-shorts, comment-moderate)
+   - `AdminService`: Added `createPermission()` and `deletePermission()` (system permissions protected)
+   - `AdminController`: Added `POST /api/admin/permissions` and `DELETE /api/admin/permissions/{id}`
+   - `api.js`: Added `adminCreatePermission()` and `adminDeletePermission()`
+   - `RoleManagement.jsx`: New inline permission creation form; permission list shows delete button on hover for non-system perms; PERMISSION_META expanded to all 12 perms with Azerbaijani descriptions
+
+3. **Rate limiting**
+   - `RateLimitFilter.java`: Per-IP token bucket — 100 RPS global, 4 RPS for `/api/upload/*`; responds 429 with `Retry-After: 1`
+   - Configurable via `RATE_LIMIT_RPS` and `RATE_LIMIT_UPLOAD_RPS` env vars
+
+4. **Docker resource limits**
+   - Added `deploy.resources.limits` (2 CPU, 3 GB) and `reservations` (0.5 CPU, 1 GB) to docker-compose
+   - `CPU_LIMIT` and `MEM_LIMIT` env vars allow override
+
+5. **VideoPlayer fixes**
+   - `formatTime` now handles hours correctly (`1:02:03` instead of `62:03` for long videos)
+   - Autoplay: browser-blocked autoplay retries with `video.muted = true` before giving up
+   - Progress bar: `NaN` guard for `currentTime / duration` when duration is 0
+   - `autoPlay` added to `useEffect` dependency array
+
+6. **VideoCard: `formatDuration` uses `Math.floor(seconds % 60)`** for correct seconds display
+
+7. **Shorts light mode**: Page wrapper and header strip changed from hardcoded `bg-black` to `bg-gray-950 dark:bg-black`
+
+8. **ModTubeLogo redesign**: Gradient shield (green → dark green), inner highlight border, top sheen highlight, `MOD` bold + `TUBE` regular weight for better contrast; unique gradient ID per theme to prevent SVG ID conflicts
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens — 64px sidebar compresses content.
+- **Backend `isShorts` field**: `PUT /videos/{id}` needs `isShorts` in update; `GET /videos/shorts` already filters by `is_short`.
+- **Backend `upload.max-concurrent` setting**: new key, needs to be persisted in settings store.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*
