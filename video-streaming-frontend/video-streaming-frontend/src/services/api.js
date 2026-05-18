@@ -206,6 +206,9 @@ export const adminUpdateSettings = (data) =>
 export const adminGetStats = () =>
     api.get('/admin/stats');
 
+export const adminAnalyzeMetrics = (metricsSnapshot) =>
+    api.post('/admin/metrics/analyze', metricsSnapshot, { timeout: 90000 });
+
 // ═══════════════════════════════════════════════════════════════
 // SHARE
 // ═══════════════════════════════════════════════════════════════

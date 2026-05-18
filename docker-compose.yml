@@ -33,6 +33,8 @@ services:
       # ── Rate limiting ─────────────────────────────────────────────────
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-100}
       RATE_LIMIT_UPLOAD_RPS: ${RATE_LIMIT_UPLOAD_RPS:-4}
+      # ── AI metrics analysis (optional) ───────────────────────────────
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     deploy:
       resources:
         limits:

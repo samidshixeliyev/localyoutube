@@ -6,6 +6,7 @@ import {
   Upload, Clapperboard, Eye, Database,
   Network, Server, Clock, Layers,
   AlertCircle, Wifi, Zap, BarChart2,
+  Sparkles, BrainCircuit,
 } from 'lucide-react';
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
@@ -13,7 +14,7 @@ import {
   ResponsiveContainer, ComposedChart,
 } from 'recharts';
 import Navbar from '../../components/Navbar';
-import api, { adminGetStats } from '../../services/api';
+import api, { adminGetStats, adminAnalyzeMetrics } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 
 // ── Prometheus proxy helpers ──────────────────────────────────────────────────
@@ -202,6 +203,10 @@ export default function Metrics() {
   const [dbStats,   setDbStats]    = useState(null);
   const [dbLoading, setDbLoading]  = useState(true);
 
+  const [aiAnalysis,  setAiAnalysis]  = useState(null);
+  const [aiLoading,   setAiLoading]   = useState(false);
+  const [aiError,     setAiError]     = useState(null);
+
   // ── Fetch instant stats ───────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
@@ -212,17 +217,17 @@ export default function Metrics() {
           instant('(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100'),
           instant('max((1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"}) * 100)'),
           instant('sum(rate(http_server_requests_seconds_count[5m]))'),
-          instant('modtube_uploads_success_total'),
-          instant('modtube_active_transcodings'),
-          instant('modtube_video_views_total'),
-          instant('sum(modtube_disk_usage_bytes)'),
+          instant('localtube_uploads_success_total'),
+          instant('localtube_active_transcodings'),
+          instant('localtube_video_views_total'),
+          instant('sum(localtube_disk_usage_bytes)'),
           instant('sum(rate(node_network_receive_bytes_total{device!="lo"}[5m]))'),
           instant('sum(rate(node_network_transmit_bytes_total{device!="lo"}[5m]))'),
           instant('node_load1'),
           instant('node_load5'),
           instant('time() - node_boot_time_seconds'),
           instant('jvm_threads_live_threads'),
-          instant('process_open_fds'),
+          instant('process_open_fds{job="modtube-backend"}'),
           instant('sum(rate(node_disk_read_bytes_total[5m]))'),
           instant('sum(rate(node_disk_written_bytes_total[5m]))'),
         ]);
@@ -272,10 +277,10 @@ export default function Metrics() {
           range('histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket[5m])))', S, E, T),
           range('sum(jvm_memory_used_bytes{area="heap"})', S, E, T),
           range('sum(jvm_memory_max_bytes{area="heap"})', S, E, T),
-          range('rate(modtube_uploads_success_total[10m]) * 60', S, E, T),
-          range('rate(modtube_video_views_total[5m]) * 60', S, E, T),
-          range('modtube_disk_usage_bytes', S, E, T),
-          range('modtube_active_transcodings', S, E, T),
+          range('rate(localtube_uploads_success_total[10m]) * 60', S, E, T),
+          range('rate(localtube_video_views_total[5m]) * 60', S, E, T),
+          range('localtube_disk_usage_bytes', S, E, T),
+          range('localtube_active_transcodings', S, E, T),
           range('sum(rate(node_network_receive_bytes_total{device!="lo"}[5m]))', S, E, T),
           range('sum(rate(node_network_transmit_bytes_total{device!="lo"}[5m]))', S, E, T),
           range('node_load1', S, E, T),
@@ -331,6 +336,44 @@ export default function Metrics() {
     catch { setDbStats(null); }
     finally { setDbLoading(false); }
   }, []);
+
+  const handleAnalyze = useCallback(async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiAnalysis(null);
+    try {
+      const snapshot = {
+        db: dbStats,
+        system: {
+          cpu_pct:       stats.cpu,
+          mem_pct:       stats.mem,
+          disk_pct:      stats.disk,
+          load_1m:       stats.load1,
+          load_5m:       stats.load5,
+          uptime_secs:   stats.uptime,
+          net_in_bps:    stats.netIn,
+          net_out_bps:   stats.netOut,
+          disk_read_bps: stats.diskRd,
+          disk_write_bps:stats.diskWr,
+          jvm_threads:   stats.threads,
+          open_fds:      stats.fds,
+        },
+        app: {
+          http_rps:          stats.http,
+          uploads_total:     stats.uploads,
+          active_transcodings: stats.transcodings,
+          views_total:       stats.views,
+          storage_bytes:     stats.storage,
+        },
+      };
+      const res = await adminAnalyzeMetrics(snapshot);
+      setAiAnalysis(res.data.analysis);
+    } catch (e) {
+      setAiError(e.response?.data?.error || e.message || 'Analiz xətası baş verdi');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [stats, dbStats]);
 
   const refresh = useCallback(() => {
     fetchStats(); fetchCharts(); fetchDbStats();
@@ -699,6 +742,60 @@ export default function Metrics() {
                 </AreaChart>
               </ResponsiveContainer>
             </ChartCard>
+          </div>
+
+          {/* ══ AI ANALYSIS ══════════════════════════════════════════════════ */}
+          <Section icon={BrainCircuit}>AI Analiz</Section>
+          <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-200 dark:border-army-700 shadow-sm p-5">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Claude Opus AI Analizi</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Cari metrik anlıq görüntüsünü Claude Opus 4.7 ilə analiz edin
+                </p>
+              </div>
+              <button
+                onClick={handleAnalyze}
+                disabled={aiLoading || loading}
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 text-white text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed"
+              >
+                {aiLoading
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Analiz edilir…</>
+                  : <><Sparkles className="w-4 h-4" /> Analiz et</>}
+              </button>
+            </div>
+
+            {aiError && (
+              <div className="flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2.5">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 dark:text-red-400">{aiError}</p>
+              </div>
+            )}
+
+            {aiLoading && !aiAnalysis && (
+              <div className="space-y-2 mt-2">
+                {[90, 75, 60, 80, 55].map((w, i) => (
+                  <div key={i} className="h-3 bg-gray-100 dark:bg-army-700 rounded animate-pulse" style={{ width: `${w}%` }} />
+                ))}
+              </div>
+            )}
+
+            {aiAnalysis && (
+              <div className="mt-2 p-4 bg-primary-50 dark:bg-army-900/60 border border-primary-100 dark:border-army-700 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
+                  <span className="text-xs font-semibold text-primary-700 dark:text-primary-400 uppercase tracking-wide">Claude Opus 4.7</span>
+                </div>
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{aiAnalysis}</p>
+              </div>
+            )}
+
+            {!aiAnalysis && !aiLoading && !aiError && (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400 dark:text-gray-600">
+                <BrainCircuit className="w-10 h-10 mb-2 opacity-30" />
+                <p className="text-sm">Metrikləri AI ilə analiz etmək üçün yuxarıdakı düyməyə basın</p>
+              </div>
+            )}
           </div>
 
           <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-6">
