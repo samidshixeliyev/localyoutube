@@ -197,9 +197,12 @@ export default function Metrics() {
   const [charts,  setCharts]       = useState({});
   const [loading, setLoading]      = useState(true);
   const [chartsLoading, setChartsLoading] = useState(true);
-  const [error,   setError]        = useState(null);
-  const [lastRefresh, setLastRefresh]     = useState(null);
-  const timerRef = useRef(null);
+  const [error,       setError]       = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(30);   // seconds; 0 = off
+  const [countdown,   setCountdown]   = useState(0);
+  const timerRef    = useRef(null);
+  const countRef    = useRef(null);
 
   const [dbStats,   setDbStats]    = useState(null);
   const [dbLoading, setDbLoading]  = useState(true);
@@ -342,13 +345,22 @@ export default function Metrics() {
 
   const refresh = useCallback(() => {
     fetchStats(); fetchCharts(); fetchDbStats();
-  }, [fetchStats, fetchCharts, fetchDbStats]);
+    setCountdown(autoRefresh);
+  }, [fetchStats, fetchCharts, fetchDbStats, autoRefresh]);
 
   useEffect(() => {
     refresh();
-    timerRef.current = setInterval(refresh, 30_000);
-    return () => clearInterval(timerRef.current);
-  }, [refresh]);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    clearInterval(timerRef.current);
+    clearInterval(countRef.current);
+    if (autoRefresh === 0) { setCountdown(0); return; }
+    setCountdown(autoRefresh);
+    timerRef.current  = setInterval(() => { fetchStats(); fetchCharts(); fetchDbStats(); setCountdown(autoRefresh); }, autoRefresh * 1000);
+    countRef.current  = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
+    return () => { clearInterval(timerRef.current); clearInterval(countRef.current); };
+  }, [autoRefresh, fetchStats, fetchCharts, fetchDbStats]);
 
   // ── Tick formatter — shows seconds for very short ranges ─────────────────
   const tickFmt = range_.step < 60
@@ -373,17 +385,20 @@ export default function Metrics() {
               className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-army-700 rounded-lg transition-all">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary-600" />
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Sistem Metriklər</h1>
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Prometheus — hər 30 san yenilənir
-                {lastRefresh && <> · Son yeniləmə: {lastRefresh.toLocaleTimeString()}</>}
+                {autoRefresh > 0
+                  ? <>Avtomatik yeniləmə: {countdown}s</>
+                  : <>Avtomatik yeniləmə: söndürülüb</>}
+                {lastRefresh && <> · Son: {lastRefresh.toLocaleTimeString()}</>}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {/* Time range selector */}
               <div className="flex bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg overflow-hidden">
                 {TIME_RANGES.map(r => (
                   <button key={r.label} onClick={() => setRange(r)}
@@ -395,8 +410,22 @@ export default function Metrics() {
                   </button>
                 ))}
               </div>
+              {/* Auto-refresh selector */}
+              <div className="flex bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg overflow-hidden">
+                {[0, 10, 30, 60].map(s => (
+                  <button key={s} onClick={() => setAutoRefresh(s)}
+                    className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      autoRefresh === s
+                        ? 'bg-primary-600 text-white'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-army-700'}`}>
+                    {s === 0 ? 'Off' : `${s}s`}
+                  </button>
+                ))}
+              </div>
+              {/* Manual refresh */}
               <button onClick={refresh}
-                className="p-2 bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-army-700 transition-all">
+                className="p-2 bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-army-700 transition-all"
+                title="İndi yenilə">
                 <RefreshCw className="w-4 h-4" />
               </button>
             </div>

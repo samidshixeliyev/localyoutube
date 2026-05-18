@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ModTubeLogo from '../components/ModTubeLogo';
 
 function decodeJwtPayload(token) {
   try {
@@ -24,7 +25,7 @@ const OAuthCallback = () => {
       const errorParam = params.get('error');
 
       if (errorParam) {
-        setError('IDP returned error: ' + (params.get('error_description') || errorParam));
+        setError('IDP xətası: ' + (params.get('error_description') || errorParam));
         return;
       }
 
@@ -36,11 +37,10 @@ const OAuthCallback = () => {
       sessionStorage.removeItem('idp_config');
 
       if (!code || state !== savedState) {
-        setError('Invalid OAuth2 callback: state mismatch or missing code.');
+        setError('Etibarsız OAuth2 callback: state uyğunsuzluğu və ya kod tapılmadı.');
         return;
       }
 
-      // Use the exact registered redirect URI from server config
       const redirectUri = idpConfig.redirectUri || window.location.origin + '/';
 
       try {
@@ -52,34 +52,26 @@ const OAuthCallback = () => {
 
         if (!response.ok) {
           const body = await response.text();
-          setError('Token exchange failed: ' + body);
+          setError('Token mübadiləsi uğursuz oldu: ' + body);
           return;
         }
 
         const data = await response.json();
-
-        // access_token = sent to our API for authorization
-        // id_token     = contains user identity claims (display_name, email, etc.)
         const accessToken = data.access_token;
         const idToken = data.id_token;
         const authToken = accessToken || idToken;
 
         if (!authToken) {
-          setError('No token in IDP response.');
+          setError('IDP cavabında token tapılmadı.');
           return;
         }
 
-        // Prefer id_token for user info (has display_name, email, given_name etc.)
-        // Fall back to access_token payload if id_token is absent
         const userInfoPayload = idToken
           ? decodeJwtPayload(idToken)
           : decodeJwtPayload(accessToken);
 
-        // Log in the user on the frontend
         loginWithIdp(authToken, userInfoPayload);
 
-        // Sync id_token profile claims to the backend DB so admin can see real names.
-        // Fire-and-forget: don't block login if this fails.
         try {
           await fetch('/api/auth/idp/sync-profile', {
             method: 'POST',
@@ -89,13 +81,12 @@ const OAuthCallback = () => {
             },
             body: JSON.stringify(userInfoPayload),
           });
-        } catch (_) { /* ignore — profile sync is best-effort */ }
+        } catch (_) {}
 
-        // Replace URL to remove ?code=&state= params, then go to home
         window.history.replaceState({}, '', '/');
         navigate('/', { replace: true });
       } catch (e) {
-        setError('Unexpected error: ' + e.message);
+        setError('Gözlənilməz xəta: ' + e.message);
       }
     };
 
@@ -104,39 +95,66 @@ const OAuthCallback = () => {
 
   if (error) {
     return (
-      <div style={{
-        minHeight: '100vh', background: '#0a0c10', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', fontFamily: "'JetBrains Mono', monospace"
-      }}>
-        <div style={{
-          maxWidth: 380, background: '#12161e', border: '1px solid rgba(255,68,68,0.3)',
-          borderRadius: 8, padding: '2rem', textAlign: 'center'
-        }}>
-          <p style={{ color: '#ff4444', fontWeight: 700, marginBottom: '0.75rem' }}>Login failed</p>
-          <p style={{ color: '#5eead4', fontSize: '0.8rem', marginBottom: '1.5rem' }}>{error}</p>
-          <button onClick={() => navigate('/login')}
-            style={{ background: 'none', border: '1px solid #5eead4', color: '#5eead4',
-              padding: '0.5rem 1rem', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}>
-            ← Back to login
-          </button>
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 via-primary-100 to-army-100
+                      dark:from-army-950 dark:via-army-900 dark:to-army-800
+                      flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-white dark:bg-army-800 rounded-2xl shadow-2xl
+                        border border-gray-200 dark:border-army-700 overflow-hidden">
+          <div className="bg-gradient-to-r from-red-700 to-red-500 px-8 py-6 text-center">
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth="2"
+                   viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <p className="text-white font-bold text-lg">Giriş uğursuz oldu</p>
+          </div>
+          <div className="px-8 py-6 text-center">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5 leading-relaxed">{error}</p>
+            <button onClick={() => navigate('/login')}
+              className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold
+                         rounded-lg transition-colors">
+              ← Giriş səhifəsinə qayıt
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{
-      minHeight: '100vh', background: '#0a0c10', display: 'flex',
-      flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      fontFamily: "'JetBrains Mono', monospace", color: '#5eead4'
-    }}>
-      <div style={{
-        width: 40, height: 40, border: '3px solid rgba(94,234,212,0.3)',
-        borderTopColor: '#5eead4', borderRadius: '50%',
-        animation: 'spin 0.7s linear infinite', marginBottom: '1rem'
-      }} />
-      <p style={{ fontSize: '0.85rem', color: '#2dd4bf' }}>Giriş tamamlanır…</p>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-primary-100 to-army-100
+                    dark:from-army-950 dark:via-army-900 dark:to-army-800
+                    flex flex-col items-center justify-center p-4">
+      <div className="flex flex-col items-center gap-6">
+        <ModTubeLogo size={52} />
+
+        {/* Spinner ring */}
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-4 border-primary-200 dark:border-primary-900" />
+          <div className="absolute inset-0 rounded-full border-4 border-transparent
+                          border-t-primary-600 dark:border-t-primary-400 animate-spin" />
+          <div className="absolute inset-2 rounded-full border-2 border-transparent
+                          border-t-tan-500 dark:border-t-tan-400 animate-spin"
+               style={{ animationDuration: '0.6s', animationDirection: 'reverse' }} />
+        </div>
+
+        <div className="text-center">
+          <p className="text-base font-semibold text-gray-800 dark:text-gray-100">Giriş tamamlanır…</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">AO ID hesabınız yoxlanılır</p>
+        </div>
+
+        {/* Animated dots */}
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map(i => (
+            <div key={i}
+              className="w-2 h-2 rounded-full bg-primary-500 dark:bg-primary-400 animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

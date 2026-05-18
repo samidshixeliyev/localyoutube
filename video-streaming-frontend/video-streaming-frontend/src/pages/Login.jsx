@@ -17,7 +17,7 @@ const Login = () => {
   useEffect(() => {
     fetch('/api/auth/idp/config', { cache: 'no-store' })
       .then(r => r.json())
-      .then(cfg => setIdpEnabled(cfg.idpEnabled !== 'false'))
+      .then(cfg => setIdpEnabled(cfg.idpEnabled === 'true'))
       .catch(() => setIdpEnabled(false));
   }, []);
 
