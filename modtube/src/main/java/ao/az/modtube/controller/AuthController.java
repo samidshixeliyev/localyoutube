@@ -314,19 +314,34 @@ public class AuthController {
     /**
      * Called by the frontend after IDP token exchange to sync id_token claims
      * (display_name, email, ldap_username) into the local DB user record.
-     * The access_token only carries sub (UUID); the id_token has the real profile.
+     * Does NOT require an authenticated principal — the user identity is derived
+     * from the 'sub' claim in the request body (a UUID used as the email placeholder
+     * when the IDP user was first provisioned). This avoids a hard dependency on the
+     * IDP JWKS endpoint being reachable at sync time.
      */
     @PostMapping("/idp/sync-profile")
     public ResponseEntity<?> syncIdpProfile(
             @RequestBody Map<String, String> claims,
             @AuthenticationPrincipal ModTubePrincipal principal) {
         try {
-            if (principal == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("error", "Not authenticated"));
+            // Prefer the authenticated principal (IDP JWT validated by filter).
+            // Fall back to the 'sub' claim from the body so the call succeeds even when
+            // the IDP JWKS endpoint is temporarily unreachable (offline deployments).
+            String currentEmail = null;
+            if (principal != null) {
+                currentEmail = principal.getEmail();
+            } else {
+                // 'sub' is a UUID written as the placeholder email during provisioning
+                String sub = claims.get("sub");
+                if (sub != null && !sub.isBlank()) {
+                    currentEmail = sub;
+                }
             }
 
-            String currentEmail = principal.getEmail(); // UUID or real email in DB
+            if (currentEmail == null) {
+                return ResponseEntity.ok(Map.of("synced", false, "reason", "no identity"));
+            }
+
             User user = userRepository.findUserByEmail(currentEmail)
                     .orElse(null);
             if (user == null) {

@@ -19,6 +19,7 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [isSwitchingQuality, setIsSwitchingQuality] = useState(false);
   const controlsTimeoutRef = useRef(null);
+  const qualitySwitchTimeoutRef = useRef(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -98,9 +99,14 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
         setIsSwitchingQuality(false);
       });
 
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        setIsSwitchingQuality(false);
+      });
+
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.fatal) {
           setIsLoading(false);
+          setIsSwitchingQuality(false);
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               hls.startLoad();
@@ -275,16 +281,17 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
     setShowQualityMenu(false);
 
     if (levelIndex === -1) {
-      // Re-enable ABR (auto quality) — no buffering needed
       hls.currentLevel = -1;
       setCurrentQuality(-1);
     } else {
-      // Hard switch: currentLevel flushes the buffer immediately and starts
-      // loading the new level right away. nextLevel would wait for the
-      // existing buffer (up to 60 s) to drain first — far too slow.
+      // Hard switch: currentLevel flushes the buffer immediately.
       setIsSwitchingQuality(true);
       hls.currentLevel = levelIndex;
       setCurrentQuality(levelIndex);
+
+      // Safety fallback — clear spinner after 5s in case LEVEL_SWITCHED/FRAG_BUFFERED never fires
+      clearTimeout(qualitySwitchTimeoutRef.current);
+      qualitySwitchTimeoutRef.current = setTimeout(() => setIsSwitchingQuality(false), 5000);
     }
   };
 
