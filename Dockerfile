@@ -33,12 +33,20 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/opt/java/bin:/usr/lib/postgresql/16/bin:$PATH"
 
 # ── System packages ──────────────────────────────────────────────────────────
+# Grafana is installed but NOT started (supervisord.conf has no grafana program).
+# Keeping it here preserves the cached layer so offline rebuilds work.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl ca-certificates gnupg \
         supervisor \
         ffmpeg \
         postgresql-16 postgresql-client-16 && \
+    # Grafana
+    curl -fsSL https://apt.grafana.com/gpg.key | gpg --dearmor -o /etc/apt/keyrings/grafana.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" \
+        > /etc/apt/sources.list.d/grafana.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends grafana && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── Java 21 JRE (Eclipse Temurin) ────────────────────────────────────────────
@@ -87,15 +95,23 @@ RUN mkdir -p \
         /app \
         /data/uploads /data/hls /data/thumbnails /data/temp \
         /var/log/supervisor \
+        /var/log/grafana \
+        /var/lib/grafana/dashboards \
+        /var/lib/grafana/plugins \
         /var/lib/prometheus \
-        /etc/prometheus && \
-    chown -R postgres:postgres /var/lib/postgresql
+        /etc/prometheus \
+        /etc/grafana/provisioning/datasources \
+        /etc/grafana/provisioning/dashboards && \
+    chown -R postgres:postgres /var/lib/postgresql && \
+    chown -R grafana:grafana /var/lib/grafana /var/log/grafana 2>/dev/null || true
 
 # ── Copy app artifacts ────────────────────────────────────────────────────────
 COPY --from=backend-builder /app/build/libs/*.jar /app/modtube.jar
 
 # ── Copy configs ──────────────────────────────────────────────────────────────
 COPY prometheus.yml              /etc/prometheus/prometheus.yml
+COPY grafana-datasources.yml     /etc/grafana/provisioning/datasources/datasources.yml
+COPY grafana-dashboards.yml      /etc/grafana/provisioning/dashboards/dashboards.yml
 COPY supervisord.conf            /etc/supervisor/conf.d/supervisord.conf
 COPY docker-entrypoint.sh        /docker-entrypoint.sh
 COPY start-spring.sh             /start-spring.sh
@@ -104,6 +120,7 @@ RUN chmod +x /docker-entrypoint.sh /start-spring.sh
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
 # 4000 — Spring Boot (serves frontend + API)
+# Grafana is installed but disabled — not exposed
 EXPOSE 4000
 
 VOLUME ["/data", "/var/lib/postgresql/data", "/var/lib/prometheus"]
