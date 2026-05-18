@@ -227,7 +227,7 @@ export default function Metrics() {
         instant('node_load5'),
         instant('time() - node_boot_time_seconds'),
         instant('jvm_threads_live_threads'),
-        instant('process_open_fds{job="modtube"}'),
+        instant('process_open_fds{job="modtube-backend"}'),
         instant('sum(rate(node_disk_read_bytes_total[5m]))'),
         instant('sum(rate(node_disk_written_bytes_total[5m]))'),
       ]);
@@ -288,7 +288,7 @@ export default function Metrics() {
         range('node_load1', S, E, T),
         range(`sum(rate(node_disk_read_bytes_total[${rw}]))`, S, E, T),
         range(`sum(rate(node_disk_written_bytes_total[${rw}]))`, S, E, T),
-        range(`sum(rate(http_server_requests_seconds_count{status=~"[45].."}[${rw}])) / sum(rate(http_server_requests_seconds_count[${rw}])) * 100`, S, E, T),
+        range(`(sum(rate(http_server_requests_seconds_count{status=~"[45].."}[${rw}])) or vector(0)) / sum(rate(http_server_requests_seconds_count[${rw}])) * 100`, S, E, T),
       ]);
       const [cpuTs, memTs, httpTs, p95Ts, heapUsed, heapMax,
              uploadRate, viewRate, diskTs, transTs,
