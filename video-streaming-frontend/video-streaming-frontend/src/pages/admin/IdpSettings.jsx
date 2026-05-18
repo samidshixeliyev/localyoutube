@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle, ToggleLeft, ToggleRight, Upload } from 'lucide-react';
+import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle, Upload } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import { adminGetSettings, adminUpdateSettings } from '../../services/api';
 
@@ -193,12 +193,15 @@ const IdpSettings = () => {
               </div>
               <button
                 onClick={() => setIdpEnabled(v => !v)}
-                className="flex-shrink-0 ml-4 focus:outline-none"
+                className={`relative flex-shrink-0 ml-4 w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary-500/40 ${
+                  idpEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-army-600'
+                }`}
+                aria-checked={idpEnabled}
+                role="switch"
               >
-                {idpEnabled
-                  ? <ToggleRight className="w-10 h-10 text-primary-600" />
-                  : <ToggleLeft  className="w-10 h-10 text-gray-400" />
-                }
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${
+                  idpEnabled ? 'translate-x-6' : 'translate-x-0'
+                }`} />
               </button>
             </div>
           </div>

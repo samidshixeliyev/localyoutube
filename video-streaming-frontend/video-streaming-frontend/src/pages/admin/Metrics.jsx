@@ -208,27 +208,29 @@ export default function Metrics() {
   // ── Fetch instant stats ───────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
+      const empty = { data: { result: [] } };
+      const settled = await Promise.allSettled([
+        instant('100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
+        instant('(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100'),
+        instant('max((1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"}) * 100)'),
+        instant('sum(rate(http_server_requests_seconds_count[5m]))'),
+        instant('localtube_uploads_success_total'),
+        instant('localtube_active_transcodings'),
+        instant('localtube_video_views_total'),
+        instant('sum(localtube_disk_usage_bytes)'),
+        instant('sum(rate(node_network_receive_bytes_total{device!="lo"}[5m]))'),
+        instant('sum(rate(node_network_transmit_bytes_total{device!="lo"}[5m]))'),
+        instant('node_load1'),
+        instant('node_load5'),
+        instant('time() - node_boot_time_seconds'),
+        instant('jvm_threads_live'),
+        instant('process_open_fds{job="modtube-backend"}'),
+        instant('sum(rate(node_disk_read_bytes_total[5m]))'),
+        instant('sum(rate(node_disk_written_bytes_total[5m]))'),
+      ]);
       const [cpu, mem, disk, http_, uploads, transcodings, views, storage,
              netIn, netOut, load1, load5, uptime_, threads, fds, diskRd, diskWr] =
-        await Promise.all([
-          instant('100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
-          instant('(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100'),
-          instant('max((1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|devtmpfs|squashfs"}) * 100)'),
-          instant('sum(rate(http_server_requests_seconds_count[5m]))'),
-          instant('localtube_uploads_success_total'),
-          instant('localtube_active_transcodings'),
-          instant('localtube_video_views_total'),
-          instant('sum(localtube_disk_usage_bytes)'),
-          instant('sum(rate(node_network_receive_bytes_total{device!="lo"}[5m]))'),
-          instant('sum(rate(node_network_transmit_bytes_total{device!="lo"}[5m]))'),
-          instant('node_load1'),
-          instant('node_load5'),
-          instant('time() - node_boot_time_seconds'),
-          instant('jvm_threads_live'),
-          instant('process_open_fds{job="modtube-backend"}'),
-          instant('sum(rate(node_disk_read_bytes_total[5m]))'),
-          instant('sum(rate(node_disk_written_bytes_total[5m]))'),
-        ]);
+        settled.map(r => r.status === 'fulfilled' ? r.value : empty);
       setStats({
         cpu, mem, disk,
         http:          scalar(http_),
@@ -266,27 +268,29 @@ export default function Metrics() {
       const rw    = range_.rateWin;
       const S = String(start), E = String(now), T = String(step);
 
+      const empty = { data: { result: [] } };
+      const chartSettled = await Promise.allSettled([
+        range(`100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[${rw}])) * 100)`, S, E, T),
+        range('node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes', S, E, T),
+        range(`sum by(status)(rate(http_server_requests_seconds_count[${rw}]))`, S, E, T),
+        range(`histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket[${rw}])))`, S, E, T),
+        range('sum(jvm_memory_used_bytes{area="heap"})', S, E, T),
+        range('sum(jvm_memory_max_bytes{area="heap"})', S, E, T),
+        range(`rate(localtube_uploads_success_total[${rw}]) * 60`, S, E, T),
+        range(`rate(localtube_video_views_total[${rw}]) * 60`, S, E, T),
+        range('localtube_disk_usage_bytes', S, E, T),
+        range('localtube_active_transcodings', S, E, T),
+        range(`sum(rate(node_network_receive_bytes_total{device!="lo"}[${rw}]))`, S, E, T),
+        range(`sum(rate(node_network_transmit_bytes_total{device!="lo"}[${rw}]))`, S, E, T),
+        range('node_load1', S, E, T),
+        range(`sum(rate(node_disk_read_bytes_total[${rw}]))`, S, E, T),
+        range(`sum(rate(node_disk_written_bytes_total[${rw}]))`, S, E, T),
+        range(`sum(rate(http_server_requests_seconds_count{status=~"[45].."}[${rw}])) / sum(rate(http_server_requests_seconds_count[${rw}])) * 100`, S, E, T),
+      ]);
       const [cpuTs, memTs, httpTs, p95Ts, heapUsed, heapMax,
              uploadRate, viewRate, diskTs, transTs,
              netInTs, netOutTs, loadTs, diskRdTs, diskWrTs, errRateTs] =
-        await Promise.all([
-          range(`100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[${rw}])) * 100)`, S, E, T),
-          range('node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes', S, E, T),
-          range(`sum by(status)(rate(http_server_requests_seconds_count[${rw}]))`, S, E, T),
-          range(`histogram_quantile(0.95, sum by(le)(rate(http_server_requests_seconds_bucket[${rw}])))`, S, E, T),
-          range('sum(jvm_memory_used_bytes{area="heap"})', S, E, T),
-          range('sum(jvm_memory_max_bytes{area="heap"})', S, E, T),
-          range(`rate(localtube_uploads_success_total[${rw}]) * 60`, S, E, T),
-          range(`rate(localtube_video_views_total[${rw}]) * 60`, S, E, T),
-          range('localtube_disk_usage_bytes', S, E, T),
-          range('localtube_active_transcodings', S, E, T),
-          range(`sum(rate(node_network_receive_bytes_total{device!="lo"}[${rw}]))`, S, E, T),
-          range(`sum(rate(node_network_transmit_bytes_total{device!="lo"}[${rw}]))`, S, E, T),
-          range('node_load1', S, E, T),
-          range(`sum(rate(node_disk_read_bytes_total[${rw}]))`, S, E, T),
-          range(`sum(rate(node_disk_written_bytes_total[${rw}]))`, S, E, T),
-          range(`sum(rate(http_server_requests_seconds_count{status=~"[45].."}[${rw}])) / sum(rate(http_server_requests_seconds_count[${rw}])) * 100`, S, E, T),
-        ]);
+        chartSettled.map(r => r.status === 'fulfilled' ? r.value : empty);
 
       const heapData = (() => {
         const u = toSeries(heapUsed, () => 'İstifadə');
