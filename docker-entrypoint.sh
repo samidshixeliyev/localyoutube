@@ -23,9 +23,6 @@ su -s /bin/bash postgres -c \
 su -s /bin/bash postgres -c "$PG_BIN/pg_ctl -D $PGDATA stop -w"
 echo "[entrypoint] PostgreSQL ready, database '$PGDB' exists."
 
-# ── Grafana directory permissions ─────────────────────────────────────────────
-chown -R grafana:grafana /var/lib/grafana /var/log/grafana 2>/dev/null || true
-
 # ── Prometheus: clean up stale artifacts from previous container run ──────────
 # The bind-mounted /var/lib/prometheus directory survives container
 # restarts/rebuilds.  Two things can prevent Prometheus from starting:

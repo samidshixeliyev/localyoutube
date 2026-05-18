@@ -14,13 +14,12 @@ RUN npm run build
 FROM eclipse-temurin:21-jdk-jammy AS backend-builder
 WORKDIR /app
 COPY modtube/ ./
-# Inject built frontend into Spring Boot static resources
 COPY --from=frontend-builder /frontend/dist ./src/main/resources/static/
 RUN chmod +x ./gradlew && ./gradlew clean bootJar -x test --no-daemon
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 3 – Runtime: Ubuntu 24.04 with PostgreSQL 16, FFmpeg, Java 21,
-#            Prometheus, Grafana, supervisord — all in one image
+#            Prometheus, node_exporter, supervisord — all in one image
 # ─────────────────────────────────────────────────────────────────────────────
 FROM ubuntu:24.04
 
@@ -30,14 +29,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PGDB=modtube \
     PROMETHEUS_VERSION=2.52.0 \
     NODE_EXPORTER_VERSION=1.8.2 \
-    GF_SECURITY_ADMIN_USER=admin \
-    GF_SECURITY_ADMIN_PASSWORD=admin \
-    GF_USERS_ALLOW_SIGN_UP=false \
-    GF_SERVER_HTTP_PORT=3000 \
-    GF_PATHS_DATA=/var/lib/grafana \
-    GF_PATHS_LOGS=/var/log/grafana \
-    GF_PATHS_PLUGINS=/var/lib/grafana/plugins \
-    GF_PATHS_PROVISIONING=/etc/grafana/provisioning \
     JAVA_HOME=/opt/java \
     PATH="/opt/java/bin:/usr/lib/postgresql/16/bin:$PATH"
 
@@ -48,12 +39,6 @@ RUN apt-get update && \
         supervisor \
         ffmpeg \
         postgresql-16 postgresql-client-16 && \
-    # Grafana
-    curl -fsSL https://apt.grafana.com/gpg.key | gpg --dearmor -o /etc/apt/keyrings/grafana.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" \
-        > /etc/apt/sources.list.d/grafana.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends grafana && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── Java 21 JRE (Eclipse Temurin) ────────────────────────────────────────────
@@ -102,28 +87,15 @@ RUN mkdir -p \
         /app \
         /data/uploads /data/hls /data/thumbnails /data/temp \
         /var/log/supervisor \
-        /var/log/grafana \
-        /var/lib/grafana/dashboards \
-        /var/lib/grafana/plugins \
         /var/lib/prometheus \
-        /etc/prometheus \
-        /etc/grafana/provisioning/datasources \
-        /etc/grafana/provisioning/dashboards && \
-    chown -R postgres:postgres /var/lib/postgresql && \
-    chown -R grafana:grafana /var/lib/grafana /var/log/grafana 2>/dev/null || true
+        /etc/prometheus && \
+    chown -R postgres:postgres /var/lib/postgresql
 
 # ── Copy app artifacts ────────────────────────────────────────────────────────
 COPY --from=backend-builder /app/build/libs/*.jar /app/modtube.jar
 
-# ── Dashboard JSON goes to /etc/grafana/dashboards — NOT under the bind-mounted
-#    /var/lib/grafana which gets replaced by the host volume at runtime.
-RUN mkdir -p /etc/grafana/dashboards
-COPY modtube/modtube-dashboard.json /etc/grafana/dashboards/modtube.json
-
 # ── Copy configs ──────────────────────────────────────────────────────────────
 COPY prometheus.yml              /etc/prometheus/prometheus.yml
-COPY grafana-datasources.yml     /etc/grafana/provisioning/datasources/datasources.yml
-COPY grafana-dashboards.yml      /etc/grafana/provisioning/dashboards/dashboards.yml
 COPY supervisord.conf            /etc/supervisor/conf.d/supervisord.conf
 COPY docker-entrypoint.sh        /docker-entrypoint.sh
 COPY start-spring.sh             /start-spring.sh
@@ -131,13 +103,12 @@ COPY start-spring.sh             /start-spring.sh
 RUN chmod +x /docker-entrypoint.sh /start-spring.sh
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
-# 8080 — Spring Boot (serves frontend + API)
-# 3000 — Grafana
-EXPOSE 8080 3000
+# 4000 — Spring Boot (serves frontend + API)
+EXPOSE 4000
 
-VOLUME ["/data", "/var/lib/postgresql/data", "/var/lib/grafana", "/var/lib/prometheus"]
+VOLUME ["/data", "/var/lib/postgresql/data", "/var/lib/prometheus"]
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-    CMD curl -f http://localhost:8080/actuator/health || exit 1
+    CMD curl -f http://localhost:4000/actuator/health || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
