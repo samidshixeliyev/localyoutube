@@ -2,54 +2,6 @@ version: '3.8'
 
 services:
   # ═══════════════════════════════════════════════════════════════════════════
-  # Elasticsearch
-  # ═══════════════════════════════════════════════════════════════════════════
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: modtube-elasticsearch
-    environment:
-      - node.name=elasticsearch
-      - cluster.name=modtube-cluster
-      - discovery.type=single-node
-      - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - xpack.security.enabled=false
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    ports:
-      - "9200:9200"
-    networks:
-      - modtube-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-  # ═══════════════════════════════════════════════════════════════════════════
-  # Kibana
-  # ═══════════════════════════════════════════════════════════════════════════
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.11.0
-    container_name: modtube-kibana
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - xpack.security.enabled=false
-      - xpack.encryptedSavedObjects.encryptionKey=min-32-byte-long-strong-encryption-key-here
-    ports:
-      - "5601:5601"
-    networks:
-      - modtube-network
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-
-  # ═══════════════════════════════════════════════════════════════════════════
   # Prometheus
   # ═══════════════════════════════════════════════════════════════════════════
   prometheus:
@@ -68,26 +20,6 @@ services:
       - modtube-network
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Grafana
-  # ═══════════════════════════════════════════════════════════════════════════
-  grafana:
-    image: grafana/grafana:10.2.2
-    container_name: modtube-grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
-    ports:
-      - "3000:3000"
-    networks:
-      - modtube-network
-    depends_on:
-      - prometheus
-
-  # ═══════════════════════════════════════════════════════════════════════════
   # ModTube Backend
   # ═══════════════════════════════════════════════════════════════════════════
   modtube-backend:
@@ -98,7 +30,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "${SERVER_PORT:-4000}:4000"
     volumes:
       - video_uploads:/data/uploads
       - video_hls:/data/hls
@@ -106,9 +38,6 @@ services:
       - video_thumbnails:/data/thumbnails
     networks:
       - modtube-network
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -118,9 +47,7 @@ networks:
     driver: bridge
 
 volumes:
-  elasticsearch_data:
   prometheus_data:
-  grafana_data:
   video_uploads:
   video_hls:
   video_temp:

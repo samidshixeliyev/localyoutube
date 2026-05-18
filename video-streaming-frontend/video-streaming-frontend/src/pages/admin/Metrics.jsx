@@ -226,8 +226,8 @@ export default function Metrics() {
         instant('node_load1'),
         instant('node_load5'),
         instant('time() - node_boot_time_seconds'),
-        instant('jvm_threads_live'),
-        instant('process_open_file_descriptors{job="modtube-backend"}'),
+        instant('jvm_threads_live_threads'),
+        instant('process_files_open_files{job="modtube-backend"}'),
         instant('sum(rate(node_disk_read_bytes_total[5m]))'),
         instant('sum(rate(node_disk_written_bytes_total[5m]))'),
       ]);
