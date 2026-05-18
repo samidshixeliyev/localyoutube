@@ -2,7 +2,7 @@ import React from 'react';
 import { useTheme } from '../context/ThemeContext';
 
 /**
- * ModTube logo — SVG shield icon + styled text. No PNG files required.
+ * ModTube logo — gradient shield badge + styled text.
  *
  * Props:
  *   size      – controls height in px (width scales proportionally)
@@ -12,15 +12,15 @@ import { useTheme } from '../context/ThemeContext';
 export default function ModTubeLogo({ size = 36, mini = false, className = '' }) {
   const { dark } = useTheme();
 
-  const oliveText = dark ? '#a3b96a' : '#556430';   // primary-400 dark / primary-600 light
-  const sandText  = dark ? '#c4aa62' : '#9a7b38';   // tan-400 dark   / tan-600 light
+  const oliveText = dark ? '#a3c46a' : '#4a6227';
+  const sandText  = dark ? '#d4b96a' : '#7a5c20';
 
-  // Proportional measurements
-  const iconW  = Math.round(size * 0.875); // 28/32 ≈ 0.875 of height
-  const fs     = Math.round(size * 0.50);  // font size
-  const gap    = Math.round(size * 0.22);  // gap between icon and text
+  const iconW = Math.round(size * 0.875);
+  const fs    = Math.round(size * 0.50);
+  const gap   = Math.round(size * 0.20);
 
-  /* ── Shield icon ──────────────────────────────────────────────── */
+  const gradId = `mt-sg-${dark ? 'd' : 'l'}`;
+
   const ShieldIcon = () => (
     <svg
       width={iconW}
@@ -30,20 +30,39 @@ export default function ModTubeLogo({ size = 36, mini = false, className = '' })
       aria-hidden="true"
       style={{ flexShrink: 0, display: 'block' }}
     >
-      {/* Shield body */}
+      <defs>
+        <linearGradient id={gradId} x1="14" y1="0" x2="14" y2="32" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor={dark ? '#7a9e48' : '#6a8c3a'} />
+          <stop offset="100%" stopColor={dark ? '#3d5a22' : '#3a5220'} />
+        </linearGradient>
+      </defs>
+
+      {/* Shield body with gradient */}
       <path
-        d="M14 1 L27 5.5 L27 17 Q27 26 14 31 Q1 26 1 17 L1 5.5 Z"
-        fill="#556430"
+        d="M14 1.5 L26.5 6 L26.5 17.5 Q26.5 26.5 14 31 Q1.5 26.5 1.5 17.5 L1.5 6 Z"
+        fill={`url(#${gradId})`}
       />
-      {/* Inner highlight for depth */}
+
+      {/* Inner highlight border */}
       <path
-        d="M14 3 L25 7 L25 17 Q25 24.5 14 29 Q3 24.5 3 17 L3 7 Z"
-        fill="#6b7f3a"
-        opacity="0.5"
+        d="M14 4 L24 7.5 L24 17.5 Q24 24.5 14 28.5 Q4 24.5 4 17.5 L4 7.5 Z"
+        fill="none"
+        stroke="rgba(255,255,255,0.18)"
+        strokeWidth="0.75"
       />
+
+      {/* Top sheen */}
+      <path
+        d="M8 6 Q14 4 20 6"
+        fill="none"
+        stroke="rgba(255,255,255,0.25)"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+
       {/* Play triangle */}
       <polygon
-        points="10,10.5 22,16 10,21.5"
+        points="11,11 22,16 11,21"
         fill="white"
         opacity="0.95"
       />
@@ -75,18 +94,13 @@ export default function ModTubeLogo({ size = 36, mini = false, className = '' })
       aria-label="ModTube"
     >
       <ShieldIcon />
-      <span
-        style={{
-          fontSize: fs,
-          fontWeight: 800,
-          letterSpacing: '-0.02em',
-          lineHeight: 1,
-          display: 'flex',
-          alignItems: 'baseline',
-        }}
-      >
-        <span style={{ color: oliveText }}>MOD</span>
-        <span style={{ color: sandText  }}>TUBE</span>
+      <span style={{ display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
+        <span style={{ fontSize: fs, fontWeight: 900, letterSpacing: '0.04em', color: oliveText }}>
+          MOD
+        </span>
+        <span style={{ fontSize: fs, fontWeight: 400, letterSpacing: '0.01em', color: sandText }}>
+          TUBE
+        </span>
       </span>
     </div>
   );

@@ -173,6 +173,12 @@ export const adminDeleteRole = (id) =>
 export const adminGetPermissions = () =>
     api.get('/admin/permissions');
 
+export const adminCreatePermission = (data) =>
+    api.post('/admin/permissions', data);
+
+export const adminDeletePermission = (id) =>
+    api.delete(`/admin/permissions/${id}`);
+
 // ═══════════════════════════════════════════════════════════════
 // SHORTS
 // ═══════════════════════════════════════════════════════════════

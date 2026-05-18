@@ -6,11 +6,13 @@ import {
   adminUpdateRole,
   adminDeleteRole,
   adminGetPermissions,
+  adminCreatePermission,
+  adminDeletePermission,
 } from '../../services/api';
 import Navbar from '../../components/Navbar';
 import {
   ArrowLeft, Shield, Plus, Edit2, Trash2, X, Check,
-  Users, Lock, Save, AlertTriangle, ChevronDown, ChevronUp,
+  Users, Lock, Save, AlertTriangle, ChevronDown, ChevronUp, Key,
 } from 'lucide-react';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
@@ -19,18 +21,24 @@ const SYSTEM_ROLES = ['super-admin'];
 /* Permission metadata — enriches backend permissions with category, icon, description.
    Unknown permissions fall back to DEFAULT_META so the UI stays robust. */
 const PERMISSION_META = {
-  'super-admin':       { category: 'Sistem', icon: '🛡️', desc: 'Tam sistem girişi — bütün icazələri əhatə edir' },
-  'admin-modtube':     { category: 'Video',  icon: '🎬', desc: 'Video yükləmə, redaktə və silmə' },
-  'view-private':      { category: 'Video',  icon: '🔒', desc: 'Gizli videoları izləmək' },
-  'view-metrics':      { category: 'Sistem', icon: '📊', desc: 'Prometheus metrik panelini görmək' },
-  'manage-settings':   { category: 'Sistem', icon: '⚙️', desc: 'Sistem parametrlərinə dəyişiklik etmək' },
-  'manage-users':      { category: 'İstifadəçi', icon: '👥', desc: 'İstifadəçiləri yaratmaq, redaktə etmək və silmək' },
-  'manage-roles':      { category: 'İstifadəçi', icon: '🎭', desc: 'Rolları idarə etmək' },
-  'upload-video':      { category: 'Video',  icon: '📤', desc: 'Video yükləmək' },
-  'delete-video':      { category: 'Video',  icon: '🗑️', desc: 'İstənilən videonu silmək' },
-  'view-reports':      { category: 'Sistem', icon: '📋', desc: 'Hesabatları görmək' },
+  'super-admin':      { category: 'Sistem',       icon: '🛡️', desc: 'Tam sistem girişi — bütün icazələri əhatə edir' },
+  'view-metrics':     { category: 'Sistem',       icon: '📊', desc: 'Prometheus metrik panelini görmək' },
+  'manage-settings':  { category: 'Sistem',       icon: '⚙️', desc: 'Sistem parametrlərinə dəyişiklik etmək' },
+  'view-reports':     { category: 'Sistem',       icon: '📋', desc: 'Hesabatları görmək' },
+  'manage-users':     { category: 'İstifadəçi',   icon: '👥', desc: 'İstifadəçiləri yaratmaq, redaktə etmək və silmək' },
+  'manage-roles':     { category: 'İstifadəçi',   icon: '🎭', desc: 'Rolları idarə etmək' },
+  'admin-modtube':    { category: 'Video',         icon: '🎬', desc: 'Bütün videoları yükləmək, redaktə etmək və silmək' },
+  'upload-video':     { category: 'Video',         icon: '📤', desc: 'Yeni video yükləmək' },
+  'delete-video':     { category: 'Video',         icon: '🗑️', desc: 'İstənilən videonu silmək' },
+  'view-private':     { category: 'Video',         icon: '🔒', desc: 'Gizli və məhdud videoları izləmək' },
+  'manage-shorts':    { category: 'Video',         icon: '⚡', desc: 'Shorts videoları idarə etmək' },
+  'comment-moderate': { category: 'Kontent',       icon: '💬', desc: 'Şərhləri silmək və gizlətmək' },
 };
 const DEFAULT_META = { category: 'Digər', icon: '🔑', desc: '' };
+
+const SYSTEM_PERMISSIONS = new Set([
+  'super-admin', 'admin-modtube', 'view-metrics', 'manage-settings',
+]);
 
 function PermBadge({ name }) {
   const isSuper = name === 'super-admin';
@@ -420,6 +428,15 @@ const RoleManagement = () => {
   const [modal, setModal] = useState(null);  // null | { type: 'create' | 'edit' | 'delete', role? }
   const [toast, setToast] = useState({ msg: '', type: 'success' });
 
+  // Permission creation state
+  const [showPermForm, setShowPermForm] = useState(false);
+  const [newPerm, setNewPerm] = useState({ name: '', description: '', type: 'CUSTOM' });
+  const [permSaving, setPermSaving] = useState(false);
+  const [permErr, setPermErr] = useState('');
+
+  const refreshPermissions = () =>
+    adminGetPermissions().then(r => setPermissions(r.data)).catch(() => {});
+
   useEffect(() => {
     Promise.all([adminGetRoles(), adminGetPermissions()])
       .then(([rolesRes, permsRes]) => {
@@ -429,6 +446,33 @@ const RoleManagement = () => {
       .catch(() => setError('Məlumatlar yüklənə bilmədi'))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleCreatePermission = async (e) => {
+    e.preventDefault();
+    if (!newPerm.name.trim()) { setPermErr('İcazə adı tələb olunur'); return; }
+    setPermSaving(true); setPermErr('');
+    try {
+      await adminCreatePermission(newPerm);
+      await refreshPermissions();
+      setNewPerm({ name: '', description: '', type: 'CUSTOM' });
+      setShowPermForm(false);
+      showToast('İcazə yaradıldı');
+    } catch (ex) {
+      setPermErr(ex.response?.data?.message || 'Xəta baş verdi');
+    } finally { setPermSaving(false); }
+  };
+
+  const handleDeletePermission = async (perm) => {
+    if (SYSTEM_PERMISSIONS.has(perm.name)) return;
+    if (!window.confirm(`"${perm.name}" icazəsini silmək istədiyinizə əminsinizmi?`)) return;
+    try {
+      await adminDeletePermission(perm.id);
+      setPermissions(prev => prev.filter(p => p.id !== perm.id));
+      showToast(`"${perm.name}" icazəsi silindi`);
+    } catch (ex) {
+      showToast(ex.response?.data?.message || 'Silinə bilmədi', 'error');
+    }
+  };
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -508,25 +552,105 @@ const RoleManagement = () => {
             </div>
           )}
 
-          {/* Permissions legend */}
-          {permissions.length > 0 && (
-            <div className="army-card p-4 mb-6">
-              <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-                Mövcud icazələr
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {permissions.map(p => (
-                  <div key={p.id} className="flex flex-col">
-                    <PermBadge name={p.name} />
-                    {p.description && (
-                      <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 max-w-[140px] truncate"
-                            title={p.description}>{p.description}</span>
-                    )}
-                  </div>
-                ))}
+          {/* ── Permissions panel ── */}
+          <div className="army-card p-4 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Key className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                  İcazələr ({permissions.length})
+                </p>
               </div>
+              <button
+                onClick={() => { setShowPermForm(v => !v); setPermErr(''); }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+                           bg-primary-600 text-white hover:bg-primary-700 transition-colors">
+                <Plus className="h-3.5 w-3.5" />
+                {showPermForm ? 'Ləğv et' : 'Yeni icazə'}
+              </button>
             </div>
-          )}
+
+            {/* Create permission form */}
+            {showPermForm && (
+              <form onSubmit={handleCreatePermission}
+                    className="mb-4 p-3 bg-primary-50 dark:bg-primary-900/10 border border-primary-200 dark:border-primary-800 rounded-xl space-y-2">
+                {permErr && (
+                  <p className="text-xs text-red-600 dark:text-red-400 font-medium">{permErr}</p>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    value={newPerm.name}
+                    onChange={e => setNewPerm(p => ({ ...p, name: e.target.value.toLowerCase().replace(/\s+/g, '-') }))}
+                    placeholder="icaze-adi (kebab-case)"
+                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm
+                               bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
+                               focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+                    required
+                  />
+                  <input
+                    value={newPerm.description}
+                    onChange={e => setNewPerm(p => ({ ...p, description: e.target.value }))}
+                    placeholder="Qısa izah (isteğe bağlı)"
+                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm
+                               bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
+                               focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+                  />
+                  <select
+                    value={newPerm.type}
+                    onChange={e => setNewPerm(p => ({ ...p, type: e.target.value }))}
+                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm
+                               bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
+                               focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500">
+                    <option value="CUSTOM">CUSTOM</option>
+                    <option value="VIDEO">VIDEO</option>
+                    <option value="USER">USER</option>
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="CONTENT">CONTENT</option>
+                  </select>
+                </div>
+                <button type="submit" disabled={permSaving}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white text-sm font-semibold
+                             rounded-lg hover:bg-primary-700 disabled:opacity-60 transition-colors">
+                  {permSaving
+                    ? 'Saxlanır…'
+                    : <><Check className="h-3.5 w-3.5" />İcazəni yarat</>}
+                </button>
+              </form>
+            )}
+
+            {/* Permissions list */}
+            {permissions.length === 0 ? (
+              <p className="text-sm text-gray-400 dark:text-gray-500">İcazə tapılmadı</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {permissions.map(p => {
+                  const meta = PERMISSION_META[p.name] || DEFAULT_META;
+                  const isSystem = SYSTEM_PERMISSIONS.has(p.name);
+                  return (
+                    <div key={p.id}
+                         className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border
+                                    bg-white dark:bg-army-700 border-gray-200 dark:border-army-600
+                                    hover:border-primary-300 dark:hover:border-primary-700 transition-colors"
+                         title={p.description || meta.desc || ''}>
+                      <span className="text-sm" aria-hidden="true">{meta.icon}</span>
+                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{p.name}</span>
+                      {isSystem && (
+                        <span className="text-[10px] font-bold text-red-500 dark:text-red-400 ml-0.5">SİSTEM</span>
+                      )}
+                      {!isSystem && (
+                        <button
+                          onClick={() => handleDeletePermission(p)}
+                          className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
+                          title={`"${p.name}" icazəsini sil`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Roles list */}
           <div className="space-y-3">

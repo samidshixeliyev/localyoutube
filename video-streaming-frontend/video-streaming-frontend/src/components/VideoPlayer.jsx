@@ -76,7 +76,11 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
           video.currentTime = startTime;
         }
         if (autoPlay) {
-          video.play().catch(() => {});
+          video.play().catch(() => {
+            // Autoplay with sound blocked — retry muted (browser policy)
+            video.muted = true;
+            video.play().catch(() => {});
+          });
         }
 
         const levels = data.levels.map((level, index) => ({
@@ -125,11 +129,14 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
           video.currentTime = startTime;
         }
         if (autoPlay) {
-          video.play().catch(() => {});
+          video.play().catch(() => {
+            video.muted = true;
+            video.play().catch(() => {});
+          });
         }
       });
     }
-  }, [hlsUrl, startTime]);
+  }, [hlsUrl, startTime, autoPlay]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -297,10 +304,12 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
   };
 
   const formatTime = (seconds) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    if (!seconds || isNaN(seconds) || !isFinite(seconds)) return '0:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   const handleMouseMove = () => {
@@ -371,7 +380,7 @@ const VideoPlayer = ({ hlsUrl, onTimeUpdate, startTime = 0, autoPlay = false, on
           onChange={handleSeek}
           className="w-full h-1 mb-4 cursor-pointer accent-primary-600 appearance-none bg-gray-600 rounded-full"
           style={{
-            background: `linear-gradient(to right, #f97316 0%, #f97316 ${(currentTime / duration) * 100}%, #4B5563 ${(currentTime / duration) * 100}%, #4B5563 100%)`
+            background: `linear-gradient(to right, #f97316 0%, #f97316 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #4B5563 ${duration > 0 ? (currentTime / duration) * 100 : 0}%, #4B5563 100%)`
           }}
         />
 

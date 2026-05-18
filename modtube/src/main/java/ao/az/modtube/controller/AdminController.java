@@ -115,6 +115,24 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getAllPermissions());
     }
 
+    @PostMapping("/permissions")
+    public ResponseEntity<PermissionResponse> createPermission(
+            @RequestBody Map<String, String> body) {
+        String name = body.get("name");
+        if (name == null || name.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        PermissionResponse created = adminService.createPermission(
+                name, body.get("description"), body.get("type"));
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @DeleteMapping("/permissions/{id}")
+    public ResponseEntity<Map<String, String>> deletePermission(@PathVariable Long id) {
+        adminService.deletePermission(id);
+        return ResponseEntity.ok(Map.of("message", "Permission deleted successfully"));
+    }
+
     @PostMapping("/roles")
     public ResponseEntity<RoleResponse> createRole(@Valid @RequestBody CreateRoleRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(adminService.createRole(request));

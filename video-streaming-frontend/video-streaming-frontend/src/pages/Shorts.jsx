@@ -281,7 +281,7 @@ const Shorts = () => {
     return (
       <>
         <Navbar />
-        <div className="flex items-center justify-center min-h-[80vh] bg-black">
+        <div className="flex items-center justify-center min-h-[80vh] bg-gray-950 dark:bg-black">
           <div className="text-center">
             <Zap className="h-12 w-12 text-primary-500 mx-auto mb-3 animate-pulse" />
             <p className="text-white/60 font-medium">Shorts yüklənir…</p>
@@ -295,7 +295,7 @@ const Shorts = () => {
     return (
       <>
         <Navbar />
-        <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4 bg-black">
+        <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4 bg-gray-950 dark:bg-black">
           <Zap className="h-16 w-16 text-army-600 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Shorts hələ yoxdur</h2>
           <p className="text-white/60 mb-6">Qısa videolar burada göstəriləcək</p>
@@ -313,9 +313,9 @@ const Shorts = () => {
   return (
     <>
       <Navbar />
-      <div className="bg-black min-h-screen">
+      <div className="bg-gray-950 dark:bg-black min-h-screen">
         {/* Header strip */}
-        <div className="sticky top-14 z-40 bg-black/80 backdrop-blur-md border-b border-white/10 px-4 py-2 flex items-center gap-3">
+        <div className="sticky top-14 z-40 bg-gray-950/95 dark:bg-black/80 backdrop-blur-md border-b border-white/10 px-4 py-2 flex items-center gap-3">
           <button onClick={() => navigate('/')}
             className="text-white/70 hover:text-white transition-colors">
             <ArrowLeft className="h-5 w-5" />

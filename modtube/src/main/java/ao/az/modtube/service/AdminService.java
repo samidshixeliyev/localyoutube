@@ -157,6 +157,31 @@ public class AdminService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional
+    public PermissionResponse createPermission(String name, String description, String type) {
+        if (permissionRepository.findByName(name).isPresent()) {
+            throw new BadRequestException("Permission already exists: " + name);
+        }
+        Permission p = new Permission();
+        p.setName(name.trim().toLowerCase());
+        p.setDescription(description != null ? description.trim() : null);
+        p.setPermissionType(type != null ? type.trim().toUpperCase() : "CUSTOM");
+        p.setCreatedAt(java.time.LocalDateTime.now());
+        return toPermissionResponse(permissionRepository.save(p));
+    }
+
+    @Transactional
+    public void deletePermission(Long id) {
+        Permission p = permissionRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Permission not found: " + id));
+        // Prevent deleting built-in system permissions
+        if (java.util.Set.of("super-admin", "admin-modtube", "view-metrics", "manage-settings")
+                .contains(p.getName())) {
+            throw new BadRequestException("Cannot delete built-in system permission: " + p.getName());
+        }
+        permissionRepository.deleteById(id);
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // ROLE CRUD
     // ═══════════════════════════════════════════════════════════════
