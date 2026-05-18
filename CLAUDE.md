@@ -396,4 +396,59 @@ localyoutube/
 
 ---
 
+### 2026-05-18 — Claude Opus AI Metrics Analysis
+
+#### What was done
+
+1. **MetricsAnalysisController.java** — new backend endpoint
+   - `POST /api/admin/metrics/analyze` (requires `super-admin` or `view-metrics`)
+   - Accepts `{db, system, app}` JSON snapshot from frontend
+   - Calls `https://api.anthropic.com/v1/messages` with `claude-opus-4-7`
+   - Uses `thinking: {type: "adaptive"}`, Azerbaijani system prompt, 300-word max
+   - Returns `{analysis: "...text..."}` or `{error: "..."}` on failure
+   - Gracefully returns 503 if `ANTHROPIC_API_KEY` env var is unset
+
+2. **Metrics.jsx** — AI Analiz section added at the bottom of the page
+   - "Analiz et" button (disabled while stats are loading)
+   - Loading skeleton while waiting for Claude response (up to 90s)
+   - Formatted result panel with `whitespace-pre-wrap` for readable output
+   - Error display if API key missing or API call fails
+   - Empty state with `BrainCircuit` icon prompt
+
+3. **api.js** — `adminAnalyzeMetrics(snapshot)` added with 90-second timeout
+
+4. **docker-compose.yml** — `ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}` added to env section
+
+5. **`.env.example`** — `ANTHROPIC_API_KEY=` documented under AI metrics section
+
+6. **Prometheus fixes confirmed from previous session**
+   - All `modtube_*` queries in Metrics.jsx changed to `localtube_*` (actual metric prefix)
+   - `prometheus.yml` target changed to `localhost:4000` (was `localhost:8080` / `modtube-backend:8080`)
+
+#### Key gotchas
+
+- **Anthropic API timeout**: Claude Opus with extended thinking can take 30–60s. `api.js` uses `timeout: 90000` (90s). Spring Boot `RestTemplate` read timeout set to 60s in `MetricsAnalysisController.buildRestTemplate()`.
+- **`thinking: {type: "adaptive"}` on Opus 4.7**: Do NOT use `budget_tokens` — it's removed on Opus 4.7. Use adaptive only.
+- **ANTHROPIC_API_KEY is optional**: The button still renders; on click, backend returns 503 with Azerbaijani error message if key is not set.
+
+#### To deploy on VPS
+
+```bash
+# SSH to ubuntu@13.61.159.58 then:
+cd projects/modtube
+git pull origin master
+# Add your API key to .env:
+echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
+docker compose build
+docker compose up -d --force-recreate
+```
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens — 64px sidebar compresses content.
+- **Backend `isShorts` field**: `PUT /videos/{id}` needs `isShorts` in update.
+- **Backend `upload.max-concurrent` setting**: new key, needs to be persisted in settings store.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*
