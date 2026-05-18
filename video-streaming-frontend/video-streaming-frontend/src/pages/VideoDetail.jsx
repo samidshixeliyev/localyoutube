@@ -32,9 +32,13 @@ const fmtViews = (n) => {
   if (n >= 1_000)     return `${(n/1_000).toFixed(1)}K`;
   return `${n}`;
 };
+const AZ_MONTHS = ['yanvar','fevral','mart','aprel','may','iyun','iyul','avqust','sentyabr','oktyabr','noyabr','dekabr'];
 const fmtDate = (ts) => {
   if (!ts) return '';
-  return new Date(ts).toLocaleDateString('az-AZ', { year:'numeric', month:'long', day:'numeric' });
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getDate()} ${AZ_MONTHS[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
 /* ═══════════════════════════════════════════════════════════════ */
@@ -272,10 +276,23 @@ const VideoDetail = () => {
     return `<iframe\n  src="${url}"\n  width="640"\n  height="360"\n  frameborder="0"\n  allowfullscreen\n></iframe>`;
   };
   const handleCopyEmbed = () => {
-    navigator.clipboard.writeText(getEmbedCode()).then(() => {
-      setEmbedCopied(true);
-      setTimeout(() => setEmbedCopied(false), 2000);
-    });
+    const text = getEmbedCode();
+    const done = () => { setEmbedCopied(true); setTimeout(() => setEmbedCopied(false), 2000); };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(done).catch(() => execCopy(text, done));
+    } else {
+      execCopy(text, done);
+    }
+  };
+  const execCopy = (text, done) => {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    done();
   };
 
   /* ── loading / error states ─────────────────────────────────── */

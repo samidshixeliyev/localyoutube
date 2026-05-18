@@ -40,6 +40,7 @@ export default function MiniPlayer() {
         }
 
         return () => {
+            if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = ''; }
             if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
