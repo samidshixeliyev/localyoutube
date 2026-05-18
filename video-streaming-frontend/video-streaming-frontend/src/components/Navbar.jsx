@@ -52,8 +52,7 @@ const Navbar = () => {
 
           {/* ── Logo ─────────────────────────────────────────────────── */}
           <Link to="/" className="flex-shrink-0 flex items-center">
-            <ModTubeLogo size={34} className="hidden sm:block" />
-            <ModTubeLogo size={30} mini className="sm:hidden" />
+            <ModTubeLogo size={34} />
           </Link>
 
           {/* ── Search ───────────────────────────────────────────────── */}
