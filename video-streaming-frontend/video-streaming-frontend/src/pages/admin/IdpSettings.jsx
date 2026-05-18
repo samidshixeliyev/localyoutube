@@ -116,6 +116,18 @@ const IdpSettings = () => {
     setValues(prev => ({ ...prev, [key]: value }));
   };
 
+  const toggleIdpEnabled = async () => {
+    const next = !idpEnabled;
+    setIdpEnabled(next);
+    try {
+      await adminUpdateSettings({ 'idp.enabled': next ? 'true' : 'false' });
+      showToast('success', next ? 'SSO aktivləşdirildi' : 'SSO söndürüldü');
+    } catch {
+      setIdpEnabled(!next); // revert on failure
+      showToast('error', 'SSO vəziyyəti saxlanmadı');
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -192,7 +204,7 @@ const IdpSettings = () => {
                 </p>
               </div>
               <button
-                onClick={() => setIdpEnabled(v => !v)}
+                onClick={toggleIdpEnabled}
                 className={`relative flex-shrink-0 ml-4 w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary-500/40 ${
                   idpEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-army-600'
                 }`}

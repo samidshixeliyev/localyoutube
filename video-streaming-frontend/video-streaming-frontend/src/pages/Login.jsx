@@ -81,10 +81,6 @@ const Login = () => {
           <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-black/10" />
           <p className="text-xs font-bold tracking-widest uppercase text-primary-200 mb-1 relative">Sistemə giriş</p>
           <h1 className="text-2xl font-black text-white tracking-tight relative">ModTube</h1>
-          <div className="mt-3 inline-flex items-center gap-2 bg-black/25 rounded-full px-4 py-1.5 relative">
-            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"/>
-            <span className="text-xs text-white/90 font-medium">Sistem aktiv</span>
-          </div>
         </div>
 
         {/* Body */}
