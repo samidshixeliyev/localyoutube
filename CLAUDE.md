@@ -451,4 +451,38 @@ docker compose up -d --force-recreate
 
 ---
 
+### 2026-05-18 — Metrics Fix, Port Cleanup, ES/Kibana Removal
+
+#### Root cause of metrics not working
+
+Prometheus was scraping `localhost:8080` (connection refused) because `prometheus.yml` at the project root was never updated when Spring Boot moved to port 4000. The baked-in image had the stale config. Also the Prometheus job name was `modtube` while Metrics.jsx filtered for `job="modtube-backend"`.
+
+Additionally, two metric names in Metrics.jsx were wrong:
+- `jvm_threads_live` → **`jvm_threads_live_threads`** (Micrometer gauge name includes `_threads` suffix on JDK21)
+- `process_open_file_descriptors` → **`process_files_open_files`** (actual Micrometer name; not the Prometheus Go client name)
+
+#### What was done
+
+1. **`prometheus.yml` (root)** — fixed `localhost:8080` → `localhost:4000`; job `modtube` → `modtube-backend`
+2. **`Metrics.jsx`** — corrected both metric names above
+3. **`modtube/docker-compose.yml`** — removed unused elasticsearch and kibana services; fixed port 8080 → 4000
+4. **`modtube/Dockerfile`** — fixed `EXPOSE 8080` and healthcheck port to 4000
+5. **Live VPS fix (no rebuild needed)** — wrote corrected prometheus.yml into running container, sent SIGHUP to reload. Targets immediately came up; `jvm_threads_live_threads`, `process_files_open_files`, `http_server_requests`, `localtube_*` all returning real values.
+
+#### Key gotchas
+
+- **The `prometheus.yml` that matters is the one at the project ROOT** (copied into the all-in-one Docker image). The one at `modtube/prometheus.yml` is for the old multi-container setup and is not used by the VPS deployment.
+- **Prometheus config reload without rebuild**: `kill -HUP $(pgrep prometheus)` inside the container. No restart required.
+- **Micrometer metric names on JDK21**: `jvm_threads_live_threads` (includes `_threads`), `process_files_open_files` (not `process_open_fds` / `process_open_file_descriptors`). Always verify against `curl http://localhost:4000/actuator/prometheus | grep <pattern>` before guessing.
+- **No 8080 anywhere**: All port references cleaned up. Spring Boot defaults to 4000 via `SERVER_PORT:4000` in application.yml.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens — 64px sidebar compresses content.
+- **Backend `isShorts` field**: `PUT /videos/{id}` needs `isShorts` in update.
+- **Backend `upload.max-concurrent` setting**: new key, needs to be persisted in settings store.
+- **Next rebuild**: prometheus.yml fix is live in the running container but the rebuilt image will also pick it up from the fixed root file.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*
