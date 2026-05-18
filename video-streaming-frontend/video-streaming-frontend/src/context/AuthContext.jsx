@@ -199,6 +199,7 @@ export const AuthProvider = ({ children }) => {
       state,
       code_challenge: challenge,
       code_challenge_method: 'S256',
+      prompt: 'login',
     });
 
     window.location.href = config.authorizationEndpoint + '?' + params.toString();
