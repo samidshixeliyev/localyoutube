@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
+import ModTubeLogo from './ModTubeLogo';
 
 const MAIN_NAV = [
   { to: '/',       icon: Home,       label: 'Ana Səhifə' },
@@ -72,8 +73,8 @@ export default function Sidebar() {
           <Menu className="h-5 w-5" />
         </button>
         {isOpen && (
-          <span className="ml-2 font-bold text-sm text-gray-800 dark:text-gray-100 truncate tracking-wide">
-            MOD|TUBE
+          <span className="ml-2 flex-shrink-0">
+            <ModTubeLogo size={28} />
           </span>
         )}
       </div>
