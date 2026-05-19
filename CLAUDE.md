@@ -520,4 +520,70 @@ Additionally, two metric names in Metrics.jsx were wrong:
 
 ---
 
+### 2026-05-19 — Permissions System, Mini Player Redesign, Roles UI, Shorts Nav/Share
+
+#### What was done
+
+1. **Central permissions registry** (`src/config/permissions.js`)
+   - `PERMS` constants matching DB strings; `FEATURE` gates (OR logic arrays); `can()` helper
+   - `super-admin` always bypasses via `can()` — not added to FEATURE arrays
+
+2. **Frontend permission wiring**
+   - `Sidebar.jsx`: `CONTENT_NAV` (upload-video/admin-modtube) and `ADMIN_NAV` (per-item perms: manage-users, manage-roles, manage-settings, view-metrics). Each section only shows if user has any matching perm.
+   - `UserDropdown.jsx`: `canManageUsers` and `canManageRoles` flags replacing `isSuperAdmin`-only checks.
+   - `App.jsx`: `/upload` and `/my-videos` → `['upload-video', 'admin-modtube']`; `/admin/users` → `['super-admin', 'manage-users']`; `/admin/roles` → `['super-admin', 'manage-roles']`.
+   - `VideoDetail.jsx`: `canDelete` = owner with `delete-video` or `admin-modtube`, or super-admin. Delete button uses `canDelete`, edit button uses `canEdit`.
+
+3. **Backend permission wiring**
+   - `AdminController.java`: removed class-level `@PreAuthorize("hasAuthority('super-admin')")`; method-level annotations added: stats → `view-metrics OR super-admin`; user endpoints → `manage-users OR super-admin`; role/permission endpoints → `manage-roles OR super-admin`.
+   - `VideoController.java`: delete endpoint → `delete-video OR admin-modtube OR super-admin`; `canDelete` added to `toResponse()`.
+   - `UploadController.java`: init/chunk/complete → `upload-video OR admin-modtube OR super-admin`.
+
+4. **Grafana removed**
+   - `AppConfigController.java`: removed `/api/config/grafana` endpoint.
+   - `SystemSettingController.java`: removed `grafana.url` from allowed keys whitelist.
+   - (Dockerfile still installs Grafana but it was already disabled from supervisord — low priority to clean up)
+
+5. **Upload transcoding persistence after re-login** (`MyVideos.jsx` rewrite)
+   - Backend already stores processing progress in DB. MyVideos now separates videos by status.
+   - `ProcessingCard` component polls `/api/upload/status/{videoId}` every 3s and shows live progress bar.
+   - When processing completes, card shows "Videoya bax →" link; `onReady` callback reloads the full video list.
+   - Status is compared case-insensitively (UploadController returns UPPERCASE, VideoController returns lowercase).
+
+6. **Mini player full redesign** (`MiniPlayer.jsx`)
+   - YouTube-style: fixed `bottom: 16px; right: 16px` by default; uses `left/top` only when dragged.
+   - `W=400, H=225` (16:9), `CTRL_H=56` control bar.
+   - Thumbnail poster shown while HLS loads (requires `thumbnailUrl` in MiniPlayerContext now).
+   - Buffered track shown behind progress bar.
+   - Window resize handler clamps position so player never goes off-screen.
+   - `hls.startPosition = currentTime` for efficient seek-on-load.
+   - Autoplay with muted fallback if browser blocks sound.
+   - Drag with `dragOffset` correctly calculated from bounding rect (not internal offset).
+
+7. **RoleManagement UI complete redesign**
+   - Permission library: grid of colored cards (icon, name, category chip, description, delete button on hover).
+   - Category filter tabs (Hamısı / Sistem / İstifadəçi / Video / Kontent).
+   - Role cards: header strip (gradient red for system, primary for custom), icon, edit/delete buttons.
+   - Expandable permission list per role showing colored mini-cards.
+   - RoleFormModal: category filter tabs for the permission picker; 2-column card grid with checkbox overlay.
+
+8. **Shorts: up/down navigation + share button**
+   - Floating up/down chevron buttons fixed at center-right, outside the snap-scroll container. Calls `scrollRef.scrollBy({ top: ±itemH })`.
+   - Share button per short: uses `navigator.share()` on mobile; falls back to `navigator.clipboard.writeText()`. Shows "Kopyalandı" + green checkmark for 2s.
+   - `ChevronUp`, `Link2`, `CheckIcon` added to import list.
+
+#### Key gotchas
+
+- **UploadController.listVideos** returns ALL videos (no user filter) — MyVideos's processing section polls status for these. This is a pre-existing security concern: any authenticated user can call `/api/upload/videos` and see all uploads. Not fixed in this session.
+- **MiniPlayer position**: `pos = null` uses CSS `bottom/right`; `pos = {x,y}` uses `left/top`. Switching happens on first drag. Reset to `null` (bottom-right) when a new video activates.
+- **Grafana in Dockerfile**: Grafana is still installed in the Docker image but was already excluded from supervisord. Not removed from Dockerfile to avoid a full image rebuild. The only consumer (frontend `/api/config/grafana` call) is now gone.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens.
+- **Backend `upload.max-concurrent` setting**: not persisted in DB yet.
+- **UploadController.listVideos**: returns all videos, not filtered by current user. MyVideos should ideally filter server-side.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*
