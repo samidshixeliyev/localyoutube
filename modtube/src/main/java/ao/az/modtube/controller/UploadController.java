@@ -294,6 +294,8 @@ public class UploadController {
             status.put("progress", video.getProcessingProgress() != null ? video.getProcessingProgress() : 0);
             status.put("qualities", video.getAvailableQualities());
             status.put("stage", transcodingService.getProcessingStage(video.getId()));
+            Map<String, Integer> qp = transcodingService.getQualityProgress(video.getId());
+            if (!qp.isEmpty()) status.put("qualityProgress", qp);
 
             if (video.getStatus() == VideoStatus.READY) {
                 status.put("hlsUrl", video.getMasterPlaylistUrl());

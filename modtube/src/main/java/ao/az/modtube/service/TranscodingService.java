@@ -48,8 +48,18 @@ public class TranscodingService {
     /** Human-readable stage exposed via GET /api/upload/status/{id} */
     private final ConcurrentHashMap<String, String> processingStages = new ConcurrentHashMap<>();
 
+    /** Per-quality progress (0-100) per video, for detailed UI feedback */
+    private final ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> qualityProgressMap =
+            new ConcurrentHashMap<>();
+
     public String getProcessingStage(String videoId) {
         return processingStages.getOrDefault(videoId, "");
+    }
+
+    /** Returns a snapshot of per-quality progress for the given video (empty if not transcoding). */
+    public Map<String, Integer> getQualityProgress(String videoId) {
+        ConcurrentHashMap<String, Integer> m = qualityProgressMap.get(videoId);
+        return m != null ? Map.copyOf(m) : Map.of();
     }
 
     /**
@@ -139,8 +149,12 @@ public class TranscodingService {
             List<QualityProfile> profiles = buildQualityProfiles(info);
             int perQuality = profiles.isEmpty() ? 0 : 90 / profiles.size();
 
-            // Shared progress counter across parallel quality jobs
+            // Shared overall progress + per-quality progress for UI feedback
             AtomicInteger sharedProgress = new AtomicInteger(5);
+            ConcurrentHashMap<String, Integer> qp = new ConcurrentHashMap<>();
+            profiles.forEach(p -> qp.put(p.label, 0));
+            qualityProgressMap.put(videoId, qp);
+
             processingStages.put(videoId, "Transcoding " + profiles.stream()
                 .map(p -> p.label).reduce((a, b) -> a + "+" + b).orElse(""));
 
@@ -153,7 +167,7 @@ public class TranscodingService {
                     int rangeStart = 5 + idx * perQuality;
                     int rangeEnd   = 5 + (idx + 1) * perQuality;
                     boolean ok = transcodeQuality(videoId, inputFile, outputDir, profile,
-                            rangeStart, rangeEnd, sharedProgress);
+                            rangeStart, rangeEnd, sharedProgress, qp);
                     return Map.entry(idx, ok);
                 }));
             }
@@ -165,6 +179,7 @@ public class TranscodingService {
                 Map.Entry<Integer, Boolean> r = f.join();
                 results[r.getKey()] = r.getValue();
             }
+            qualityProgressMap.remove(videoId);
 
             StringBuilder masterPlaylist = new StringBuilder();
             masterPlaylist.append("#EXTM3U\n#EXT-X-VERSION:3\n");
@@ -266,7 +281,8 @@ public class TranscodingService {
      */
     private boolean transcodeQuality(String videoId, Path input, Path outputDir,
                                      QualityProfile profile, int progressStart, int progressEnd,
-                                     AtomicInteger sharedProgress) {
+                                     AtomicInteger sharedProgress,
+                                     ConcurrentHashMap<String, Integer> qualityProgress) {
         Process process = null;
         BufferedReader reader = null;
 
@@ -324,12 +340,16 @@ public class TranscodingService {
                     double currentTime = parseFfmpegTime(TIME_PATTERN, line);
                     if (currentTime >= 0) {
                         double ratio = Math.min(currentTime / totalDuration, 1.0);
+                        int qualityPct = (int) (ratio * 100);
+                        // Update per-quality progress for UI
+                        qualityProgress.put(profile.label, qualityPct);
+                        // Update overall DB progress (shared across parallel qualities)
                         int overallPct = progressStart + (int) ((progressEnd - progressStart) * ratio);
                         int prev = sharedProgress.get();
                         if (overallPct >= prev + 5 && sharedProgress.compareAndSet(prev, overallPct)) {
                             videoService.updateProcessingProgress(videoId, overallPct);
                             log.info("[Transcoding] {} video={} {}% (overall {}%)",
-                                    profile.label, videoId, (int)(ratio*100), overallPct);
+                                    profile.label, videoId, qualityPct, overallPct);
                         }
                     }
                 }
@@ -351,6 +371,7 @@ public class TranscodingService {
                 return false;
             }
 
+            qualityProgress.put(profile.label, 100);
             log.info("[Transcoding] ✓ {} video={}", profile.label, videoId);
             return true;
 

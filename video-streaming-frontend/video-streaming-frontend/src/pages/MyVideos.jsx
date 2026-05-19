@@ -7,18 +7,23 @@ import { Loader2, Upload as UploadIcon, Cpu, CheckCircle, AlertCircle, Clock, X 
 
 const POLL_INTERVAL = 3000;
 
+const QUALITY_ORDER = ['480p', '720p', '1080p', '1440p', '2160p'];
+
 function ProcessingCard({ video, onReady, onCancel }) {
-  const [progress, setProgress]   = useState(video.processingProgress || 0);
-  const [stage, setStage]         = useState('');
-  const [phase, setPhase]         = useState('processing');
-  const [cancelling, setCancelling] = useState(false);
+  const [progress, setProgress]       = useState(video.processingProgress || 0);
+  const [stage, setStage]             = useState('');
+  const [phase, setPhase]             = useState('processing');
+  const [cancelling, setCancelling]   = useState(false);
+  const [qualityProgress, setQualityProgress] = useState({});
   const timerRef = useRef(null);
 
   const poll = useCallback(async () => {
     try {
-      const { status, progress: p, stage: s } = await videoService.getUploadStatus(video.id);
+      const { status, progress: p, stage: s, qualityProgress: qp } =
+        await videoService.getUploadStatus(video.id);
       setProgress(p || 0);
       setStage(s || '');
+      if (qp) setQualityProgress(qp);
       if (status === 'READY') {
         setPhase('done');
         clearInterval(timerRef.current);
@@ -91,7 +96,8 @@ function ProcessingCard({ video, onReady, onCancel }) {
           <p className="text-sm text-gray-500 dark:text-gray-400 text-center">Ləğv edilir…</p>
         ) : (
           <>
-            <div className="h-2 bg-gray-100 dark:bg-army-700 rounded-full overflow-hidden mb-2">
+            {/* Overall progress bar */}
+            <div className="h-1.5 bg-gray-100 dark:bg-army-700 rounded-full overflow-hidden mb-2">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   isDone ? 'bg-green-500' : 'bg-gradient-to-r from-primary-500 to-orange-400'
@@ -99,6 +105,33 @@ function ProcessingCard({ video, onReady, onCancel }) {
                 style={{ width: `${isDone ? 100 : progress}%` }}
               />
             </div>
+
+            {/* Per-quality progress bars (shown during transcoding) */}
+            {!isDone && Object.keys(qualityProgress).length > 0 && (
+              <div className="space-y-1 mb-2">
+                {QUALITY_ORDER.filter(q => q in qualityProgress).map(q => (
+                  <div key={q} className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-gray-400 dark:text-gray-500 w-10 text-right flex-shrink-0">
+                      {q}
+                    </span>
+                    <div className="flex-1 h-1.5 bg-gray-100 dark:bg-army-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          qualityProgress[q] >= 100
+                            ? 'bg-green-500'
+                            : 'bg-gradient-to-r from-primary-500 to-orange-400'
+                        }`}
+                        style={{ width: `${qualityProgress[q]}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 w-8 flex-shrink-0">
+                      {qualityProgress[q] >= 100 ? '✓' : `${qualityProgress[q]}%`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {!isDone && stage && (
               <p className="text-xs text-center text-gray-500 dark:text-gray-400 truncate">{stage}</p>
             )}

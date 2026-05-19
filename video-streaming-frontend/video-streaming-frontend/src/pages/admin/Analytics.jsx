@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Eye, Users, Video, TrendingUp, Clock,
-  RefreshCw, BarChart2, Calendar,
+  RefreshCw, BarChart2, Calendar, UserCheck,
 } from 'lucide-react';
 import {
   BarChart, Bar, AreaChart, Area,
@@ -150,11 +150,17 @@ export default function Analytics() {
             </button>
           </div>
 
-          {/* Summary cards */}
+          {/* Summary cards - views */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-3">
+            <SummaryCard icon={Eye}        title="Son 24 saat baxış"   value={summary?.views24h}      color={C.red}    loading={loading} />
+            <SummaryCard icon={Calendar}   title="Son 7 gün baxış"     value={summary?.views7d}       color={C.amber}  loading={loading} />
+            <SummaryCard icon={TrendingUp} title="Son 30 gün baxış"    value={summary?.views30d}      color={C.blue}   loading={loading} />
+          </div>
+          {/* Summary cards - users */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            <SummaryCard icon={Eye}      title="Son 24 saat"  value={summary?.views24h}  color={C.red}    loading={loading} />
-            <SummaryCard icon={Calendar} title={`Son 7 gün`}  value={summary?.views7d}   color={C.amber}  loading={loading} />
-            <SummaryCard icon={TrendingUp} title={`Son 30 gün`} value={summary?.views30d} color={C.blue}  loading={loading} />
+            <SummaryCard icon={UserCheck}  title="Aktiv istifadəçi (7g)"  value={summary?.activeUsers7d}  color={C.green}  loading={loading} />
+            <SummaryCard icon={Users}      title="Aktiv istifadəçi (30g)" value={summary?.activeUsers30d} color={C.purple} loading={loading} />
+            <SummaryCard icon={Video}      title="Baxılan video (30g)"    value={summary?.watchedVideos}   color={C.teal}   loading={loading} />
           </div>
 
           {/* Daily views chart */}

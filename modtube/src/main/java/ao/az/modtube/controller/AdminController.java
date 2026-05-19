@@ -259,9 +259,12 @@ public class AdminController {
         Instant since7  = Instant.now().minus(7,  ChronoUnit.DAYS);
         Instant since1  = Instant.now().minus(1,  ChronoUnit.DAYS);
         Map<String, Object> m = new HashMap<>();
-        m.put("views30d", videoViewRepository.countSince(since30));
-        m.put("views7d",  videoViewRepository.countSince(since7));
-        m.put("views24h", videoViewRepository.countSince(since1));
+        m.put("views30d",       videoViewRepository.countSince(since30));
+        m.put("views7d",        videoViewRepository.countSince(since7));
+        m.put("views24h",       videoViewRepository.countSince(since1));
+        m.put("activeUsers30d", videoViewRepository.countActiveUsers(since30));
+        m.put("activeUsers7d",  videoViewRepository.countActiveUsers(since7));
+        m.put("watchedVideos",  videoViewRepository.countWatchedVideos(since30));
         return ResponseEntity.ok(m);
     }
 }

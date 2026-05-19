@@ -59,4 +59,15 @@ public interface VideoViewRepository extends JpaRepository<VideoView, Long> {
         SELECT COUNT(*) FROM video_views WHERE viewed_at >= :since
         """, nativeQuery = true)
     long countSince(@Param("since") Instant since);
+
+    @Query(value = """
+        SELECT COUNT(DISTINCT user_email) FROM video_views
+        WHERE user_email IS NOT NULL AND viewed_at >= :since
+        """, nativeQuery = true)
+    long countActiveUsers(@Param("since") Instant since);
+
+    @Query(value = """
+        SELECT COUNT(DISTINCT video_id) FROM video_views WHERE viewed_at >= :since
+        """, nativeQuery = true)
+    long countWatchedVideos(@Param("since") Instant since);
 }
