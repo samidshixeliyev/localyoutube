@@ -123,6 +123,7 @@ const VideoDetail = () => {
           videoId: id,
           title: v.title,
           hlsUrl: v.hlsUrl,
+          thumbnailUrl: v.thumbnailUrl,
           currentTime: t,
         });
       }
@@ -146,6 +147,9 @@ const VideoDetail = () => {
         role,
         isAdmin: perms.includes('super-admin') || perms.includes('admin-modtube') ||
                  role === 'ADMIN' || role === 'SUPER_ADMIN',
+        canDeleteAny: perms.includes('super-admin'),
+        canDeleteOwn: perms.includes('delete-video') || perms.includes('admin-modtube') ||
+                      perms.includes('super-admin'),
       });
     } catch { setCurrentUser(null); }
   }, []);
@@ -316,9 +320,10 @@ const VideoDetail = () => {
     </>
   );
 
-  const isOwner = currentUser && (currentUser.email === video.uploaderEmail);
-  const isAdmin = currentUser?.isAdmin;
-  const canEdit = isOwner || isAdmin;
+  const isOwner  = currentUser && (currentUser.email === video.uploaderEmail);
+  const isAdmin  = currentUser?.isAdmin;
+  const canEdit   = isOwner && currentUser?.isAdmin ? true : video.canEdit ?? (isOwner || isAdmin);
+  const canDelete = (isOwner && currentUser?.canDeleteOwn) || currentUser?.canDeleteAny;
   const vis     = getVis(video.visibility);
   const VisIcon = vis.icon;
 
@@ -448,11 +453,13 @@ const VideoDetail = () => {
                             className="flex items-center gap-1.5 px-3 py-2 bg-army-700 dark:bg-army-600 text-white rounded-full text-sm font-semibold hover:bg-army-600 dark:hover:bg-army-500 transition-colors">
                             <Image className="h-4 w-4" />
                           </button>
-                          <button onClick={handleDelete}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-full text-sm font-semibold hover:bg-red-700 transition-colors">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
                         </>
+                      )}
+                      {canDelete && (
+                        <button onClick={handleDelete}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-full text-sm font-semibold hover:bg-red-700 transition-colors">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       )}
                     </div>
                   </div>

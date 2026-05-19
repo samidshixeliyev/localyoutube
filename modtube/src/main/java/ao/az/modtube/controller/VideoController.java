@@ -225,7 +225,7 @@ public class VideoController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('admin-modtube', 'super-admin')")
+    @PreAuthorize("hasAnyAuthority('delete-video', 'admin-modtube', 'super-admin')")
     public ResponseEntity<?> deleteVideo(
             @PathVariable String id,
             @AuthenticationPrincipal ModTubePrincipal user) {
@@ -446,10 +446,13 @@ public class VideoController {
             map.put("isLikedByCurrentUser", videoService.isLikedByUser(video.getId(), user.getEmail()));
             boolean isOwner = video.getUploaderEmail() != null
                     && video.getUploaderEmail().equalsIgnoreCase(user.getEmail());
-            map.put("canEdit", user.isSuperAdmin() || (user.hasPermission("admin-modtube") && isOwner));
+            map.put("canEdit",   user.isSuperAdmin() || (user.hasPermission("admin-modtube") && isOwner));
+            map.put("canDelete", user.isSuperAdmin()
+                    || (isOwner && (user.hasPermission("delete-video") || user.hasPermission("admin-modtube"))));
         } else {
             map.put("isLikedByCurrentUser", false);
-            map.put("canEdit", false);
+            map.put("canEdit",   false);
+            map.put("canDelete", false);
         }
         return map;
     }

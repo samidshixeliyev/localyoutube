@@ -12,10 +12,12 @@ const UserDropdown = () => {
     const timeoutRef = useRef(null);
     const navigate = useNavigate();
 
-    const isSuperAdmin    = hasPermission('super-admin');
-    const isAdmin         = hasPermission('admin-modtube') || isSuperAdmin;
-    const canViewMetrics  = isSuperAdmin || hasPermission('view-metrics');
+    const isSuperAdmin      = hasPermission('super-admin');
+    const isAdmin           = hasPermission('admin-modtube') || isSuperAdmin;
+    const canViewMetrics    = isSuperAdmin || hasPermission('view-metrics');
     const canManageSettings = isSuperAdmin || hasPermission('manage-settings');
+    const canManageUsers    = isSuperAdmin || hasPermission('manage-users');
+    const canManageRoles    = isSuperAdmin || hasPermission('manage-roles');
 
     const handleMouseEnter = () => {
         clearTimeout(timeoutRef.current);
@@ -96,8 +98,30 @@ const UserDropdown = () => {
                             Şifrəni Dəyiş
                         </Link>
 
-                        {(canViewMetrics || canManageSettings || isSuperAdmin) && (
+                        {(canViewMetrics || canManageSettings || canManageUsers || canManageRoles) && (
                             <div className="border-t border-gray-100 dark:border-army-700 my-1" />
+                        )}
+
+                        {canManageUsers && (
+                            <Link
+                                to="/admin/users"
+                                onClick={() => setIsOpen(false)}
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
+                            >
+                                <Users className="h-4 w-4 text-gray-400" />
+                                İstifadəçilər
+                            </Link>
+                        )}
+
+                        {canManageRoles && (
+                            <Link
+                                to="/admin/roles"
+                                onClick={() => setIsOpen(false)}
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
+                            >
+                                <Shield className="h-4 w-4 text-gray-400" />
+                                Rollar
+                            </Link>
                         )}
 
                         {canViewMetrics && (
@@ -120,27 +144,6 @@ const UserDropdown = () => {
                                 <Settings className="h-4 w-4 text-gray-400" />
                                 Parametrlər
                             </Link>
-                        )}
-
-                        {isSuperAdmin && (
-                            <>
-                                <Link
-                                    to="/admin/users"
-                                    onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
-                                >
-                                    <Users className="h-4 w-4 text-gray-400" />
-                                    İstifadəçilər
-                                </Link>
-                                <Link
-                                    to="/admin/roles"
-                                    onClick={() => setIsOpen(false)}
-                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors"
-                                >
-                                    <Shield className="h-4 w-4 text-gray-400" />
-                                    Rollar
-                                </Link>
-                            </>
                         )}
 
                         <div className="border-t border-gray-100 dark:border-army-700 my-1" />

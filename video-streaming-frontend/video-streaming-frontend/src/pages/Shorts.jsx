@@ -10,6 +10,7 @@ import {
   Play, Eye, Heart, ArrowLeft, Zap,
   Volume2, VolumeX, Loader2, Maximize2,
   MessageSquare, X, ChevronDown, Settings,
+  ChevronUp, Link2, Check as CheckIcon,
 } from 'lucide-react';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
@@ -47,9 +48,12 @@ function ShortItem({ video, muted, onToggleMute, onVisible, isLast, onLastVisibl
   const [descExpanded, setDescExpanded] = useState(false);
 
   // Quality selector
-  const [levels,       setLevels]       = useState([]);   // HLS quality levels
-  const [activeLevel,  setActiveLevel]  = useState(-1);   // -1 = auto
+  const [levels,       setLevels]       = useState([]);
+  const [activeLevel,  setActiveLevel]  = useState(-1);
   const [showQuality,  setShowQuality]  = useState(false);
+
+  // Share state
+  const [copied, setCopied] = useState(false);
 
   // ── IntersectionObserver ───────────────────────────────────────
   useEffect(() => {
@@ -171,6 +175,26 @@ function ShortItem({ video, muted, onToggleMute, onVisible, isLast, onLastVisibl
   const currentLevelObj = activeLevel >= 0 ? levels[activeLevel] : null;
   const qualityBadge    = currentLevelObj ? `${currentLevelObj.height}p` : 'Auto';
 
+  const handleShare = async (e) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/video/${video.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: video.title, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch { /* ignore */ }
+    }
+  };
+
   return (
     <div
       ref={wrapperRef}
@@ -273,6 +297,17 @@ function ShortItem({ video, muted, onToggleMute, onVisible, isLast, onLastVisibl
             <div className="bg-white/15 hover:bg-white/25 backdrop-blur-sm rounded-full p-3 transition-colors">
               {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
             </div>
+          </button>
+
+          {/* Share */}
+          <button onClick={handleShare}
+            className="flex flex-col items-center gap-1 text-white" title="Paylaş">
+            <div className={`backdrop-blur-sm rounded-full p-3 transition-colors ${
+              copied ? 'bg-green-500/80' : 'bg-white/15 hover:bg-white/25'
+            }`}>
+              {copied ? <CheckIcon className="h-5 w-5" /> : <Link2 className="h-5 w-5" />}
+            </div>
+            <span className="text-[11px] font-medium">{copied ? 'Kopyalandı' : 'Paylaş'}</span>
           </button>
 
           {/* Quality selector (only shows when HLS levels available) */}
@@ -423,7 +458,15 @@ const Shorts = () => {
   const [activeId,    setActiveId]    = useState(null);
   const [muted,       setMuted]       = useState(true);
   const [error,       setError]       = useState('');
+  const scrollRef = useRef(null);
   const PAGE_SIZE = 10;
+
+  const scrollToItem = useCallback((dir) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const itemH = el.clientHeight;
+    el.scrollBy({ top: dir * itemH, behavior: 'smooth' });
+  }, []);
 
   const loadShorts = useCallback(async (p) => {
     try {
@@ -507,8 +550,27 @@ const Shorts = () => {
           </button>
         </div>
 
+        {/* Up / Down navigation arrows — floating right of center */}
+        <div className="fixed right-4 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-2 pointer-events-none">
+          <button
+            onClick={() => scrollToItem(-1)}
+            className="pointer-events-auto w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white transition-colors shadow-lg"
+            title="Əvvəlki"
+          >
+            <ChevronUp className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => scrollToItem(1)}
+            className="pointer-events-auto w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white transition-colors shadow-lg"
+            title="Növbəti"
+          >
+            <ChevronDown className="h-5 w-5" />
+          </button>
+        </div>
+
         {/* Vertical snap-scroll feed */}
         <div
+          ref={scrollRef}
           className="overflow-y-scroll snap-y snap-mandatory no-scrollbar"
           style={{ height: 'calc(100vh - 7rem)' }}
         >

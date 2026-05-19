@@ -27,7 +27,6 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/admin")
-@PreAuthorize("hasAuthority('super-admin')")
 @RequiredArgsConstructor
 public class AdminController {
 
@@ -39,6 +38,7 @@ public class AdminController {
     // ═══════════════════════════════════════════════════════════════
 
     @GetMapping("/stats")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'view-metrics')")
     public ResponseEntity<Map<String, Object>> getStats() {
         try {
             return ResponseEntity.ok(Map.of(
@@ -58,22 +58,26 @@ public class AdminController {
     // ═══════════════════════════════════════════════════════════════
 
     @GetMapping("/users")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-users')")
     public ResponseEntity<List<UserResponse>> getAllUsers() {
         return ResponseEntity.ok(adminService.getAllUsers());
     }
 
     @GetMapping("/users/{id}")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-users')")
     public ResponseEntity<UserResponse> getUser(@PathVariable Long id) {
         return ResponseEntity.ok(adminService.getUserById(id));
     }
 
     @PostMapping("/users")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-users')")
     public ResponseEntity<UserResponse> createUser(@Valid @RequestBody CreateUserRequest request) {
         UserResponse created = adminService.createUser(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @PutMapping("/users/{id}")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-users')")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long id,
             @Valid @RequestBody UpdateUserRequest request) {
@@ -81,6 +85,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/users/{id}")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-users')")
     public ResponseEntity<Map<String, String>> deleteUser(
             @PathVariable Long id,
             @AuthenticationPrincipal ModTubeUserDetails currentUser) {
@@ -89,6 +94,7 @@ public class AdminController {
     }
 
     @PostMapping("/users/{id}/password")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-users')")
     public ResponseEntity<Map<String, String>> resetUserPassword(
             @PathVariable Long id,
             @Valid @RequestBody AdminResetPasswordRequest request) {
@@ -101,21 +107,25 @@ public class AdminController {
     // ═══════════════════════════════════════════════════════════════
 
     @GetMapping("/roles")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-roles')")
     public ResponseEntity<List<RoleResponse>> getAllRoles() {
         return ResponseEntity.ok(adminService.getAllRoles());
     }
 
     @GetMapping("/roles/{id}")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-roles')")
     public ResponseEntity<RoleResponse> getRole(@PathVariable Long id) {
         return ResponseEntity.ok(adminService.getRoleById(id));
     }
 
     @GetMapping("/permissions")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-roles')")
     public ResponseEntity<List<PermissionResponse>> getAllPermissions() {
         return ResponseEntity.ok(adminService.getAllPermissions());
     }
 
     @PostMapping("/permissions")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-roles')")
     public ResponseEntity<PermissionResponse> createPermission(
             @RequestBody Map<String, String> body) {
         String name = body.get("name");
@@ -128,17 +138,20 @@ public class AdminController {
     }
 
     @DeleteMapping("/permissions/{id}")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-roles')")
     public ResponseEntity<Map<String, String>> deletePermission(@PathVariable Long id) {
         adminService.deletePermission(id);
         return ResponseEntity.ok(Map.of("message", "Permission deleted successfully"));
     }
 
     @PostMapping("/roles")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-roles')")
     public ResponseEntity<RoleResponse> createRole(@Valid @RequestBody CreateRoleRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(adminService.createRole(request));
     }
 
     @PutMapping("/roles/{id}")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-roles')")
     public ResponseEntity<RoleResponse> updateRole(
             @PathVariable Long id,
             @Valid @RequestBody UpdateRoleRequest request) {
@@ -146,6 +159,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/roles/{id}")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-roles')")
     public ResponseEntity<Map<String, String>> deleteRole(@PathVariable Long id) {
         adminService.deleteRole(id);
         return ResponseEntity.ok(Map.of("message", "Role deleted successfully"));

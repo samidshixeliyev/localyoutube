@@ -13,16 +13,16 @@ const MAIN_NAV = [
   { to: '/shorts', icon: PlaySquare, label: 'Shorts'      },
 ];
 
-const ADMIN_NAV = [
-  { to: '/my-videos', icon: Film,   label: 'Videolarım', perm: 'admin-modtube' },
-  { to: '/upload',    icon: Upload, label: 'Yüklə',      perm: 'admin-modtube' },
+const CONTENT_NAV = [
+  { to: '/my-videos', icon: Film,   label: 'Videolarım', perms: ['upload-video', 'admin-modtube'] },
+  { to: '/upload',    icon: Upload, label: 'Yüklə',      perms: ['upload-video', 'admin-modtube'] },
 ];
 
-const SUPER_NAV = [
-  { to: '/admin/users',    icon: Users,    label: 'İstifadəçilər' },
-  { to: '/admin/roles',    icon: Shield,   label: 'Rollar'         },
-  { to: '/admin/settings', icon: Settings, label: 'Tənzimləmələr' },
-  { to: '/admin/metrics',  icon: Activity, label: 'Metriklər'      },
+const ADMIN_NAV = [
+  { to: '/admin/users',    icon: Users,    label: 'İstifadəçilər', perms: ['manage-users']    },
+  { to: '/admin/roles',    icon: Shield,   label: 'Rollar',         perms: ['manage-roles']    },
+  { to: '/admin/settings', icon: Settings, label: 'Tənzimləmələr', perms: ['manage-settings'] },
+  { to: '/admin/metrics',  icon: Activity, label: 'Metriklər',      perms: ['view-metrics']    },
 ];
 
 function NavItem({ to, icon: Icon, label, isOpen }) {
@@ -53,7 +53,11 @@ export default function Sidebar() {
   const { isOpen, toggle } = useSidebar();
   const { isAuthenticated, hasPermission } = useAuth();
   const isSuperAdmin = hasPermission('super-admin');
-  const isAdmin = hasPermission('admin-modtube') || isSuperAdmin;
+
+  const canSee = (perms) => isSuperAdmin || perms.some(p => hasPermission(p));
+
+  const visibleContent = isAuthenticated ? CONTENT_NAV.filter(i => canSee(i.perms)) : [];
+  const visibleAdmin   = isAuthenticated ? ADMIN_NAV.filter(i => canSee(i.perms))   : [];
 
   return (
     <aside
@@ -85,19 +89,19 @@ export default function Sidebar() {
           <NavItem key={item.to} {...item} isOpen={isOpen} />
         ))}
 
-        {isAuthenticated && isAdmin && (
+        {visibleContent.length > 0 && (
           <>
             <Divider />
-            {ADMIN_NAV.filter(i => hasPermission(i.perm) || isSuperAdmin).map(item => (
+            {visibleContent.map(item => (
               <NavItem key={item.to} {...item} isOpen={isOpen} />
             ))}
           </>
         )}
 
-        {isSuperAdmin && (
+        {visibleAdmin.length > 0 && (
           <>
             <Divider />
-            {SUPER_NAV.map(item => (
+            {visibleAdmin.map(item => (
               <NavItem key={item.to} {...item} isOpen={isOpen} />
             ))}
           </>

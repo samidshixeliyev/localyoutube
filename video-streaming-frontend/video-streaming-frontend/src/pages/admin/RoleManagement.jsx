@@ -12,45 +12,48 @@ import {
 import Navbar from '../../components/Navbar';
 import {
   ArrowLeft, Shield, Plus, Edit2, Trash2, X, Check,
-  Users, Lock, Save, AlertTriangle, ChevronDown, ChevronUp, Key,
+  Lock, Save, AlertTriangle, ChevronDown, ChevronUp, Key,
+  Users, Settings, Video, MessageSquare, Eye, Upload, Star,
 } from 'lucide-react';
 
-/* ─── helpers ─────────────────────────────────────────────────── */
+/* ─── Permission metadata ─────────────────────────────────────── */
 const SYSTEM_ROLES = ['super-admin'];
-
-/* Permission metadata — enriches backend permissions with category, icon, description.
-   Unknown permissions fall back to DEFAULT_META so the UI stays robust. */
-const PERMISSION_META = {
-  'super-admin':      { category: 'Sistem',       icon: '🛡️', desc: 'Tam sistem girişi — bütün icazələri əhatə edir' },
-  'view-metrics':     { category: 'Sistem',       icon: '📊', desc: 'Prometheus metrik panelini görmək' },
-  'manage-settings':  { category: 'Sistem',       icon: '⚙️', desc: 'Sistem parametrlərinə dəyişiklik etmək' },
-  'view-reports':     { category: 'Sistem',       icon: '📋', desc: 'Hesabatları görmək' },
-  'manage-users':     { category: 'İstifadəçi',   icon: '👥', desc: 'İstifadəçiləri yaratmaq, redaktə etmək və silmək' },
-  'manage-roles':     { category: 'İstifadəçi',   icon: '🎭', desc: 'Rolları idarə etmək' },
-  'admin-modtube':    { category: 'Video',         icon: '🎬', desc: 'Bütün videoları yükləmək, redaktə etmək və silmək' },
-  'upload-video':     { category: 'Video',         icon: '📤', desc: 'Yeni video yükləmək' },
-  'delete-video':     { category: 'Video',         icon: '🗑️', desc: 'İstənilən videonu silmək' },
-  'view-private':     { category: 'Video',         icon: '🔒', desc: 'Gizli və məhdud videoları izləmək' },
-  'manage-shorts':    { category: 'Video',         icon: '⚡', desc: 'Shorts videoları idarə etmək' },
-  'comment-moderate': { category: 'Kontent',       icon: '💬', desc: 'Şərhləri silmək və gizlətmək' },
-};
-const DEFAULT_META = { category: 'Digər', icon: '🔑', desc: '' };
-
 const SYSTEM_PERMISSIONS = new Set([
   'super-admin', 'admin-modtube', 'view-metrics', 'manage-settings',
 ]);
 
-function PermBadge({ name }) {
-  const isSuper = name === 'super-admin';
-  const isAdmin = name === 'admin-modtube';
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md border
-      ${isSuper ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800' :
-        isAdmin ? 'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-400 dark:border-primary-800' :
-                  'bg-army-50 text-gray-700 border-army-200 dark:bg-army-700 dark:text-gray-300 dark:border-army-600'}`}>
-      <Lock className="h-2.5 w-2.5" />{name}
-    </span>
-  );
+const PERM_META = {
+  'super-admin':      { category: 'Sistem',     icon: '🛡️', color: 'red',     desc: 'Tam sistem girişi — bütün icazələri əhatə edir' },
+  'view-metrics':     { category: 'Sistem',     icon: '📊', color: 'amber',   desc: 'Prometheus metrik panelini görmək' },
+  'manage-settings':  { category: 'Sistem',     icon: '⚙️', color: 'orange',  desc: 'Sistem parametrlərinə dəyişiklik etmək' },
+  'view-reports':     { category: 'Sistem',     icon: '📋', color: 'amber',   desc: 'Hesabatları görmək' },
+  'manage-users':     { category: 'İstifadəçi', icon: '👥', color: 'blue',    desc: 'İstifadəçiləri yaratmaq, redaktə etmək, silmək' },
+  'manage-roles':     { category: 'İstifadəçi', icon: '🎭', color: 'purple',  desc: 'Rolları və icazələri idarə etmək' },
+  'admin-modtube':    { category: 'Video',      icon: '🎬', color: 'primary', desc: 'Bütün videoları yükləmək, redaktə etmək, silmək' },
+  'upload-video':     { category: 'Video',      icon: '📤', color: 'primary', desc: 'Yeni video yükləmək' },
+  'delete-video':     { category: 'Video',      icon: '🗑️', color: 'red',     desc: 'Video silmək' },
+  'view-private':     { category: 'Video',      icon: '🔒', color: 'primary', desc: 'Gizli və məhdud videoları izləmək' },
+  'manage-shorts':    { category: 'Video',      icon: '⚡', color: 'yellow',  desc: 'Shorts videoları idarə etmək' },
+  'comment-moderate': { category: 'Kontent',    icon: '💬', color: 'teal',    desc: 'Şərhləri silmək' },
+};
+const DEFAULT_META = { category: 'Digər', icon: '🔑', color: 'gray', desc: '' };
+
+const CAT_ORDER = ['Sistem', 'İstifadəçi', 'Video', 'Kontent', 'Digər'];
+
+const COLOR_MAP = {
+  red:     'bg-red-50    dark:bg-red-900/20    border-red-200    dark:border-red-800    text-red-700    dark:text-red-300',
+  amber:   'bg-amber-50  dark:bg-amber-900/20  border-amber-200  dark:border-amber-800  text-amber-700  dark:text-amber-300',
+  orange:  'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300',
+  blue:    'bg-blue-50   dark:bg-blue-900/20   border-blue-200   dark:border-blue-800   text-blue-700   dark:text-blue-300',
+  purple:  'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300',
+  primary: 'bg-primary-50 dark:bg-primary-900/20 border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-300',
+  yellow:  'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300',
+  teal:    'bg-teal-50   dark:bg-teal-900/20   border-teal-200   dark:border-teal-800   text-teal-700   dark:text-teal-300',
+  gray:    'bg-gray-50   dark:bg-army-700      border-gray-200   dark:border-army-600   text-gray-700   dark:text-gray-300',
+};
+
+function getMeta(name) {
+  return PERM_META[name] || DEFAULT_META;
 }
 
 /* ─── Toast ───────────────────────────────────────────────────── */
@@ -58,18 +61,81 @@ function Toast({ msg, type = 'success' }) {
   if (!msg) return null;
   return (
     <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl font-medium text-sm
-      ${type === 'success'
-        ? 'bg-primary-700 text-white'
-        : 'bg-red-700 text-white'}`}>
+      ${type === 'success' ? 'bg-primary-700 text-white' : 'bg-red-700 text-white'}`}>
       {type === 'success'
-        ? <Check className="h-4 w-4 bg-white/20 rounded-full p-0.5" />
+        ? <Check className="h-4 w-4" />
         : <AlertTriangle className="h-4 w-4" />}
       {msg}
     </div>
   );
 }
 
-/* ─── RoleForm modal ──────────────────────────────────────────── */
+/* ─── Permission card ─────────────────────────────────────────── */
+function PermCard({ perm, selectable, selected, onToggle, onDelete }) {
+  const meta = getMeta(perm.name);
+  const colorCls = COLOR_MAP[meta.color] || COLOR_MAP.gray;
+  const isSystem = SYSTEM_PERMISSIONS.has(perm.name);
+
+  return (
+    <div
+      onClick={selectable ? () => onToggle(perm.id) : undefined}
+      className={`relative group rounded-xl border p-3.5 transition-all duration-150 ${
+        selectable ? 'cursor-pointer hover:shadow-md' : ''
+      } ${
+        selectable && selected
+          ? 'ring-2 ring-primary-500 border-primary-400 dark:border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+          : 'bg-white dark:bg-army-800 border-gray-200 dark:border-army-700 hover:border-primary-300 dark:hover:border-primary-700'
+      }`}
+    >
+      {/* Checkbox indicator for selectable mode */}
+      {selectable && (
+        <div className={`absolute top-2.5 right-2.5 w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+          selected
+            ? 'bg-primary-600 border-primary-600'
+            : 'border-gray-300 dark:border-army-500'
+        }`}>
+          {selected && <Check className="h-2.5 w-2.5 text-white" />}
+        </div>
+      )}
+
+      {/* Delete button for permission library */}
+      {!selectable && !isSystem && onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(perm); }}
+          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+          title="Sil"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      <div className="flex items-start gap-3 pr-5">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0 border ${colorCls}`}>
+          {meta.icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{perm.name}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+            {meta.desc || perm.description || '—'}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 mt-2.5">
+        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${colorCls}`}>
+          {meta.category}
+        </span>
+        {isSystem && (
+          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400">
+            SİSTEM
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── RoleFormModal ───────────────────────────────────────────── */
 function RoleFormModal({ mode, role, permissions, onClose, onSaved }) {
   const isCreate = mode === 'create';
   const isSystemRole = !isCreate && SYSTEM_ROLES.includes(role?.name);
@@ -83,57 +149,25 @@ function RoleFormModal({ mode, role, permissions, onClose, onSaved }) {
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
-  const [expandedCats, setExpandedCats] = useState({});
+  const [filterCat, setFilterCat] = useState('Hamısı');
 
-  const togglePerm = (id) => {
-    setSelectedPerms(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
+  const togglePerm = (id) =>
+    setSelectedPerms(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
-  const toggleCat = (cat) =>
-    setExpandedCats(prev => ({ ...prev, [cat]: !isCatExpanded(cat) }));
-  const isCatExpanded = (cat) => expandedCats[cat] !== false; // default expanded
-
-  const selectAllInCat = (perms) => {
-    const ids = perms.map(p => p.id);
-    setSelectedPerms(prev => Array.from(new Set([...prev, ...ids])));
-  };
-  const deselectAllInCat = (perms) => {
-    const ids = new Set(perms.map(p => p.id));
-    setSelectedPerms(prev => prev.filter(id => !ids.has(id)));
-  };
-  const allSelectedInCat = (perms) => perms.length > 0 && perms.every(p => selectedPerms.includes(p.id));
-
-  /* Group permissions by category from PERMISSION_META */
-  const groupedPerms = permissions.reduce((acc, perm) => {
-    const meta = PERMISSION_META[perm.name] || DEFAULT_META;
-    if (!acc[meta.category]) acc[meta.category] = [];
-    acc[meta.category].push({ ...perm, meta });
+  const grouped = permissions.reduce((acc, p) => {
+    const cat = getMeta(p.name).category;
+    (acc[cat] = acc[cat] || []).push(p);
     return acc;
   }, {});
-
-  /* Stable category order: known categories first, then anything else (incl. "Digər") */
-  const CATEGORY_ORDER = ['Sistem', 'İstifadəçi', 'Video', 'Digər'];
-  const orderedCategories = Object.keys(groupedPerms).sort((a, b) => {
-    const ai = CATEGORY_ORDER.indexOf(a);
-    const bi = CATEGORY_ORDER.indexOf(b);
-    if (ai === -1 && bi === -1) return a.localeCompare(b);
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
+  const cats = ['Hamısı', ...CAT_ORDER.filter(c => grouped[c])];
+  const filtered = filterCat === 'Hamısı' ? permissions : (grouped[filterCat] || []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) { setErr('Rol adı tələb olunur'); return; }
     setSaving(true); setErr('');
     try {
-      const payload = {
-        name: name.trim(),
-        description: description.trim() || null,
-        permissionIds: selectedPerms,
-      };
+      const payload = { name: name.trim(), description: description.trim() || null, permissionIds: selectedPerms };
       if (isCreate) {
         const res = await adminCreateRole(payload);
         onSaved(res.data, 'create');
@@ -143,156 +177,117 @@ function RoleFormModal({ mode, role, permissions, onClose, onSaved }) {
       }
     } catch (ex) {
       setErr(ex.response?.data?.message || 'Xəta baş verdi');
-    } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-army-800 rounded-2xl w-full max-w-lg shadow-2xl border border-gray-200 dark:border-army-700">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-army-800 rounded-2xl w-full max-w-2xl shadow-2xl border border-gray-200 dark:border-army-700 my-8">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-army-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-army-700 bg-gradient-to-r from-primary-600 to-primary-700 rounded-t-2xl">
           <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary-600 dark:text-primary-400" />
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-              {isCreate ? 'Yeni rol yarat' : `Rolu redaktə et: ${role.name}`}
+            <Shield className="h-5 w-5 text-white" />
+            <h3 className="text-lg font-bold text-white">
+              {isCreate ? 'Yeni Rol Yarat' : `Redaktə: ${role.name}`}
             </h3>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+          <button onClick={onClose} className="text-white/70 hover:text-white transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {err && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-red-700 dark:text-red-400 text-sm">
               {err}
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-              Rol adı <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              disabled={isSystemRole}
-              placeholder="məs. moderator"
-              className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg text-sm
-                         bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
-                         focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500
-                         disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            />
-            {isSystemRole && (
-              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Sistem rolunun adı dəyişdirilə bilməz</p>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Rol adı <span className="text-red-500">*</span>
+              </label>
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                disabled={isSystemRole}
+                placeholder="məs. moderator"
+                className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-xl text-sm
+                           bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
+                           focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Təsvir
+              </label>
+              <input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Rol haqqında qısa məlumat"
+                className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-xl text-sm
+                           bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
+                           focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+              />
+            </div>
           </div>
 
+          {/* Permission picker */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-              Təsvir (isteğe bağlı)
-            </label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={2}
-              placeholder="Bu rolun icazələrini qısaca izah edin…"
-              className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg text-sm
-                         bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
-                         focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500
-                         resize-none transition-all"
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                 İcazələr
               </label>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full
-                               bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
+              <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
                 {selectedPerms.length} seçilib
               </span>
             </div>
 
-            <div className="border border-gray-200 dark:border-army-600 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-              {permissions.length === 0 ? (
-                <p className="p-3 text-sm text-gray-400 dark:text-gray-500">İcazə tapılmadı</p>
-              ) : orderedCategories.map(cat => {
-                const perms = groupedPerms[cat];
-                const expanded = isCatExpanded(cat);
-                const selectedCount = perms.filter(p => selectedPerms.includes(p.id)).length;
-                const allSelected = allSelectedInCat(perms);
-                return (
-                  <div key={cat} className="border-b border-gray-100 dark:border-army-700 last:border-0">
-                    {/* Category header */}
-                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-army-900/40">
-                      <button
-                        type="button"
-                        onClick={() => toggleCat(cat)}
-                        className="flex items-center gap-2 flex-1 text-left text-sm font-bold text-gray-700 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                      >
-                        {expanded
-                          ? <ChevronUp className="h-4 w-4" />
-                          : <ChevronDown className="h-4 w-4" />}
-                        <span>{cat}</span>
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                          ({selectedCount}/{perms.length} seçilib)
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => allSelected ? deselectAllInCat(perms) : selectAllInCat(perms)}
-                        className="text-xs font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors px-2 py-1 rounded hover:bg-primary-50 dark:hover:bg-primary-900/20"
-                      >
-                        {allSelected ? 'Hamısını sil' : 'Hamısını seç'}
-                      </button>
-                    </div>
+            {/* Category tabs */}
+            <div className="flex gap-1.5 flex-wrap mb-3">
+              {cats.map(cat => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setFilterCat(cat)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                    filterCat === cat
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 dark:bg-army-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-army-600'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
 
-                    {/* Category items */}
-                    {expanded && perms.map(perm => {
-                      const desc = PERMISSION_META[perm.name]?.desc || perm.description || '';
-                      const icon = perm.meta.icon;
-                      return (
-                        <label
-                          key={perm.id}
-                          className="flex items-start gap-3 px-4 py-2.5 cursor-pointer hover:bg-primary-50 dark:hover:bg-army-700 border-t border-gray-100 dark:border-army-700 transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedPerms.includes(perm.id)}
-                            onChange={() => togglePerm(perm.id)}
-                            className="mt-0.5 rounded border-gray-300 dark:border-army-600 text-primary-600 focus:ring-primary-500"
-                          />
-                          <span className="text-base leading-none mt-0.5" aria-hidden="true">{icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{perm.name}</p>
-                            {desc && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
-                            )}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+              {filtered.map(perm => (
+                <PermCard
+                  key={perm.id}
+                  perm={perm}
+                  selectable
+                  selected={selectedPerms.includes(perm.id)}
+                  onToggle={togglePerm}
+                />
+              ))}
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose}
-              className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg text-sm font-semibold
+              className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-army-600 rounded-xl text-sm font-semibold
                          text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors">
               Ləğv et
             </button>
             <button type="submit" disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg text-sm font-semibold
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-xl text-sm font-semibold
                          hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm">
               {saving
-                ? <><svg className="w-4 h-4 animate-spin border-2 border-white/30 border-t-white rounded-full" viewBox="0 0 24 24" />Saxlanır…</>
+                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Saxlanır…</>
                 : <><Save className="h-4 w-4" />{isCreate ? 'Yarat' : 'Yadda saxla'}</>}
             </button>
           </div>
@@ -302,11 +297,10 @@ function RoleFormModal({ mode, role, permissions, onClose, onSaved }) {
   );
 }
 
-/* ─── DeleteConfirm modal ─────────────────────────────────────── */
+/* ─── DeleteModal ─────────────────────────────────────────────── */
 function DeleteModal({ role, onClose, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState('');
-
   const handleDelete = async () => {
     setDeleting(true); setErr('');
     try {
@@ -317,9 +311,8 @@ function DeleteModal({ role, onClose, onDeleted }) {
       setDeleting(false);
     }
   };
-
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-army-800 rounded-2xl w-full max-w-sm shadow-2xl border border-gray-200 dark:border-army-700 p-6">
         <div className="text-center mb-5">
           <div className="mx-auto w-14 h-14 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-3">
@@ -327,24 +320,20 @@ function DeleteModal({ role, onClose, onDeleted }) {
           </div>
           <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Rolu sil</h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            <span className="font-semibold text-gray-900 dark:text-gray-100">"{role.name}"</span> rolu silinsin?
+            <span className="font-bold text-gray-900 dark:text-gray-100">"{role.name}"</span> silinsin?
           </p>
-          <p className="text-xs text-red-600 dark:text-red-400 mt-2 font-medium">Bu əməliyyat geri qaytarıla bilməz!</p>
+          <p className="text-xs text-red-600 mt-1 font-medium">Bu əməliyyat geri qaytarıla bilməz!</p>
         </div>
-        {err && (
-          <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-red-700 dark:text-red-400 text-sm">
-            {err}
-          </div>
-        )}
+        {err && <p className="mb-4 text-sm text-red-600 dark:text-red-400 text-center">{err}</p>}
         <div className="flex gap-3">
           <button onClick={onClose}
-            className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg text-sm font-semibold
+            className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-army-600 rounded-xl text-sm font-semibold
                        text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors">
             Ləğv et
           </button>
           <button onClick={handleDelete} disabled={deleting}
-            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold
-                       hover:bg-red-700 disabled:opacity-60 transition-colors shadow-sm">
+            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold
+                       hover:bg-red-700 disabled:opacity-60 transition-colors">
             {deleting ? 'Silinir…' : 'Sil'}
           </button>
         </div>
@@ -357,36 +346,41 @@ function DeleteModal({ role, onClose, onDeleted }) {
 function RoleCard({ role, onEdit, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const isSystem = SYSTEM_ROLES.includes(role.name);
+  const permCount = role.permissions?.length || 0;
 
   return (
-    <div className="army-card p-5 hover:shadow-md dark:hover:border-primary-700/50 transition-all duration-200">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-bold text-gray-900 dark:text-gray-100">{role.name}</h3>
-            {isSystem && (
-              <span className="inline-flex items-center gap-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400
-                               border border-red-200 dark:border-red-800 text-xs font-bold px-2 py-0.5 rounded-full">
-                <Shield className="h-3 w-3" />SİSTEM
-              </span>
-            )}
-            <span className="text-xs text-gray-400 dark:text-gray-500">ID: {role.id}</span>
+    <div className="bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200">
+      {/* Card header strip */}
+      <div className={`px-5 py-4 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-army-700 ${
+        isSystem ? 'bg-gradient-to-r from-red-600 to-red-700' : 'bg-gradient-to-r from-primary-600 to-primary-700'
+      }`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+            <Shield className="h-5 w-5 text-white" />
           </div>
-          {role.description && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{role.description}</p>
-          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-white text-base truncate">{role.name}</h3>
+              {isSystem && (
+                <span className="inline-flex items-center gap-1 bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  <Star className="h-2.5 w-2.5" />SİSTEM
+                </span>
+              )}
+            </div>
+            {role.description && (
+              <p className="text-white/70 text-xs truncate">{role.description}</p>
+            )}
+          </div>
         </div>
-
-        {/* Actions */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button onClick={() => onEdit(role)}
-            className="p-1.5 rounded-lg text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+            className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
             title="Redaktə et">
             <Edit2 className="h-4 w-4" />
           </button>
           {!isSystem && (
             <button onClick={() => onDelete(role)}
-              className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              className="p-2 rounded-lg bg-white/20 hover:bg-red-500/50 text-white transition-colors"
               title="Sil">
               <Trash2 className="h-4 w-4" />
             </button>
@@ -394,58 +388,67 @@ function RoleCard({ role, onEdit, onDelete }) {
         </div>
       </div>
 
-      {/* Permissions */}
-      <div className="mt-3">
+      {/* Card body */}
+      <div className="p-4">
         <button
           onClick={() => setExpanded(e => !e)}
-          className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+          className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors w-full text-left"
         >
-          <Lock className="h-3.5 w-3.5" />
-          {role.permissions?.length || 0} icazə
-          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          <Lock className="h-4 w-4" />
+          <span>{permCount} icazə</span>
+          <span className="flex-1" />
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
 
-        {expanded && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {(role.permissions || []).length === 0
-              ? <span className="text-xs text-gray-400 dark:text-gray-500">İcazə yoxdur</span>
-              : (role.permissions || []).map(p => <PermBadge key={p} name={p} />)
-            }
+        {expanded && permCount > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+            {(role.permissions || []).map(name => {
+              const meta = getMeta(name);
+              const colorCls = COLOR_MAP[meta.color] || COLOR_MAP.gray;
+              return (
+                <div key={name} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-xs font-medium ${colorCls}`}>
+                  <span>{meta.icon}</span>
+                  <span className="truncate">{name}</span>
+                </div>
+              );
+            })}
           </div>
+        )}
+        {expanded && permCount === 0 && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 text-center py-2">İcazə yoxdur</p>
         )}
       </div>
     </div>
   );
 }
 
-/* ─── RoleManagement page ─────────────────────────────────────── */
+/* ─── Main page ───────────────────────────────────────────────── */
 const RoleManagement = () => {
   const navigate = useNavigate();
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [modal, setModal] = useState(null);  // null | { type: 'create' | 'edit' | 'delete', role? }
+  const [modal, setModal] = useState(null);
   const [toast, setToast] = useState({ msg: '', type: 'success' });
 
-  // Permission creation state
   const [showPermForm, setShowPermForm] = useState(false);
   const [newPerm, setNewPerm] = useState({ name: '', description: '', type: 'CUSTOM' });
   const [permSaving, setPermSaving] = useState(false);
   const [permErr, setPermErr] = useState('');
-
-  const refreshPermissions = () =>
-    adminGetPermissions().then(r => setPermissions(r.data)).catch(() => {});
+  const [permTab, setPermTab] = useState('Hamısı');
 
   useEffect(() => {
     Promise.all([adminGetRoles(), adminGetPermissions()])
-      .then(([rolesRes, permsRes]) => {
-        setRoles(rolesRes.data);
-        setPermissions(permsRes.data);
-      })
+      .then(([r, p]) => { setRoles(r.data); setPermissions(p.data); })
       .catch(() => setError('Məlumatlar yüklənə bilmədi'))
       .finally(() => setLoading(false));
   }, []);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast({ msg: '', type: 'success' }), 3500);
+  };
 
   const handleCreatePermission = async (e) => {
     e.preventDefault();
@@ -453,7 +456,8 @@ const RoleManagement = () => {
     setPermSaving(true); setPermErr('');
     try {
       await adminCreatePermission(newPerm);
-      await refreshPermissions();
+      const res = await adminGetPermissions();
+      setPermissions(res.data);
       setNewPerm({ name: '', description: '', type: 'CUSTOM' });
       setShowPermForm(false);
       showToast('İcazə yaradıldı');
@@ -468,45 +472,41 @@ const RoleManagement = () => {
     try {
       await adminDeletePermission(perm.id);
       setPermissions(prev => prev.filter(p => p.id !== perm.id));
-      showToast(`"${perm.name}" icazəsi silindi`);
+      showToast(`"${perm.name}" silindi`);
     } catch (ex) {
       showToast(ex.response?.data?.message || 'Silinə bilmədi', 'error');
     }
   };
 
-  const showToast = (msg, type = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast({ msg: '', type: 'success' }), 3500);
-  };
-
-  const handleSaved = (savedRole, op) => {
-    if (op === 'create') {
-      setRoles(prev => [...prev, savedRole]);
-      showToast(`"${savedRole.name}" rolu yaradıldı`);
-    } else {
-      setRoles(prev => prev.map(r => r.id === savedRole.id ? savedRole : r));
-      showToast(`"${savedRole.name}" rolu yeniləndi`);
-    }
+  const handleSaved = (saved, op) => {
+    if (op === 'create') setRoles(prev => [...prev, saved]);
+    else setRoles(prev => prev.map(r => r.id === saved.id ? saved : r));
+    showToast(op === 'create' ? `"${saved.name}" yaradıldı` : `"${saved.name}" yeniləndi`);
     setModal(null);
   };
 
   const handleDeleted = (id) => {
-    const deleted = roles.find(r => r.id === id);
-    setRoles(prev => prev.filter(r => r.id !== id));
-    showToast(`"${deleted?.name}" rolu silindi`);
+    const r = roles.find(x => x.id === id);
+    setRoles(prev => prev.filter(x => x.id !== id));
+    showToast(`"${r?.name}" silindi`);
     setModal(null);
   };
 
-  /* ── Loading ── */
+  // Grouped permissions for the library
+  const grouped = permissions.reduce((acc, p) => {
+    const cat = getMeta(p.name).category;
+    (acc[cat] = acc[cat] || []).push(p);
+    return acc;
+  }, {});
+  const permCats = ['Hamısı', ...CAT_ORDER.filter(c => grouped[c])];
+  const visiblePerms = permTab === 'Hamısı' ? permissions : (grouped[permTab] || []);
+
   if (loading) {
     return (
       <>
         <Navbar />
         <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <Shield className="h-12 w-12 text-primary-600 mx-auto mb-3 animate-pulse" />
-            <p className="text-gray-500 dark:text-gray-400">Rollar yüklənir…</p>
-          </div>
+          <Shield className="h-12 w-12 text-primary-600 animate-pulse" />
         </div>
       </>
     );
@@ -516,73 +516,71 @@ const RoleManagement = () => {
     <>
       <Navbar />
       <div className="min-h-screen bg-primary-50 dark:bg-army-900 transition-colors">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
 
-          {/* Page header */}
+          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => navigate('/admin/users')}
-                className="p-2 rounded-lg border border-gray-200 dark:border-army-700 bg-white dark:bg-army-800
+                className="p-2 rounded-xl border border-gray-200 dark:border-army-700 bg-white dark:bg-army-800
                            text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-army-700 transition-colors">
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div>
                 <h1 className="text-2xl font-black text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <Shield className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+                  <Shield className="h-6 w-6 text-primary-600" />
                   Rol İdarəetməsi
                 </h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  {roles.length} rol · {permissions.length} mövcud icazə
+                  {roles.length} rol · {permissions.length} icazə
                 </p>
               </div>
             </div>
-
             <button
               onClick={() => setModal({ type: 'create' })}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white text-sm font-semibold
-                         rounded-xl hover:bg-primary-700 active:bg-primary-800 transition-colors shadow-sm">
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white text-sm font-bold
+                         rounded-xl hover:bg-primary-700 transition-colors shadow-sm">
               <Plus className="h-4 w-4" />Yeni Rol
             </button>
           </div>
 
           {error && (
-            <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-700 dark:text-red-400 text-sm">
+            <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-xl p-4 text-red-700 dark:text-red-400 text-sm">
               {error}
             </div>
           )}
 
-          {/* ── Permissions panel ── */}
-          <div className="army-card p-4 mb-6">
-            <div className="flex items-center justify-between mb-3">
+          {/* ── Permissions Library ── */}
+          <div className="bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-2xl shadow-sm mb-8">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-army-700">
               <div className="flex items-center gap-2">
-                <Key className="h-4 w-4 text-primary-600 dark:text-primary-400" />
-                <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                  İcazələr ({permissions.length})
-                </p>
+                <Key className="h-5 w-5 text-primary-600" />
+                <h2 className="font-bold text-gray-900 dark:text-gray-100">İcazə Kitabxanası</h2>
+                <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-gray-100 dark:bg-army-700 text-gray-600 dark:text-gray-400">
+                  {permissions.length}
+                </span>
               </div>
               <button
                 onClick={() => { setShowPermForm(v => !v); setPermErr(''); }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg
                            bg-primary-600 text-white hover:bg-primary-700 transition-colors">
                 <Plus className="h-3.5 w-3.5" />
                 {showPermForm ? 'Ləğv et' : 'Yeni icazə'}
               </button>
             </div>
 
-            {/* Create permission form */}
+            {/* New permission form */}
             {showPermForm && (
               <form onSubmit={handleCreatePermission}
-                    className="mb-4 p-3 bg-primary-50 dark:bg-primary-900/10 border border-primary-200 dark:border-primary-800 rounded-xl space-y-2">
-                {permErr && (
-                  <p className="text-xs text-red-600 dark:text-red-400 font-medium">{permErr}</p>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    className="mx-5 mt-4 p-4 bg-primary-50 dark:bg-primary-900/10 border border-primary-200 dark:border-primary-800 rounded-xl space-y-3">
+                {permErr && <p className="text-xs text-red-600 font-medium">{permErr}</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <input
                     value={newPerm.name}
                     onChange={e => setNewPerm(p => ({ ...p, name: e.target.value.toLowerCase().replace(/\s+/g, '-') }))}
                     placeholder="icaze-adi (kebab-case)"
-                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm
+                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-xl text-sm
                                bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
                                focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
                     required
@@ -591,14 +589,14 @@ const RoleManagement = () => {
                     value={newPerm.description}
                     onChange={e => setNewPerm(p => ({ ...p, description: e.target.value }))}
                     placeholder="Qısa izah (isteğe bağlı)"
-                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm
+                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-xl text-sm
                                bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
                                focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
                   />
                   <select
                     value={newPerm.type}
                     onChange={e => setNewPerm(p => ({ ...p, type: e.target.value }))}
-                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm
+                    className="px-3 py-2 border border-gray-300 dark:border-army-600 rounded-xl text-sm
                                bg-white dark:bg-army-700 text-gray-900 dark:text-gray-100
                                focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500">
                     <option value="CUSTOM">CUSTOM</option>
@@ -609,92 +607,68 @@ const RoleManagement = () => {
                   </select>
                 </div>
                 <button type="submit" disabled={permSaving}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white text-sm font-semibold
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white text-sm font-bold
                              rounded-lg hover:bg-primary-700 disabled:opacity-60 transition-colors">
-                  {permSaving
-                    ? 'Saxlanır…'
-                    : <><Check className="h-3.5 w-3.5" />İcazəni yarat</>}
+                  {permSaving ? 'Saxlanır…' : <><Check className="h-3.5 w-3.5" />Yarat</>}
                 </button>
               </form>
             )}
 
-            {/* Permissions list */}
-            {permissions.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500">İcazə tapılmadı</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {permissions.map(p => {
-                  const meta = PERMISSION_META[p.name] || DEFAULT_META;
-                  const isSystem = SYSTEM_PERMISSIONS.has(p.name);
-                  return (
-                    <div key={p.id}
-                         className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border
-                                    bg-white dark:bg-army-700 border-gray-200 dark:border-army-600
-                                    hover:border-primary-300 dark:hover:border-primary-700 transition-colors"
-                         title={p.description || meta.desc || ''}>
-                      <span className="text-sm" aria-hidden="true">{meta.icon}</span>
-                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{p.name}</span>
-                      {isSystem && (
-                        <span className="text-[10px] font-bold text-red-500 dark:text-red-400 ml-0.5">SİSTEM</span>
-                      )}
-                      {!isSystem && (
-                        <button
-                          onClick={() => handleDeletePermission(p)}
-                          className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
-                          title={`"${p.name}" icazəsini sil`}>
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {/* Category filter */}
+            <div className="flex gap-1.5 flex-wrap px-5 py-3">
+              {permCats.map(cat => (
+                <button key={cat} onClick={() => setPermTab(cat)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                    permTab === cat
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 dark:bg-army-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-army-600'
+                  }`}>{cat}</button>
+              ))}
+            </div>
+
+            {/* Permission cards grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-5 pb-5">
+              {visiblePerms.map(p => (
+                <PermCard key={p.id} perm={p} selectable={false} onDelete={handleDeletePermission} />
+              ))}
+            </div>
           </div>
 
-          {/* Roles list */}
-          <div className="space-y-3">
+          {/* ── Roles ── */}
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary-600" />
+              Rollar ({roles.length})
+            </h2>
             {roles.length === 0 ? (
-              <div className="text-center py-12">
+              <div className="text-center py-12 bg-white dark:bg-army-800 rounded-2xl border border-dashed border-gray-300 dark:border-army-600">
                 <Shield className="h-12 w-12 text-gray-300 dark:text-army-600 mx-auto mb-3" />
-                <p className="text-gray-500 dark:text-gray-400">Hələ heç bir rol yoxdur</p>
+                <p className="text-gray-500">Hələ heç bir rol yoxdur</p>
               </div>
-            ) : roles.map(role => (
-              <RoleCard
-                key={role.id}
-                role={role}
-                onEdit={(r) => setModal({ type: 'edit', role: r })}
-                onDelete={(r) => setModal({ type: 'delete', role: r })}
-              />
-            ))}
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {roles.map(role => (
+                  <RoleCard
+                    key={role.id}
+                    role={role}
+                    onEdit={(r) => setModal({ type: 'edit', role: r })}
+                    onDelete={(r) => setModal({ type: 'delete', role: r })}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Modals */}
       {modal?.type === 'create' && (
-        <RoleFormModal
-          mode="create"
-          permissions={permissions}
-          onClose={() => setModal(null)}
-          onSaved={handleSaved}
-        />
+        <RoleFormModal mode="create" permissions={permissions} onClose={() => setModal(null)} onSaved={handleSaved} />
       )}
       {modal?.type === 'edit' && (
-        <RoleFormModal
-          mode="edit"
-          role={modal.role}
-          permissions={permissions}
-          onClose={() => setModal(null)}
-          onSaved={handleSaved}
-        />
+        <RoleFormModal mode="edit" role={modal.role} permissions={permissions} onClose={() => setModal(null)} onSaved={handleSaved} />
       )}
       {modal?.type === 'delete' && (
-        <DeleteModal
-          role={modal.role}
-          onClose={() => setModal(null)}
-          onDeleted={handleDeleted}
-        />
+        <DeleteModal role={modal.role} onClose={() => setModal(null)} onDeleted={handleDeleted} />
       )}
 
       <Toast msg={toast.msg} type={toast.type} />

@@ -8,6 +8,7 @@ export function MiniPlayerProvider({ children }) {
         videoId: null,
         title: '',
         hlsUrl: null,
+        thumbnailUrl: null,
         currentTime: 0,
         isPlaying: false,
     });
@@ -20,6 +21,7 @@ export function MiniPlayerProvider({ children }) {
             videoId: videoData.videoId,
             title: videoData.title || '',
             hlsUrl: videoData.hlsUrl,
+            thumbnailUrl: videoData.thumbnailUrl || null,
             currentTime: videoData.currentTime || 0,
             isPlaying: true,
         });
@@ -31,6 +33,7 @@ export function MiniPlayerProvider({ children }) {
             videoId: null,
             title: '',
             hlsUrl: null,
+            thumbnailUrl: null,
             currentTime: 0,
             isPlaying: false,
         });

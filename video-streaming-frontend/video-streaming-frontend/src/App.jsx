@@ -106,11 +106,11 @@ function AppContent() {
                   }
                 />
 
-                {/* admin-modtube OR super-admin */}
+                {/* upload-video OR admin-modtube */}
                 <Route
                   path="/upload"
                   element={
-                    <PrivateRoute requiredPermission="admin-modtube">
+                    <PrivateRoute requiredPermission={['upload-video', 'admin-modtube']}>
                       <UploadPage />
                     </PrivateRoute>
                   }
@@ -118,17 +118,17 @@ function AppContent() {
                 <Route
                   path="/my-videos"
                   element={
-                    <PrivateRoute requiredPermission="admin-modtube">
+                    <PrivateRoute requiredPermission={['upload-video', 'admin-modtube']}>
                       <MyVideos />
                     </PrivateRoute>
                   }
                 />
 
-                {/* Super-admin only */}
+                {/* manage-users OR super-admin */}
                 <Route
                   path="/admin/users"
                   element={
-                    <PrivateRoute requiredPermission="super-admin">
+                    <PrivateRoute requiredPermission={['super-admin', 'manage-users']}>
                       <UserManagement />
                     </PrivateRoute>
                   }
@@ -136,7 +136,7 @@ function AppContent() {
                 <Route
                   path="/admin/users/new"
                   element={
-                    <PrivateRoute requiredPermission="super-admin">
+                    <PrivateRoute requiredPermission={['super-admin', 'manage-users']}>
                       <UserForm />
                     </PrivateRoute>
                   }
@@ -144,15 +144,17 @@ function AppContent() {
                 <Route
                   path="/admin/users/:id/edit"
                   element={
-                    <PrivateRoute requiredPermission="super-admin">
+                    <PrivateRoute requiredPermission={['super-admin', 'manage-users']}>
                       <UserForm />
                     </PrivateRoute>
                   }
                 />
+
+                {/* manage-roles OR super-admin */}
                 <Route
                   path="/admin/roles"
                   element={
-                    <PrivateRoute requiredPermission="super-admin">
+                    <PrivateRoute requiredPermission={['super-admin', 'manage-roles']}>
                       <RoleManagement />
                     </PrivateRoute>
                   }

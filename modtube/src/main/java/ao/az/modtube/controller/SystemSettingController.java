@@ -36,9 +36,7 @@ public class SystemSettingController {
             "idp.claim.username",
             // Upload behaviour
             "upload.max-parallel",
-            "upload.max-concurrent",
-            // Grafana integration
-            "grafana.url"
+            "upload.max-concurrent"
     );
 
     private final SystemSettingService settingService;
