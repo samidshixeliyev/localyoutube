@@ -147,7 +147,6 @@ public class TranscodingService {
 
             // Stage 3: per-quality transcoding (5 → 95%), qualities run in parallel
             List<QualityProfile> profiles = buildQualityProfiles(info);
-            int perQuality = profiles.isEmpty() ? 0 : 90 / profiles.size();
 
             // Shared overall progress + per-quality progress for UI feedback
             AtomicInteger sharedProgress = new AtomicInteger(5);
@@ -164,10 +163,8 @@ public class TranscodingService {
                 final QualityProfile profile = profiles.get(i);
                 final int idx = i;
                 futures.add(CompletableFuture.supplyAsync(() -> {
-                    int rangeStart = 5 + idx * perQuality;
-                    int rangeEnd   = 5 + (idx + 1) * perQuality;
                     boolean ok = transcodeQuality(videoId, inputFile, outputDir, profile,
-                            rangeStart, rangeEnd, sharedProgress, qp);
+                            sharedProgress, qp);
                     return Map.entry(idx, ok);
                 }));
             }
@@ -276,11 +273,11 @@ public class TranscodingService {
 
     /**
      * Transcodes the input to the given quality profile.
-     * sharedProgress tracks progress across parallel quality jobs — each job claims
-     * its range and updates the DB only when progress advances 5+ points globally.
+     * Overall DB progress is the average of all parallel quality percentages mapped to 5-95%.
+     * This avoids the stuck-progress bug that sequential ranges cause when run in parallel.
      */
     private boolean transcodeQuality(String videoId, Path input, Path outputDir,
-                                     QualityProfile profile, int progressStart, int progressEnd,
+                                     QualityProfile profile,
                                      AtomicInteger sharedProgress,
                                      ConcurrentHashMap<String, Integer> qualityProgress) {
         Process process = null;
@@ -295,8 +292,7 @@ public class TranscodingService {
             Path qualityDir = outputDir.resolve(profile.label);
             Files.createDirectories(qualityDir);
 
-            log.info("[Transcoding] ▶ {} video={} threads={} (progress {}→{}%)",
-                    profile.label, videoId, threads, progressStart, progressEnd);
+            log.info("[Transcoding] ▶ {} video={} threads={}", profile.label, videoId, threads);
 
             ProcessBuilder pb = new ProcessBuilder(
                     "ffmpeg", "-y",
@@ -307,10 +303,10 @@ public class TranscodingService {
                            ":force_original_aspect_ratio=decrease,pad=" +
                            profile.width + ":" + profile.height + ":(ow-iw)/2:(oh-ih)/2",
                     "-c:v",      "libx264",
-                    "-preset",   "veryfast",   // veryfast: 2–3× faster than medium, quality ≈ fast
+                    "-preset",   "veryfast",
                     "-crf",      String.valueOf(profile.crf()),
-                    "-profile:v","baseline",
-                    "-level",    "3.0",
+                    "-profile:v", profile.h264Profile(),
+                    "-level",    profile.h264Level(),
                     "-pix_fmt",  "yuv420p",
                     "-c:a",      "aac",
                     "-b:a",      profile.audioBitrate(),
@@ -343,8 +339,10 @@ public class TranscodingService {
                         int qualityPct = (int) (ratio * 100);
                         // Update per-quality progress for UI
                         qualityProgress.put(profile.label, qualityPct);
-                        // Update overall DB progress (shared across parallel qualities)
-                        int overallPct = progressStart + (int) ((progressEnd - progressStart) * ratio);
+                        // Overall progress = average of all quality percentages mapped to 5–95%
+                        int sum = qualityProgress.values().stream().mapToInt(Integer::intValue).sum();
+                        int avgPct = qualityProgress.isEmpty() ? 0 : sum / qualityProgress.size();
+                        int overallPct = 5 + avgPct * 90 / 100;
                         int prev = sharedProgress.get();
                         if (overallPct >= prev + 5 && sharedProgress.compareAndSet(prev, overallPct)) {
                             videoService.updateProcessingProgress(videoId, overallPct);
@@ -550,6 +548,24 @@ public class TranscodingService {
                 case "1440p" -> "192k";
                 case "2160p" -> "256k";
                 default      -> "128k";
+            };
+        }
+        /** H.264 profile: baseline for ≤720p (broad device compat), high for ≥1080p (quality) */
+        String h264Profile() {
+            return switch (label) {
+                case "480p", "720p" -> "baseline";
+                default             -> "high";
+            };
+        }
+        /** H.264 level matching resolution/framerate requirements */
+        String h264Level() {
+            return switch (label) {
+                case "480p"  -> "3.1";
+                case "720p"  -> "3.1";
+                case "1080p" -> "4.0";
+                case "1440p" -> "4.2";
+                case "2160p" -> "5.1";
+                default      -> "4.0";
             };
         }
     }

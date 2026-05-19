@@ -709,4 +709,38 @@ Additionally, two metric names in Metrics.jsx were wrong:
 
 ---
 
+### 2026-05-19 — Transcoding Failure Fix + Progress Stuck at 65% Fix
+
+#### Root causes found and fixed
+
+1. **"Transkodlama uğursuz oldu" (Transcoding failed) for ≥1080p videos**
+   - Root cause: `-profile:v baseline -level 3.0` applied globally to all qualities. H.264 Baseline Level 3.0 only supports up to ~720×576@30fps. 1080p requires Level 4.0, 1440p requires Level 4.2, 2160p requires Level 5.1. FFmpeg exits non-zero for these.
+   - Fix: Added `h264Profile()` and `h264Level()` methods to `QualityProfile` record. 480p/720p use `baseline` L3.1 (broad device compat). 1080p uses `high` L4.0, 1440p uses `high` L4.2, 2160p uses `high` L5.1.
+
+2. **Progress stuck at 65%** (parallel quality encoding)
+   - Root cause: Sequential range assignment (480p=5→35%, 720p=35→65%, 1080p=65→95%) with parallel execution. When 720p finishes first, sharedProgress reaches 65. 1080p starts at rangeStart=65, so `overallPct >= prev + 5` requires 1080p to be ~8% encoded before any update. UI shows stuck.
+   - Fix: Replaced range-based progress with average-based. Overall progress = `5 + (avg of all quality percentages) * 90 / 100`. As each quality advances, the average rises smoothly. Removed `progressStart` and `progressEnd` params from `transcodeQuality()`.
+
+#### What was changed (`TranscodingService.java`)
+
+- `transcodeQuality()`: removed `progressStart`/`progressEnd` params
+- Progress calc: `int overallPct = 5 + (sum(qualityPcts) / count) * 90 / 100`
+- `QualityProfile` record: added `h264Profile()` (baseline/high) and `h264Level()` (3.1/4.0/4.2/5.1)
+- FFmpeg command: `-profile:v profile.h264Profile()` and `-level profile.h264Level()` instead of hardcoded baseline+3.0
+
+#### Key gotchas
+
+- **Baseline vs High profile**: `baseline` has no B-frames (lower latency, compatible with more old devices). `high` allows B-frames (better compression). For local LAN streaming, `high` is fine for HD+.
+- **Level determines max resolution × framerate**: Level 3.0 max is 720×576@25 or 352×288@30. Always check per-resolution when adding new quality tiers.
+- **Average-based progress is monotonically increasing**: Faster qualities (480p) reaching 100% while slower ones (1080p) are at 30% → average ~65% → overall 63.5%. When 1080p reaches 60%, average = 80% → overall 77%. Progress always advances.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens.
+- **Backend `upload.max-concurrent` setting**: not persisted in DB yet.
+- **UploadController.listVideos**: returns all videos, not filtered by current user.
+- **Backend rebuild needed**: `docker compose build && docker compose up -d --force-recreate` on VPS.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*
