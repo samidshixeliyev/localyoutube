@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,16 +144,13 @@ public class UploadController {
             Path videoDir = uploadDir.resolve(videoId);
             Files.createDirectories(videoDir);
 
-            String extension = getFileExtension(video.getFilename());
-            Path targetFile = videoDir.resolve("original." + extension);
-
-            StandardOpenOption[] options = (chunkIndex == 0)
-                    ? new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING}
-                    : new StandardOpenOption[]{StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND};
-
+            // Write each chunk to its own file — parallel workers can arrive out of order
+            // and simple APPEND would corrupt the file. Chunks are merged in order at complete().
+            Path chunkFile = videoDir.resolve("chunk_" + chunkIndex + ".bin");
             try (InputStream inputStream = chunk.getInputStream();
-                 OutputStream outputStream = Files.newOutputStream(targetFile, options)) {
-                byte[] buffer = new byte[8192];
+                 OutputStream outputStream = Files.newOutputStream(chunkFile,
+                         StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                byte[] buffer = new byte[65536];
                 int bytesRead;
                 while ((bytesRead = inputStream.read(buffer)) != -1) {
                     outputStream.write(buffer, 0, bytesRead);
@@ -197,13 +195,36 @@ public class UploadController {
             }
 
             String extension = getFileExtension(video.getFilename());
-            Path targetFile = uploadDir.resolve(videoId).resolve("original." + extension);
+            Path videoDir    = uploadDir.resolve(videoId);
+            Path targetFile  = videoDir.resolve("original." + extension);
 
-            if (!Files.exists(targetFile)) {
+            // Merge chunk files in strict index order — avoids corruption from parallel uploads
+            List<Path> chunkFiles;
+            try (var stream = Files.list(videoDir)) {
+                chunkFiles = stream
+                    .filter(p -> p.getFileName().toString().matches("chunk_\\d+\\.bin"))
+                    .sorted(Comparator.comparingInt(p ->
+                        Integer.parseInt(p.getFileName().toString()
+                            .replace("chunk_", "").replace(".bin", ""))))
+                    .collect(Collectors.toList());
+            }
+
+            if (chunkFiles.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
                         "status", "error",
-                        "message", "Upload file not found"));
+                        "message", "No upload chunks found — upload may have failed"));
             }
+
+            try (OutputStream out = Files.newOutputStream(targetFile,
+                    StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING)) {
+                for (Path cf : chunkFiles) {
+                    Files.copy(cf, out);
+                    Files.delete(cf);
+                }
+                out.flush();
+            }
+            log.info("[Upload] Merged {} chunks into {} for video={}", chunkFiles.size(), targetFile.getFileName(), videoId);
 
             long fileSize = Files.size(targetFile);
             video.setFileSize(fileSize);

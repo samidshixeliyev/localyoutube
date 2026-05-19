@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 @Service
 public class TranscodingService {
 
-    private static final long PROCESS_TIMEOUT_MINUTES = 60;
+    private static final long PROCESS_TIMEOUT_MINUTES = 180;
 
     // FFmpeg progress parsing patterns
     private static final Pattern DURATION_PATTERN =
@@ -272,7 +272,7 @@ public class TranscodingService {
                     "-hls_time", String.valueOf(segmentDuration),
                     "-hls_playlist_type", "vod",
                     "-hls_flags", "independent_segments",
-                    "-hls_segment_filename", qualityDir.resolve("seg_%03d.ts").toString(),
+                    "-hls_segment_filename", qualityDir.resolve("seg_%05d.ts").toString(),
                     qualityDir.resolve("playlist.m3u8").toString()
             );
             pb.environment().put("MALLOC_ARENA_MAX", "2");
