@@ -72,19 +72,32 @@ const videoService = {
     }
   },
 
-  uploadChunk: async (chunk, chunkIndex, totalChunks, videoId) => {
+  uploadChunk: async (chunk, chunkIndex, totalChunks, videoId, signal = null) => {
     try {
       const formData = new FormData();
       formData.append('file', chunk);
-      
-      const response = await api.post('/upload/chunk', formData, {
+
+      const config = {
         params: { chunkIndex, totalChunks, videoId },
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 300000, // 5 min — large 20 MB chunks on slow connections
-      });
+      };
+      if (signal) config.signal = signal;
+
+      const response = await api.post('/upload/chunk', formData, config);
       return response.data;
     } catch (error) {
       console.error(`[VideoService] Error uploading chunk ${chunkIndex}:`, error);
+      throw error;
+    }
+  },
+
+  cancelUpload: async (videoId) => {
+    try {
+      const response = await api.delete(`/upload/cancel/${videoId}`);
+      return response.data;
+    } catch (error) {
+      console.error('[VideoService] Error cancelling upload:', error);
       throw error;
     }
   },

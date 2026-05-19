@@ -3,14 +3,15 @@ import { Link } from 'react-router-dom';
 import videoService from '../services/videoService';
 import VideoCard from '../components/VideoCard';
 import Navbar from '../components/Navbar';
-import { Loader2, Upload as UploadIcon, Cpu, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Loader2, Upload as UploadIcon, Cpu, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
 
 const POLL_INTERVAL = 3000;
 
-function ProcessingCard({ video, onReady }) {
+function ProcessingCard({ video, onReady, onCancel }) {
   const [progress, setProgress]   = useState(video.processingProgress || 0);
   const [stage, setStage]         = useState('');
   const [phase, setPhase]         = useState('processing');
+  const [cancelling, setCancelling] = useState(false);
   const timerRef = useRef(null);
 
   const poll = useCallback(async () => {
@@ -35,29 +36,59 @@ function ProcessingCard({ video, onReady }) {
     return () => clearInterval(timerRef.current);
   }, [poll]);
 
+  const handleCancel = async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    clearInterval(timerRef.current);
+    try {
+      await videoService.cancelUpload(video.id);
+      onCancel(video.id);
+    } catch {
+      setCancelling(false);
+      timerRef.current = setInterval(poll, POLL_INTERVAL);
+    }
+  };
+
   const isDone  = phase === 'done';
   const isError = phase === 'error';
+  const isActive = !isDone && !isError;
 
   return (
     <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-army-700 bg-white dark:bg-army-800">
       <div className={`px-3 py-2 flex items-center gap-2 ${
-        isDone  ? 'bg-green-600'
+        isDone    ? 'bg-green-600'
         : isError ? 'bg-red-600'
         : 'bg-gradient-to-r from-primary-600 to-orange-500'
       }`}>
-        {isDone  ? <CheckCircle  className="w-4 h-4 text-white flex-shrink-0" />
-        : isError ? <AlertCircle  className="w-4 h-4 text-white flex-shrink-0" />
+        {isDone   ? <CheckCircle className="w-4 h-4 text-white flex-shrink-0" />
+        : isError ? <AlertCircle className="w-4 h-4 text-white flex-shrink-0" />
         : <Cpu className="w-4 h-4 text-white flex-shrink-0 animate-pulse" />}
+
         <div className="flex-1 min-w-0">
           <p className="text-white text-xs font-semibold leading-tight truncate">
             {isDone ? 'Tamamlandı' : isError ? 'Xəta' : `Emal edilir… ${progress}%`}
           </p>
           <p className="text-white/75 text-xs truncate">{video.title}</p>
         </div>
+
+        {/* Cancel button for active state */}
+        {isActive && (
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            className="p-1 rounded hover:bg-white/20 transition-colors text-white/80 hover:text-white disabled:opacity-50 flex-shrink-0"
+            title="Ləğv et və sil"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
+
       <div className="p-3">
         {isError ? (
           <p className="text-sm text-red-600 dark:text-red-400">Emal zamanı xəta baş verdi.</p>
+        ) : cancelling ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">Ləğv edilir…</p>
         ) : (
           <>
             <div className="h-2 bg-gray-100 dark:bg-army-700 rounded-full overflow-hidden mb-2">
@@ -102,7 +133,7 @@ const MyVideos = () => {
       const all = Array.isArray(data) ? data : (data.videos || []);
       const st  = (v) => (v.status || '').toLowerCase();
       setReadyVideos(all.filter(v => st(v) === 'ready'));
-      setProcessingVideos(all.filter(v => ['processing', 'uploaded', 'pending'].includes(st(v))));
+      setProcessingVideos(all.filter(v => ['processing', 'uploaded', 'uploading', 'pending'].includes(st(v))));
     } catch (err) {
       console.error('Error loading my videos:', err);
       setError('Videolar yüklənərkən xəta baş verdi.');
@@ -114,6 +145,10 @@ const MyVideos = () => {
   const handleReady = useCallback((videoId) => {
     setProcessingVideos(prev => prev.filter(v => v.id !== videoId));
     loadMyVideos();
+  }, []);
+
+  const handleCancel = useCallback((videoId) => {
+    setProcessingVideos(prev => prev.filter(v => v.id !== videoId));
   }, []);
 
   return (
@@ -150,7 +185,7 @@ const MyVideos = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {processingVideos.map(v => (
-                    <ProcessingCard key={v.id} video={v} onReady={handleReady} />
+                    <ProcessingCard key={v.id} video={v} onReady={handleReady} onCancel={handleCancel} />
                   ))}
                 </div>
               </div>

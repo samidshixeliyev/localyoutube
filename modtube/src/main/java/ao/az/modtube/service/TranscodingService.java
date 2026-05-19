@@ -1,7 +1,9 @@
 package ao.az.modtube.service;
 
+import ao.az.modtube.domain.Video;
 import ao.az.modtube.domain.VideoStatus;
 import ao.az.modtube.metrics.ModTubeMetrics;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
@@ -45,6 +47,49 @@ public class TranscodingService {
 
     public String getProcessingStage(String videoId) {
         return processingStages.getOrDefault(videoId, "");
+    }
+
+    /**
+     * Kills all active FFmpeg processes for the given video.
+     * Call before deleting a video to prevent FFmpeg from continuing to write to disk.
+     */
+    public void cancelTranscoding(String videoId) {
+        String prefix = videoId + "_";
+        activeProcesses.entrySet().removeIf(e -> {
+            if (e.getKey().startsWith(prefix)) {
+                Process p = e.getValue();
+                if (p != null && p.isAlive()) {
+                    p.destroyForcibly();
+                    log.info("[Transcoding] Killed process {} for video={}", e.getKey(), videoId);
+                }
+                return true;
+            }
+            return false;
+        });
+        processingStages.put(videoId, "Cancelled");
+        log.info("[Transcoding] Cancelled all processes for video={}", videoId);
+    }
+
+    /**
+     * On startup, marks any video stuck in UPLOADING / UPLOADED / PROCESSING as FAILED.
+     * These states indicate the server restarted before the operation could complete.
+     */
+    @PostConstruct
+    public void recoverStuckTranscodings() {
+        List<VideoStatus> stuck = List.of(VideoStatus.UPLOADING, VideoStatus.UPLOADED, VideoStatus.PROCESSING);
+        List<Video> stuckVideos = videoService.getVideosByStatusIn(stuck);
+        if (stuckVideos.isEmpty()) return;
+        log.warn("[Startup] Found {} stuck videos — marking FAILED", stuckVideos.size());
+        for (Video video : stuckVideos) {
+            log.warn("[Startup] Recovering video={} status={}", video.getId(), video.getStatus());
+            try {
+                videoService.updateVideoStatus(video.getId(), VideoStatus.FAILED);
+                processingStages.put(video.getId(), "Failed: Server restarted");
+            } catch (Exception e) {
+                log.error("[Startup] Failed to recover video={}: {}", video.getId(), e.getMessage());
+            }
+        }
+        log.info("[Startup] Recovery complete for {} videos", stuckVideos.size());
     }
 
     public TranscodingService(VideoService videoService,

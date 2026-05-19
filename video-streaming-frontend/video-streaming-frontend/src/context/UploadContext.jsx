@@ -7,7 +7,6 @@ export const useUpload = () => useContext(UploadContext);
 const CHUNK_SIZE  = 20 * 1024 * 1024; // 20 MB
 const MAX_RETRIES = 3;
 
-/** Fetches admin-configured upload knobs. */
 async function fetchUploadConfig() {
   try {
     const res = await fetch('/api/config/upload');
@@ -26,7 +25,7 @@ async function fetchUploadConfig() {
 
 const IDLE = {
   active: false, minimized: false,
-  title: '', phase: 'idle',         // idle | uploading | processing | done | error
+  title: '', phase: 'idle',
   uploadProgress: 0, processingProgress: 0,
   processingStage: '', speed: 0, eta: null,
   videoId: null, error: null,
@@ -37,27 +36,28 @@ const makeId = () => `up-${Date.now()}-${_nextId++}`;
 
 const isFinished = (u) => u.phase === 'done' || u.phase === 'error';
 
+const isAbortError = (err) =>
+  err?.name === 'AbortError' ||
+  err?.name === 'CanceledError' ||
+  err?.code === 'ERR_CANCELED';
+
 export const UploadProvider = ({ children }) => {
-  const [uploads, setUploads] = useState([]);     // active + finished entries
-  const [queue,   setQueue]   = useState([]);     // pending {id, file, meta} entries
+  const [uploads, setUploads] = useState([]);
+  const [queue,   setQueue]   = useState([]);
 
   const uploadConfigRef = useRef({ chunks: 2, concurrent: 2 });
-  const pollsRef        = useRef(new Map());      // id -> intervalHandle
-  const startTimeRef    = useRef(new Map());      // id -> Date.now()
-  const bytesRef        = useRef(new Map());      // id -> bytes uploaded
+  const pollsRef        = useRef(new Map());   // id -> intervalHandle
+  const startTimeRef    = useRef(new Map());   // id -> Date.now()
+  const bytesRef        = useRef(new Map());   // id -> bytes uploaded
+  const cancelRef       = useRef(new Map());   // id -> { ctrl: AbortController, videoId: string|null }
 
-  // Fetch upload config once at startup
   useEffect(() => {
     fetchUploadConfig().then(cfg => { uploadConfigRef.current = cfg; });
   }, []);
 
-  // ── State helpers ───────────────────────────────────────────────────────────
-
   const patchUpload = useCallback((id, updates) => {
     setUploads(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
   }, []);
-
-  // ── Poll helpers ────────────────────────────────────────────────────────────
 
   const stopPoll = (id) => {
     const handle = pollsRef.current.get(id);
@@ -69,33 +69,29 @@ export const UploadProvider = ({ children }) => {
     pollsRef.current.clear();
   };
 
-  // ── Chunk upload retry ──────────────────────────────────────────────────────
-
-  const uploadChunkWithRetry = async (chunk, idx, total, videoId) => {
+  const uploadChunkWithRetry = async (chunk, idx, total, videoId, signal) => {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       try {
-        await videoService.uploadChunk(chunk, idx, total, videoId);
+        await videoService.uploadChunk(chunk, idx, total, videoId, signal);
         return;
       } catch (err) {
+        if (isAbortError(err)) throw err;
         if (attempt === MAX_RETRIES - 1) throw err;
         await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
       }
     }
   };
 
-  // ── Queue scheduler ─────────────────────────────────────────────────────────
-
   const runningCountRef = useRef(0);
 
   const onJobFinished = useCallback((id) => {
     runningCountRef.current = Math.max(0, runningCountRef.current - 1);
-    // Pick next pending job from the queue if there is one
     setQueue(prevQueue => {
       if (prevQueue.length === 0) return prevQueue;
       const max = uploadConfigRef.current.concurrent || 2;
       if (runningCountRef.current >= max) return prevQueue;
       const [next, ...rest] = prevQueue;
-      // Defer to avoid setState-during-render
       setTimeout(() => beginJob(next.file, next.meta, next.id), 0);
       return rest;
     });
@@ -107,8 +103,6 @@ export const UploadProvider = ({ children }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onJobFinished]);
 
-  // ── Single upload job ───────────────────────────────────────────────────────
-
   const startPoll = (id, videoId) => {
     stopPoll(id);
     const handle = setInterval(async () => {
@@ -117,10 +111,12 @@ export const UploadProvider = ({ children }) => {
         patchUpload(id, { processingProgress: progress || 0, processingStage: stage || '' });
         if (status === 'READY') {
           stopPoll(id);
+          cancelRef.current.delete(id);
           patchUpload(id, { phase: 'done', processingProgress: 100, processingStage: 'Ready' });
         } else if (status === 'FAILED') {
           stopPoll(id);
-          patchUpload(id, { phase: 'error', error: 'Transcoding failed. Open upload page to retry.' });
+          cancelRef.current.delete(id);
+          patchUpload(id, { phase: 'error', error: 'Transkodlama uğursuz oldu. Yenidən yükləyin.' });
         }
       } catch { /* network blip — keep polling */ }
     }, 2000);
@@ -131,6 +127,10 @@ export const UploadProvider = ({ children }) => {
     const { title, description, tags, visibility, allowedEmails, isShorts } = meta;
 
     patchUpload(id, { phase: 'uploading', title: title || file.name });
+
+    const ctrl = new AbortController();
+    cancelRef.current.set(id, { ctrl, videoId: null });
+    const signal = ctrl.signal;
 
     const cfg = uploadConfigRef.current;
     const chunks = Math.ceil(file.size / CHUNK_SIZE);
@@ -143,16 +143,24 @@ export const UploadProvider = ({ children }) => {
       );
       patchUpload(id, { videoId });
 
+      // Store videoId so cancelUpload can delete it from server
+      const entry = cancelRef.current.get(id);
+      if (entry) entry.videoId = videoId;
+
+      if (signal.aborted) return;
+
       let next = 0, done = 0;
 
       const worker = async () => {
         while (next < chunks) {
+          if (signal.aborted) return;
           const idx   = next++;
           const start = idx * CHUNK_SIZE;
           const end   = Math.min(start + CHUNK_SIZE, file.size);
 
-          await uploadChunkWithRetry(file.slice(start, end), idx, chunks, videoId);
+          await uploadChunkWithRetry(file.slice(start, end), idx, chunks, videoId, signal);
 
+          if (signal.aborted) return;
           done++;
           const prevBytes = bytesRef.current.get(id) || 0;
           const newBytes  = prevBytes + (end - start);
@@ -170,7 +178,12 @@ export const UploadProvider = ({ children }) => {
       };
 
       await Promise.all(Array.from({ length: Math.min(cfg.chunks, chunks) }, worker));
+
+      if (signal.aborted) return;
+
       await videoService.completeUpload(videoId);
+
+      if (signal.aborted) return;
 
       if (visibility !== 'public' || (allowedEmails && allowedEmails.length > 0))
         await videoService.setPrivacy(videoId, { visibility, allowedUserEmails: allowedEmails });
@@ -182,15 +195,18 @@ export const UploadProvider = ({ children }) => {
         phase: 'processing',
         uploadProgress: 100,
         processingProgress: 0,
-        processingStage: 'Starting…',
+        processingStage: 'Başlayır…',
       });
       startPoll(id, videoId);
 
     } catch (err) {
+      if (isAbortError(err)) return; // cancelled — dismissUpload already called
+
       stopPoll(id);
+      cancelRef.current.delete(id);
       patchUpload(id, {
         phase: 'error',
-        error: err.response?.data?.message || err.message || 'Upload failed',
+        error: err.response?.data?.message || err.message || 'Yükləmə uğursuz oldu',
       });
     }
   };
@@ -213,8 +229,7 @@ export const UploadProvider = ({ children }) => {
     if (runningCountRef.current < max) {
       beginJob(file, meta, id);
     } else {
-      // Mark as queued visually
-      patchUpload(id, { phase: 'idle', processingStage: 'Queued' });
+      patchUpload(id, { phase: 'idle', processingStage: 'Növbədə' });
       setQueue(prev => [...prev, { id, file, meta }]);
     }
     return id;
@@ -222,6 +237,31 @@ export const UploadProvider = ({ children }) => {
 
   const dismissUpload = useCallback((id) => {
     stopPoll(id);
+    cancelRef.current.delete(id);
+    bytesRef.current.delete(id);
+    startTimeRef.current.delete(id);
+    setUploads(prev => prev.filter(u => u.id !== id));
+    setQueue(prev => prev.filter(q => q.id !== id));
+  }, []);
+
+  const cancelUpload = useCallback(async (id) => {
+    const entry = cancelRef.current.get(id);
+
+    // Abort in-flight chunk requests
+    entry?.ctrl?.abort();
+
+    // Stop transcoding poll
+    stopPoll(id);
+
+    // Delete video data from server
+    const videoId = entry?.videoId;
+    if (videoId) {
+      try {
+        await videoService.cancelUpload(videoId);
+      } catch { /* best-effort — server recovery on restart handles it */ }
+    }
+
+    cancelRef.current.delete(id);
     bytesRef.current.delete(id);
     startTimeRef.current.delete(id);
     setUploads(prev => prev.filter(u => u.id !== id));
@@ -233,6 +273,8 @@ export const UploadProvider = ({ children }) => {
 
   const clearAllUploads = useCallback(() => {
     stopAllPolls();
+    cancelRef.current.forEach(entry => entry?.ctrl?.abort());
+    cancelRef.current.clear();
     runningCountRef.current = 0;
     bytesRef.current.clear();
     startTimeRef.current.clear();
@@ -240,14 +282,10 @@ export const UploadProvider = ({ children }) => {
     setQueue([]);
   }, []);
 
-  // ── Backward compat (first upload acts like the old single state) ──────────
-
   const firstUpload = uploads[0];
-  const state = firstUpload
-    ? { ...firstUpload }
-    : { ...IDLE };
+  const state = firstUpload ? { ...firstUpload } : { ...IDLE };
 
-  const dismiss  = useCallback((id) => {
+  const dismiss = useCallback((id) => {
     if (id) return dismissUpload(id);
     if (firstUpload) dismissUpload(firstUpload.id);
     else {
@@ -278,6 +316,7 @@ export const UploadProvider = ({ children }) => {
       dismissUpload,
       minimizeUpload,
       expandUpload,
+      cancelUpload,
       clearAllUploads,
       queueLength: queue.length,
     }}>

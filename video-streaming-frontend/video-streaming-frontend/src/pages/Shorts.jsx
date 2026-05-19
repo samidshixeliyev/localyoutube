@@ -178,20 +178,41 @@ function ShortItem({ video, muted, onToggleMute, onVisible, isLast, onLastVisibl
   const handleShare = async (e) => {
     e.stopPropagation();
     const url = `${window.location.origin}/video/${video.id}`;
+
+    const copyViaTextarea = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch { /* no fallback possible */ }
+    };
+
     try {
       if (navigator.share) {
         await navigator.share({ title: video.title, url });
-      } else {
+      } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+      } else {
+        copyViaTextarea();
       }
     } catch {
+      // share was dismissed or clipboard blocked — try textarea fallback
       try {
         await navigator.clipboard.writeText(url);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-      } catch { /* ignore */ }
+      } catch {
+        copyViaTextarea();
+      }
     }
   };
 
@@ -529,21 +550,20 @@ const Shorts = () => {
   return (
     <>
       <Navbar />
-      {/* Dark background for the video feed — intentional for immersive video experience */}
-      <div className="bg-black min-h-screen">
+      <div className="bg-white dark:bg-black min-h-screen">
         {/* Header strip */}
-        <div className="sticky top-14 z-40 bg-black/90 backdrop-blur-md border-b border-white/10 px-4 py-2 flex items-center gap-3">
+        <div className="sticky top-14 z-40 bg-white/95 dark:bg-black/90 backdrop-blur-md border-b border-gray-200 dark:border-white/10 px-4 py-2 flex items-center gap-3">
           <button onClick={() => navigate('/')}
-            className="text-white/70 hover:text-white transition-colors">
+            className="text-gray-600 dark:text-white/70 hover:text-gray-900 dark:hover:text-white transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-primary-500" />
-            <span className="text-white font-bold">Shorts</span>
+            <span className="text-gray-900 dark:text-white font-bold">Shorts</span>
           </div>
           <button
             onClick={() => setMuted(m => !m)}
-            className="ml-auto text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+            className="ml-auto text-gray-600 dark:text-white/70 hover:text-gray-900 dark:hover:text-white p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
             title={muted ? 'Səsi aç' : 'Səsi kapat'}
           >
             {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
@@ -554,14 +574,14 @@ const Shorts = () => {
         <div className="fixed right-4 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-2 pointer-events-none">
           <button
             onClick={() => scrollToItem(-1)}
-            className="pointer-events-auto w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white transition-colors shadow-lg"
+            className="pointer-events-auto w-10 h-10 rounded-full bg-gray-900/15 dark:bg-white/10 hover:bg-gray-900/30 dark:hover:bg-white/25 backdrop-blur-sm border border-gray-900/20 dark:border-white/20 flex items-center justify-center text-gray-800 dark:text-white transition-colors shadow-lg"
             title="Əvvəlki"
           >
             <ChevronUp className="h-5 w-5" />
           </button>
           <button
             onClick={() => scrollToItem(1)}
-            className="pointer-events-auto w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white transition-colors shadow-lg"
+            className="pointer-events-auto w-10 h-10 rounded-full bg-gray-900/15 dark:bg-white/10 hover:bg-gray-900/30 dark:hover:bg-white/25 backdrop-blur-sm border border-gray-900/20 dark:border-white/20 flex items-center justify-center text-gray-800 dark:text-white transition-colors shadow-lg"
             title="Növbəti"
           >
             <ChevronDown className="h-5 w-5" />
@@ -605,7 +625,7 @@ const Shorts = () => {
         </div>
 
         {error && (
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-900/80 text-red-200 text-sm px-4 py-2 rounded-lg backdrop-blur-sm">
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-red-600 dark:bg-red-900/80 text-white dark:text-red-200 text-sm px-4 py-2 rounded-lg shadow-lg">
             {error}
           </div>
         )}

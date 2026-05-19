@@ -63,6 +63,17 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getAllUsers());
     }
 
+    @GetMapping("/users/search")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'manage-users')")
+    public ResponseEntity<Map<String, Object>> searchUsers(
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(required = false) Long roleId,
+            @RequestParam(defaultValue = "") String permission,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(adminService.searchUsers(search, roleId, permission, page, size));
+    }
+
     @GetMapping("/users/{id}")
     @PreAuthorize("hasAnyAuthority('super-admin', 'manage-users')")
     public ResponseEntity<UserResponse> getUser(@PathVariable Long id) {

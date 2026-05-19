@@ -586,4 +586,64 @@ Additionally, two metric names in Metrics.jsx were wrong:
 
 ---
 
+### 2026-05-19 — Stuck Transcoding Recovery + Cancel Button
+
+#### What was done
+
+1. **Startup recovery for stuck videos** (`TranscodingService.java`)
+   - `@PostConstruct recoverStuckTranscodings()`: on server start, queries for all videos in `UPLOADING`, `UPLOADED`, or `PROCESSING` status and marks them `FAILED`.
+   - These states mean the server restarted mid-operation; FFmpeg processes are gone, files may be incomplete.
+   - Logs warning per video. Inserts `"Failed: Server restarted"` into `processingStages` map so `/api/upload/status/{id}` reflects the reason.
+   - `VideoRepository.findByStatusIn(List<VideoStatus>)` added (Spring Data JPA derived query).
+   - `VideoService.getVideosByStatusIn(List<VideoStatus>)` added.
+
+2. **Cancel transcoding** (`TranscodingService.java`)
+   - `cancelTranscoding(String videoId)`: iterates `activeProcesses` and `destroyForcibly()` all entries prefixed with `videoId + "_"`, removes them from the map. Sets stage to `"Cancelled"`.
+   - Called by the cancel endpoint before `videoService.deleteVideo()` to ensure FFmpeg stops writing before files are deleted.
+
+3. **Cancel endpoint** (`UploadController.java`)
+   - `DELETE /api/upload/cancel/{videoId}`: requires authentication.
+   - Checks ownership (uploader_id matches user) or admin role.
+   - Calls `transcodingService.cancelTranscoding(videoId)` then `videoService.deleteVideo(videoId)` — full cleanup: upload dir, HLS dir, thumbnail dir, comments, likes, DB record.
+   - Returns `{status: "cancelled", videoId}`.
+
+4. **Frontend: AbortController-based chunk abort** (`UploadContext.jsx`)
+   - Each upload job creates an `AbortController`; signal stored in `cancelRef: Map<id, {ctrl, videoId}>`.
+   - `videoId` stored in `cancelRef` as soon as `initUpload` returns so cancel can hit the server.
+   - `signal` passed through `uploadChunkWithRetry` → `videoService.uploadChunk` (new optional param).
+   - Workers check `signal.aborted` before each chunk and between chunks.
+   - Abort errors (`AbortError` / `CanceledError` / `ERR_CANCELED`) caught in `runJob` and silently swallowed — UI already dismissed.
+   - `cancelUpload(id)`: aborts in-flight requests, stops poll, calls `videoService.cancelUpload(videoId)`, removes from uploads/queue.
+
+5. **`videoService.js`** — two changes:
+   - `uploadChunk`: added optional `signal` parameter passed to axios config.
+   - Added `cancelUpload(videoId)`: calls `DELETE /api/upload/cancel/{videoId}`.
+
+6. **`UploadManager.jsx`** — cancel button on in-progress rows
+   - `UploadRow` accepts `onCancel` prop.
+   - X button shown for `uploading`, `processing`, `idle` phases.
+   - Dismiss X only shown for `done`/`error` phases.
+
+7. **`MyVideos.jsx`** — cancel button on `ProcessingCard`
+   - X button in header strip for non-done, non-error cards.
+   - `handleCancel`: calls `videoService.cancelUpload(videoId)`, removes card from `processingVideos` state.
+   - `cancelling` state shows "Ləğv edilir…" body while request in-flight, prevents double-click.
+   - Also added `uploading` to the status filter so UPLOADING videos show in the processing section.
+
+#### Key gotchas
+
+- **`@PostConstruct` ordering**: `TranscodingService` gets `VideoService` via constructor injection — `VideoService` is initialized first, so `@PostConstruct` on `TranscodingService` can safely call `videoService.getVideosByStatusIn()`.
+- **`destroyForcibly()` vs `destroy()`**: use `destroyForcibly()` for FFmpeg — it sends SIGKILL. `destroy()` sends SIGTERM which FFmpeg may ignore and continue writing segments.
+- **Race condition on cancel + delete**: If FFmpeg finishes writing a segment between the `cancelTranscoding()` call and the filesystem delete, that's fine — `deleteVideo()` recursively deletes the entire HLS directory.
+- **Abort vs cancel**: The `AbortController` aborts the current HTTP chunk upload (browser/axios level). The server `DELETE /api/upload/cancel/{videoId}` deletes video data. Both are needed — abort to stop wasting bandwidth, delete to clean up server storage.
+- **axios CanceledError**: When axios receives an AbortSignal abort, it throws `{name: "CanceledError", code: "ERR_CANCELED"}`. Check both `err.name` and `err.code`.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens.
+- **Backend `upload.max-concurrent` setting**: not persisted in DB yet.
+- **UploadController.listVideos**: returns all videos, not filtered by current user.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*

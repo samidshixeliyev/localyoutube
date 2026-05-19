@@ -191,6 +191,10 @@ public interface VideoRepository extends JpaRepository<Video, String> {
     @Query(nativeQuery = true, value = "SELECT COALESCE(SUM(v.file_size), 0) FROM videos v WHERE v.file_size IS NOT NULL")
     long sumFileSizeBytes();
 
+    // ─── Status in-list query ─────────────────────────────────────────────────
+
+    List<Video> findByStatusIn(List<VideoStatus> statuses);
+
     // ─── Status update ───────────────────────────────────────────────────────
 
     @Modifying

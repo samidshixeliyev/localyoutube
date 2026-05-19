@@ -6,7 +6,7 @@ import { X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Upload, Cpu, Clock
 
 const fmt = {
   speed: (b) => b > 1e6 ? `${(b/1e6).toFixed(1)} MB/s` : b > 1024 ? `${(b/1024).toFixed(0)} KB/s` : `${b|0} B/s`,
-  eta:   (s) => !s || s <= 0 ? '' : s < 60 ? `~${Math.ceil(s)}s` : `~${Math.ceil(s/60)}m`,
+  eta:   (s) => !s || s <= 0 ? '' : s < 60 ? `~${Math.ceil(s)}s` : `~${Math.ceil(s/60)}d`,
 };
 
 const phaseLabel = (u) => {
@@ -31,10 +31,11 @@ const PhaseIcon = ({ u }) => {
   return <Clock className="w-4 h-4 text-white flex-shrink-0" />;
 };
 
-function UploadRow({ u, onDismiss, navigate }) {
-  const isDone  = u.phase === 'done';
-  const isError = u.phase === 'error';
-  const pct     = u.phase === 'uploading' ? u.uploadProgress : u.processingProgress;
+function UploadRow({ u, onDismiss, onCancel, navigate }) {
+  const isDone    = u.phase === 'done';
+  const isError   = u.phase === 'error';
+  const isActive  = u.phase === 'uploading' || u.phase === 'processing' || u.phase === 'idle';
+  const pct       = u.phase === 'uploading' ? u.uploadProgress : u.processingProgress;
 
   return (
     <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-army-700 bg-white dark:bg-army-800">
@@ -45,11 +46,24 @@ function UploadRow({ u, onDismiss, navigate }) {
           <p className="text-white text-xs font-semibold leading-tight truncate">{phaseLabel(u)}</p>
           <p className="text-white/75 text-xs truncate">{u.title}</p>
         </div>
+
+        {/* Dismiss button for finished states */}
         {(isDone || isError) && (
           <button
             onClick={() => onDismiss(u.id)}
             className="p-1 rounded hover:bg-white/15 transition-colors text-white flex-shrink-0"
             title="Bağla"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Cancel button for active states */}
+        {isActive && (
+          <button
+            onClick={() => onCancel(u.id)}
+            className="p-1 rounded hover:bg-white/20 transition-colors text-white/80 hover:text-white flex-shrink-0"
+            title="Ləğv et"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -119,12 +133,11 @@ function UploadRow({ u, onDismiss, navigate }) {
 }
 
 export default function UploadManager() {
-  const { uploads, dismissUpload, queueLength, clearAllUploads } = useUpload();
+  const { uploads, dismissUpload, cancelUpload, queueLength, clearAllUploads } = useUpload();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [allMinimized, setAllMinimized] = useState(false);
 
-  // Clear ALL uploads when the user logs out
   useEffect(() => {
     if (!isAuthenticated) clearAllUploads();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,7 +166,13 @@ export default function UploadManager() {
       {!allMinimized && (
         <div className="p-3 space-y-2 max-h-[60vh] overflow-y-auto">
           {uploads.map(u => (
-            <UploadRow key={u.id} u={u} onDismiss={dismissUpload} navigate={navigate} />
+            <UploadRow
+              key={u.id}
+              u={u}
+              onDismiss={dismissUpload}
+              onCancel={cancelUpload}
+              navigate={navigate}
+            />
           ))}
 
           {queueLength > 0 && (

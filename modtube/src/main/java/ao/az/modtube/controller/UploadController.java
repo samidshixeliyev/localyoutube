@@ -229,6 +229,36 @@ public class UploadController {
         }
     }
 
+    @DeleteMapping("/cancel/{videoId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, String>> cancelUpload(
+            @PathVariable String videoId,
+            @AuthenticationPrincipal ModTubeUserDetails user) {
+        try {
+            Video video = videoService.getVideo(videoId).orElse(null);
+            if (video == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            boolean isOwner = user != null && user.getUserId().equals(video.getUploaderId());
+            boolean isAdmin = user != null && (user.isSuperAdmin() || user.isAdmin());
+            if (!isOwner && !isAdmin) {
+                return ResponseEntity.status(403).body(Map.of("error", "Icazə yoxdur"));
+            }
+
+            transcodingService.cancelTranscoding(videoId);
+            videoService.deleteVideo(videoId);
+
+            log.info("[Upload] Cancelled video={} by user={}", videoId,
+                     user != null ? user.getEmail() : "unknown");
+            return ResponseEntity.ok(Map.of("status", "cancelled", "videoId", videoId));
+
+        } catch (Exception e) {
+            log.error("Error cancelling upload for video {}", videoId, e);
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/status/{videoId}")
     public ResponseEntity<Map<String, Object>> getUploadStatus(@PathVariable String videoId) {
         try {

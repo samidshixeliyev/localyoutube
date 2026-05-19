@@ -128,6 +128,10 @@ public class VideoService {
         return videoRepository.findByStatus(status);
     }
 
+    public List<Video> getVideosByStatusIn(List<VideoStatus> statuses) {
+        return videoRepository.findByStatusIn(statuses);
+    }
+
     public List<Video> searchVideos(String query) {
         return searchVideos(query, 0, 20, null);
     }

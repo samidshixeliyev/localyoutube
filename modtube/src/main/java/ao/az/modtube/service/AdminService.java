@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -45,6 +46,25 @@ public class AdminService {
         return userRepository.findAll().stream()
                 .map(this::toUserResponse)
                 .collect(Collectors.toList());
+    }
+
+    public Map<String, Object> searchUsers(String search, Long roleId, String permission, int page, int size) {
+        String q   = (search     != null && !search.isBlank())     ? search.trim()         : "";
+        long   rid = (roleId     != null && roleId > 0)            ? roleId                : 0L;
+        String pm  = (permission != null && !permission.isBlank()) ? permission.trim()     : "";
+
+        int offset = page * size;
+        List<User> users = userRepository.searchUsersPaged(q, rid, pm, offset, size);
+        long total       = userRepository.countSearchUsers(q, rid, pm);
+        int  totalPages  = size > 0 ? (int) Math.ceil((double) total / size) : 0;
+
+        return Map.of(
+            "users",      users.stream().map(this::toUserResponse).collect(Collectors.toList()),
+            "total",      total,
+            "page",       page,
+            "size",       size,
+            "totalPages", totalPages
+        );
     }
 
     public UserResponse getUserById(Long id) {

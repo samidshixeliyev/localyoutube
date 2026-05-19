@@ -151,6 +151,9 @@ export const adminDeleteUser = (id) =>
 export const adminResetPassword = (id, newPassword) =>
     api.post(`/admin/users/${id}/password`, { newPassword });
 
+export const adminSearchUsers = ({ search = '', roleId, permission = '', page = 0, size = 20 } = {}) =>
+    api.get('/admin/users/search', { params: { search, roleId, permission, page, size } });
+
 // ═══════════════════════════════════════════════════════════════
 // ADMIN - ROLES (super-admin only)
 // ═══════════════════════════════════════════════════════════════
