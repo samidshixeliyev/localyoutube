@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMiniPlayer } from '../context/MiniPlayerContext';
+import { useAuth } from '../context/AuthContext';
 import { Play, Pause, X, Maximize2 } from 'lucide-react';
 import Hls from 'hls.js';
 
 export default function MiniPlayer() {
     const navigate = useNavigate();
     const { miniPlayerState, closeMiniPlayer, updateCurrentTime, togglePlayPause } = useMiniPlayer();
+    const { isAuthenticated } = useAuth();
     const videoRef  = useRef(null);
     const hlsRef    = useRef(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -16,6 +18,12 @@ export default function MiniPlayer() {
     const dragOffset = useRef({ x: 0, y: 0 });
 
     const { active, videoId, title, hlsUrl, currentTime, isPlaying } = miniPlayerState;
+
+    // Close mini player whenever the user signs out
+    useEffect(() => {
+        if (!isAuthenticated) closeMiniPlayer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated]);
 
     // ── HLS initialise ──────────────────────────────────────────────
     useEffect(() => {

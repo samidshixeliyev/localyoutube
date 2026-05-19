@@ -479,9 +479,44 @@ Additionally, two metric names in Metrics.jsx were wrong:
 #### Known remaining issues (carried forward)
 
 - **Mobile sidebar**: no hide logic on small screens — 64px sidebar compresses content.
-- **Backend `isShorts` field**: `PUT /videos/{id}` needs `isShorts` in update.
 - **Backend `upload.max-concurrent` setting**: new key, needs to be persisted in settings store.
 - **Next rebuild**: prometheus.yml fix is live in the running container but the rebuilt image will also pick it up from the fixed root file.
+
+---
+
+### 2026-05-19 — Shorts Fix, Color Theme, Dark Mode Fixes, Mini Player Bug
+
+#### What was done
+
+1. **Shorts upload now works**
+   - Root cause: `PUT /api/videos/{id}` handler in `VideoController.java` read `title`, `description`, `tags` from the update body but **never read `isShorts`**, so `video.setShort()` was never called.
+   - Fix: added `if (updates.containsKey("isShorts")) { video.setShort(Boolean.TRUE.equals(updates.get("isShorts"))); }` before `videoService.updateVideo(video)`.
+   - Frontend (UploadContext.jsx) was already sending `{ tags: [], isShorts: true }` correctly.
+   - Backend `getShorts()` query (`WHERE v.is_short = true`) was already correct.
+   - **Requires backend rebuild + redeploy to take effect.**
+
+2. **Website color theme changed to red (matches logo)**
+   - `tailwind.config.js`: `primary-*` palette changed from olive green to crimson red (500=`#e02020`, 600=`#c41515`).
+   - All buttons, active states, focus rings, borders now use red instead of olive.
+   - `army-*` dark backgrounds unchanged (still olive/military — intentional brand choice).
+
+3. **Login page fixes**
+   - Background gradient: `to-army-100` changed to `to-gray-100` to avoid jarring red+olive mix in light mode.
+   - OAuth2 SSO button: changed from `bg-tan-500` (sand) to `bg-sky-600` (ocean blue) as requested.
+
+4. **MyVideos dark mode text**
+   - `h1` "Mənim videolarım": added `dark:text-gray-100`.
+   - Count paragraph: added `dark:text-gray-300`.
+
+5. **Mini player not closing on sign-out**
+   - Root cause: `UserDropdown.handleLogout()` calls `closeMiniPlayer()` then `logout()` — both are synchronous state updates that React 18 batches together. In some edge cases (fast navigation, re-renders), the mini player state wasn't consistently closing.
+   - Fix: added `useAuth` import to `MiniPlayer.jsx` and a `useEffect` that calls `closeMiniPlayer()` whenever `isAuthenticated` transitions to `false`. This is a guaranteed close regardless of who triggered logout.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens.
+- **Backend `upload.max-concurrent` setting**: new key needs to be persisted in settings store.
+- **Backend rebuild needed**: Shorts fix (`isShorts` in `PUT /api/videos/{id}`) requires a rebuild + redeploy.
 
 ---
 

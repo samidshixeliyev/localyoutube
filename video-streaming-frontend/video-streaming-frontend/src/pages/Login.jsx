@@ -58,7 +58,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-primary-100 to-army-100
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-gray-50 to-gray-100
                     dark:from-army-950 dark:via-army-900 dark:to-army-800
                     flex flex-col items-center justify-center p-4 transition-colors duration-200">
 
@@ -163,8 +163,8 @@ const Login = () => {
               </div>
               <button type="button" onClick={handleSso} disabled={ssoLoading || loading}
                 className="w-full flex items-center justify-center gap-2.5 px-4 py-3
-                           bg-tan-500 text-white font-bold rounded-xl shadow-md
-                           hover:bg-tan-600 hover:-translate-y-px active:translate-y-0
+                           bg-sky-600 text-white font-bold rounded-xl shadow-md
+                           hover:bg-sky-700 hover:-translate-y-px active:translate-y-0
                            transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none">
                 {ssoLoading
                   ? <svg className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" viewBox="0 0 24 24"/>

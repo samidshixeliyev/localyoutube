@@ -342,6 +342,9 @@ public class VideoController {
                 List<String> tags = (List<String>) updates.get("tags");
                 video.setTags(tags);
             }
+            if (updates.containsKey("isShorts")) {
+                video.setShort(Boolean.TRUE.equals(updates.get("isShorts")));
+            }
             videoService.updateVideo(video);
             return ResponseEntity.ok(toResponse(video, user));
         } catch (Exception e) {

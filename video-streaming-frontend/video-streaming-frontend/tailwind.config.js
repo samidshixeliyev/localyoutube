@@ -10,19 +10,19 @@ export default {
       colors: {
         // Army / military olive palette — replaces the old orange "primary"
         primary: {
-          50:  '#f4f6ef',
-          100: '#e6ebda',
-          200: '#cdd7b5',
-          300: '#aebf87',
-          400: '#8fa45d',
-          500: '#6b7f3a',  // Main olive green
-          600: '#556430',  // Buttons / active states
-          700: '#404c25',
-          800: '#2e361a',
-          900: '#1c2210',
-          950: '#0e1208',
+          50:  '#fff5f5',
+          100: '#ffe4e4',
+          200: '#ffbcbc',
+          300: '#ff8585',
+          400: '#f85050',
+          500: '#e02020',  // Main crimson — matches logo
+          600: '#c41515',  // Buttons / active states
+          700: '#a10f0f',
+          800: '#7f0c0c',
+          900: '#5c0a0a',
+          950: '#3d0606',
         },
-        // Tan / sand accent — from the right half of the MOD|TUBE patch
+        // Tan / sand accent
         tan: {
           50:  '#faf8f0',
           100: '#f2edda',
