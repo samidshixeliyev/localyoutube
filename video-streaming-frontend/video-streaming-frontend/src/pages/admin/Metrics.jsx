@@ -201,8 +201,10 @@ export default function Metrics() {
   const [lastRefresh, setLastRefresh] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(30);   // seconds; 0 = off
   const [countdown,   setCountdown]   = useState(0);
+  const [bgRefreshing, setBgRefreshing] = useState(false);
   const timerRef    = useRef(null);
   const countRef    = useRef(null);
+  const initialLoadDone = useRef(false);
 
   const [dbStats,   setDbStats]    = useState(null);
   const [dbLoading, setDbLoading]  = useState(true);
@@ -263,7 +265,7 @@ export default function Metrics() {
 
   // ── Fetch chart data ──────────────────────────────────────────────────────
   const fetchCharts = useCallback(async () => {
-    setChartsLoading(true);
+    if (!initialLoadDone.current) setChartsLoading(true);
     try {
       const now   = Math.floor(Date.now() / 1000);
       const start = now - range_.seconds;
@@ -333,7 +335,10 @@ export default function Metrics() {
         rawMem:     toSeries(memTs,      () => 'İstifadə'),
       });
     } catch {/* charts fail gracefully */}
-    finally { setChartsLoading(false); }
+    finally {
+      setChartsLoading(false);
+      initialLoadDone.current = true;
+    }
   }, [range_]);
 
   const fetchDbStats = useCallback(async () => {
@@ -344,7 +349,9 @@ export default function Metrics() {
   }, []);
 
   const refresh = useCallback(() => {
-    fetchStats(); fetchCharts(); fetchDbStats();
+    setBgRefreshing(true);
+    Promise.all([fetchStats(), fetchCharts(), fetchDbStats()])
+      .finally(() => setBgRefreshing(false));
     setCountdown(autoRefresh);
   }, [fetchStats, fetchCharts, fetchDbStats, autoRefresh]);
 
@@ -352,12 +359,20 @@ export default function Metrics() {
     refresh();
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reset initial-load flag when time range changes so charts show spinner
+  useEffect(() => { initialLoadDone.current = false; }, [range_]);
+
   useEffect(() => {
     clearInterval(timerRef.current);
     clearInterval(countRef.current);
     if (autoRefresh === 0) { setCountdown(0); return; }
     setCountdown(autoRefresh);
-    timerRef.current  = setInterval(() => { fetchStats(); fetchCharts(); fetchDbStats(); setCountdown(autoRefresh); }, autoRefresh * 1000);
+    timerRef.current  = setInterval(() => {
+      setBgRefreshing(true);
+      Promise.all([fetchStats(), fetchCharts(), fetchDbStats()])
+        .finally(() => setBgRefreshing(false));
+      setCountdown(autoRefresh);
+    }, autoRefresh * 1000);
     countRef.current  = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
     return () => { clearInterval(timerRef.current); clearInterval(countRef.current); };
   }, [autoRefresh, fetchStats, fetchCharts, fetchDbStats]);
@@ -426,7 +441,7 @@ export default function Metrics() {
               <button onClick={refresh}
                 className="p-2 bg-white dark:bg-army-800 border border-gray-200 dark:border-army-700 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-army-700 transition-all"
                 title="İndi yenilə">
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={`w-4 h-4 ${bgRefreshing ? 'animate-spin text-primary-500' : ''}`} />
               </button>
             </div>
           </div>

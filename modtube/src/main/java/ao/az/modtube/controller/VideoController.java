@@ -4,10 +4,13 @@ import ao.az.modtube.config.security.ModTubePrincipal;
 import ao.az.modtube.domain.Comment;
 import ao.az.modtube.domain.Video;
 import ao.az.modtube.domain.VideoStatus;
+import ao.az.modtube.domain.VideoView;
 import ao.az.modtube.domain.VideoVisibility;
 import ao.az.modtube.metrics.ModTubeMetrics;
+import ao.az.modtube.repository.VideoViewRepository;
 import ao.az.modtube.service.CommentService;
 import ao.az.modtube.service.VideoService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +36,7 @@ public class VideoController {
     private final VideoService videoService;
     private final CommentService commentService;
     private final ModTubeMetrics metrics;
+    private final VideoViewRepository videoViewRepository;
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> listVideos(
@@ -168,10 +172,19 @@ public class VideoController {
     }
 
     @PostMapping("/{id}/view")
-    public ResponseEntity<Void> incrementView(@PathVariable String id) {
+    public ResponseEntity<Void> incrementView(
+            @PathVariable String id,
+            @AuthenticationPrincipal ModTubePrincipal principal,
+            HttpServletRequest request) {
         try {
             videoService.incrementViews(id);
             metrics.recordVideoView();
+            String ip = request.getHeader("X-Forwarded-For");
+            if (ip != null && ip.contains(",")) ip = ip.split(",")[0].trim();
+            if (ip == null) ip = request.getRemoteAddr();
+            Long userId = principal != null ? principal.getUserId() : null;
+            String email = principal != null ? principal.getEmail() : null;
+            videoViewRepository.save(new VideoView(id, userId, email, ip));
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             log.error("Error incrementing view", e);

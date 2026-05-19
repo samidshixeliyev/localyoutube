@@ -17,8 +17,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -132,23 +135,46 @@ public class TranscodingService {
             videoService.updateVideoMetadata(videoId, info.width, info.height,
                     info.durationSeconds, Files.size(inputFile));
 
-            // Stage 3: per-quality transcoding (5 → 95%, split evenly)
+            // Stage 3: per-quality transcoding (5 → 95%), qualities run in parallel
             List<QualityProfile> profiles = buildQualityProfiles(info);
             int perQuality = profiles.isEmpty() ? 0 : 90 / profiles.size();
+
+            // Shared progress counter across parallel quality jobs
+            AtomicInteger sharedProgress = new AtomicInteger(5);
+            processingStages.put(videoId, "Transcoding " + profiles.stream()
+                .map(p -> p.label).reduce((a, b) -> a + "+" + b).orElse(""));
+
+            // Run each quality in its own thread; report progress atomically
+            List<CompletableFuture<Map.Entry<Integer, Boolean>>> futures = new ArrayList<>();
+            for (int i = 0; i < profiles.size(); i++) {
+                final QualityProfile profile = profiles.get(i);
+                final int idx = i;
+                futures.add(CompletableFuture.supplyAsync(() -> {
+                    int rangeStart = 5 + idx * perQuality;
+                    int rangeEnd   = 5 + (idx + 1) * perQuality;
+                    boolean ok = transcodeQuality(videoId, inputFile, outputDir, profile,
+                            rangeStart, rangeEnd, sharedProgress);
+                    return Map.entry(idx, ok);
+                }));
+            }
+
+            // Collect results in profile order
+            boolean[] results = new boolean[profiles.size()];
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            for (CompletableFuture<Map.Entry<Integer, Boolean>> f : futures) {
+                Map.Entry<Integer, Boolean> r = f.join();
+                results[r.getKey()] = r.getValue();
+            }
 
             StringBuilder masterPlaylist = new StringBuilder();
             masterPlaylist.append("#EXTM3U\n#EXT-X-VERSION:3\n");
 
             for (int i = 0; i < profiles.size(); i++) {
-                QualityProfile profile = profiles.get(i);
-                int rangeStart = 5 + i * perQuality;
-                int rangeEnd   = 5 + (i + 1) * perQuality;
-
-                processingStages.put(videoId, "Transcoding " + profile.label);
-                if (!transcodeQuality(videoId, inputFile, outputDir, profile, rangeStart, rangeEnd)) {
-                    log.error("[Transcoding] ✗ quality={} video={}", profile.label, videoId);
+                if (!results[i]) {
+                    log.error("[Transcoding] ✗ quality={} video={}", profiles.get(i).label, videoId);
                     continue;
                 }
+                QualityProfile profile = profiles.get(i);
                 masterPlaylist.append("#EXT-X-STREAM-INF:BANDWIDTH=")
                         .append(profile.bandwidth)
                         .append(",RESOLUTION=")
@@ -235,43 +261,48 @@ public class TranscodingService {
 
     /**
      * Transcodes the input to the given quality profile.
-     * progressStart/End define the overall 0-100 range this quality maps to,
-     * so the DB progress value rises smoothly across all qualities.
+     * sharedProgress tracks progress across parallel quality jobs — each job claims
+     * its range and updates the DB only when progress advances 5+ points globally.
      */
     private boolean transcodeQuality(String videoId, Path input, Path outputDir,
-                                     QualityProfile profile, int progressStart, int progressEnd) {
+                                     QualityProfile profile, int progressStart, int progressEnd,
+                                     AtomicInteger sharedProgress) {
         Process process = null;
         BufferedReader reader = null;
+
+        // Per-quality thread count: divide available cores by number of parallel jobs.
+        // At least 2 threads per quality; falls back to 0 (auto) if Runtime returns 1.
+        int availCores = Runtime.getRuntime().availableProcessors();
+        int threads    = Math.max(2, availCores / Math.max(1, allowedQualities.size()));
 
         try {
             Path qualityDir = outputDir.resolve(profile.label);
             Files.createDirectories(qualityDir);
-            System.gc();
 
-            log.info("[Transcoding] ▶ {} video={} (progress {}→{}%)",
-                    profile.label, videoId, progressStart, progressEnd);
+            log.info("[Transcoding] ▶ {} video={} threads={} (progress {}→{}%)",
+                    profile.label, videoId, threads, progressStart, progressEnd);
 
             ProcessBuilder pb = new ProcessBuilder(
-                    "ffmpeg",
+                    "ffmpeg", "-y",
                     "-i", input.toAbsolutePath().toString(),
-                    "-threads", "1",
-                    "-max_muxing_queue_size", "512",
+                    "-threads",             String.valueOf(threads),
+                    "-max_muxing_queue_size", "1024",
                     "-vf", "scale=" + profile.width + ":" + profile.height +
                            ":force_original_aspect_ratio=decrease,pad=" +
                            profile.width + ":" + profile.height + ":(ow-iw)/2:(oh-ih)/2",
-                    "-c:v", "libx264",
-                    "-preset", "ultrafast",
-                    "-crf", "26",
-                    "-profile:v", "baseline",
-                    "-level", "3.0",
-                    "-pix_fmt", "yuv420p",
-                    "-c:a", "aac",
-                    "-b:a", "96k",
-                    "-ar", "44100",
+                    "-c:v",      "libx264",
+                    "-preset",   "veryfast",   // veryfast: 2–3× faster than medium, quality ≈ fast
+                    "-crf",      String.valueOf(profile.crf()),
+                    "-profile:v","baseline",
+                    "-level",    "3.0",
+                    "-pix_fmt",  "yuv420p",
+                    "-c:a",      "aac",
+                    "-b:a",      profile.audioBitrate(),
+                    "-ar",       "44100",
                     "-movflags", "+faststart",
                     "-hls_time", String.valueOf(segmentDuration),
-                    "-hls_playlist_type", "vod",
-                    "-hls_flags", "independent_segments",
+                    "-hls_playlist_type",    "vod",
+                    "-hls_flags",            "independent_segments",
                     "-hls_segment_filename", qualityDir.resolve("seg_%05d.ts").toString(),
                     qualityDir.resolve("playlist.m3u8").toString()
             );
@@ -281,32 +312,24 @@ public class TranscodingService {
             process = pb.start();
             activeProcesses.put(videoId + "_" + profile.label, process);
 
-            // Parse FFmpeg stdout/stderr for Duration + time= progress
             reader = new BufferedReader(new InputStreamReader(process.getInputStream()), 16384);
             double totalDuration = 0;
-            int lastWrittenPct = progressStart; // only write DB when we move 5+ points
 
             String line;
             while ((line = reader.readLine()) != null) {
-                // Extract total duration once
                 if (totalDuration == 0 && line.contains("Duration:")) {
                     totalDuration = parseFfmpegTime(DURATION_PATTERN, line);
                 }
-
-                // Parse current encoding position
                 if (totalDuration > 0 && line.contains("time=")) {
                     double currentTime = parseFfmpegTime(TIME_PATTERN, line);
                     if (currentTime >= 0) {
                         double ratio = Math.min(currentTime / totalDuration, 1.0);
                         int overallPct = progressStart + (int) ((progressEnd - progressStart) * ratio);
-                        int qualityPct = (int) (ratio * 100);
-
-                        // Write DB only every 5 points to avoid flooding
-                        if (overallPct >= lastWrittenPct + 5) {
+                        int prev = sharedProgress.get();
+                        if (overallPct >= prev + 5 && sharedProgress.compareAndSet(prev, overallPct)) {
                             videoService.updateProcessingProgress(videoId, overallPct);
-                            lastWrittenPct = overallPct;
                             log.info("[Transcoding] {} video={} {}% (overall {}%)",
-                                    profile.label, videoId, qualityPct, overallPct);
+                                    profile.label, videoId, (int)(ratio*100), overallPct);
                         }
                     }
                 }
@@ -314,7 +337,6 @@ public class TranscodingService {
 
             boolean completed = process.waitFor(PROCESS_TIMEOUT_MINUTES, TimeUnit.MINUTES);
             activeProcesses.remove(videoId + "_" + profile.label);
-            int exitCode = completed ? process.exitValue() : -1;
 
             if (!completed) {
                 log.error("[Transcoding] ✗ timeout quality={} video={}", profile.label, videoId);
@@ -322,14 +344,13 @@ public class TranscodingService {
                 deleteDirectoryRecursive(qualityDir);
                 return false;
             }
-            if (exitCode != 0) {
+            if (process.exitValue() != 0) {
                 log.error("[Transcoding] ✗ FFmpeg exit={} quality={} video={}",
-                        exitCode, profile.label, videoId);
+                        process.exitValue(), profile.label, videoId);
                 deleteDirectoryRecursive(qualityDir);
                 return false;
             }
 
-            videoService.updateProcessingProgress(videoId, progressEnd);
             log.info("[Transcoding] ✓ {} video={}", profile.label, videoId);
             return true;
 
@@ -339,7 +360,6 @@ public class TranscodingService {
             return false;
         } finally {
             closeQuietly(reader);
-            System.gc();
         }
     }
 
@@ -449,6 +469,9 @@ public class TranscodingService {
         if (info.height >= 1080 && allowedQualities.contains("1080p")) {
             profiles.add(new QualityProfile("1080p", 1920, 1080, 6_000_000));
         }
+        if (info.height >= 1440 && allowedQualities.contains("1440p")) {
+            profiles.add(new QualityProfile("1440p", 2560, 1440, 12_000_000));
+        }
         if (info.height >= 2160 && allowedQualities.contains("2160p")) {
             profiles.add(new QualityProfile("2160p", 3840, 2160, 25_000_000));
         }
@@ -486,5 +509,27 @@ public class TranscodingService {
     }
 
     private record QualityProfile(String label, int width, int height, int bandwidth) {
+        /** CRF tuned per resolution: lower res tolerates higher CRF */
+        int crf() {
+            return switch (label) {
+                case "480p"  -> 28;
+                case "720p"  -> 26;
+                case "1080p" -> 24;
+                case "1440p" -> 23;
+                case "2160p" -> 22;
+                default      -> 26;
+            };
+        }
+        /** Audio bitrate per resolution */
+        String audioBitrate() {
+            return switch (label) {
+                case "480p"  -> "96k";
+                case "720p"  -> "128k";
+                case "1080p" -> "160k";
+                case "1440p" -> "192k";
+                case "2160p" -> "256k";
+                default      -> "128k";
+            };
+        }
     }
 }

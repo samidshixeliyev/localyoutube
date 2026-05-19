@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Home, PlaySquare, Film, Upload,
-  Users, Shield, Settings, Activity, Menu,
+  Users, Shield, Settings, Activity, BarChart2, Menu,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
@@ -22,7 +22,8 @@ const ADMIN_NAV = [
   { to: '/admin/users',    icon: Users,    label: 'İstifadəçilər', perms: ['manage-users']    },
   { to: '/admin/roles',    icon: Shield,   label: 'Rollar',         perms: ['manage-roles']    },
   { to: '/admin/settings', icon: Settings, label: 'Tənzimləmələr', perms: ['manage-settings'] },
-  { to: '/admin/metrics',  icon: Activity, label: 'Metriklər',      perms: ['view-metrics']    },
+  { to: '/admin/metrics',    icon: Activity,  label: 'Metriklər',    perms: ['view-metrics'] },
+  { to: '/admin/analytics',  icon: BarChart2, label: 'Analitika',    perms: ['view-metrics'] },
 ];
 
 function NavItem({ to, icon: Icon, label, isOpen }) {

@@ -216,4 +216,23 @@ export const adminGetStats = () =>
 export const getShareUrl = (id) =>
     api.get(`/videos/${id}/share`);
 
+// ═══════════════════════════════════════════════════════════════
+// VIEW ANALYTICS
+// ═══════════════════════════════════════════════════════════════
+
+export const adminAnalyticsSummary = (days = 30) =>
+    api.get('/admin/analytics/summary', { params: { days } });
+
+export const adminTopVideos = (days = 30, limit = 20) =>
+    api.get('/admin/analytics/top-videos', { params: { days, limit } });
+
+export const adminTopUsers = (days = 30, limit = 20) =>
+    api.get('/admin/analytics/top-users', { params: { days, limit } });
+
+export const adminDailyViews = (days = 30) =>
+    api.get('/admin/analytics/daily-views', { params: { days } });
+
+export const adminHourlyViews = (days = 30) =>
+    api.get('/admin/analytics/hourly', { params: { days } });
+
 export default api;

@@ -53,7 +53,7 @@ modtube:
 
   transcoding:
     segment-duration: 6
-    qualities: 480p,720p,1080p
+    qualities: 480p,720p,1080p,1440p,2160p
 
   idp:
     base-url: ${IDP_BASE_URL:https://13.61.159.58}

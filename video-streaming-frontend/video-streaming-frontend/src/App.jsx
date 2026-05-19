@@ -29,6 +29,7 @@ const UserForm       = lazy(() => import('./pages/admin/UserForm'));
 const RoleManagement = lazy(() => import('./pages/admin/RoleManagement'));
 const IdpSettings    = lazy(() => import('./pages/admin/IdpSettings'));
 const Metrics        = lazy(() => import('./pages/admin/Metrics'));
+const Analytics      = lazy(() => import('./pages/admin/Analytics'));
 const Embed          = lazy(() => import('./pages/Embed'));
 
 const PageLoader = () => (
@@ -172,6 +173,14 @@ function AppContent() {
                   element={
                     <PrivateRoute requiredPermission={['super-admin', 'view-metrics']}>
                       <Metrics />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/analytics"
+                  element={
+                    <PrivateRoute requiredPermission={['super-admin', 'view-metrics']}>
+                      <Analytics />
                     </PrivateRoute>
                   }
                 />
