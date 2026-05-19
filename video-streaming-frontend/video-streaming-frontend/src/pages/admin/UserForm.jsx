@@ -144,7 +144,7 @@ const UserForm = () => {
                   <input
                     type="email" value={form.email} required
                     onChange={e => setForm({ ...form, email: e.target.value })}
-                    placeholder="istifadeci@misal.com"
+                    placeholder="istifadeci@ao.az"
                     className={inputClass + ' pl-9'}
                   />
                 </div>

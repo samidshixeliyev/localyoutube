@@ -110,7 +110,7 @@ const Login = () => {
                 <input
                   name="email" type="email" autoComplete="email" required
                   value={form.email} onChange={handleChange}
-                  placeholder="istifadeci@misal.com"
+                  placeholder="istifadeci@ao.az"
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-army-600 rounded-xl
                              text-sm text-gray-900 dark:text-gray-100
                              placeholder-gray-400 dark:placeholder-gray-500

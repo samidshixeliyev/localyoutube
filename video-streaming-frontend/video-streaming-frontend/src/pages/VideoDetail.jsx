@@ -587,7 +587,7 @@ const VideoDetail = () => {
                             onChange={e => { setEmailInput(e.target.value); fetchEmailSuggestions(e.target.value); }}
                             onKeyDown={e => e.key==='Enter' && (e.preventDefault(), addEmail())}
                             onFocus={() => emailInput.length >= 2 && emailSuggestions.length > 0 && setShowEmailSug(true)}
-                            placeholder="user@example.com"
+                            placeholder="istifadeci@ao.az"
                             className="w-full px-3 py-2 border border-primary-300 dark:border-primary-700 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                           {showEmailSug && emailSuggestions.length > 0 && (
                             <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-army-800 border border-primary-200 dark:border-primary-700 rounded-xl shadow-lg z-20 overflow-hidden">

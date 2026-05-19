@@ -285,7 +285,7 @@ export default function UploadPage() {
                       onChange={onEmailInputChange}
                       onFocus={() => { if (userSuggestions.length > 0) setShowSuggestions(true); }}
                       onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addEmail())}
-                      placeholder="user@example.com"
+                      placeholder="istifadeci@ao.az"
                       className="w-full px-3 py-2 border border-primary-300 dark:border-primary-700 dark:bg-army-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                     />
                     {showSuggestions && userSuggestions.length > 0 && (

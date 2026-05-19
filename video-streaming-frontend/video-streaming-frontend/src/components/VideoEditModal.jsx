@@ -331,7 +331,7 @@ const VideoEditModal = ({ video, isOpen, onClose, onSave }) => {
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
-                  placeholder="user@example.com"
+                  placeholder="istifadeci@ao.az"
                   className="flex-1 px-4 py-2 border-2 border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
                 <button
