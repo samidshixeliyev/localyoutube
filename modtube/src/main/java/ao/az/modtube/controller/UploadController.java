@@ -38,7 +38,7 @@ public class UploadController {
     private final long maxFileSize;
     private final long minDiskFree;
 
-    private static final int MAX_CHUNK_SIZE = 25 * 1024 * 1024; // 25 MB ceiling
+    private static final int MAX_CHUNK_SIZE = 55 * 1024 * 1024; // 55 MB ceiling (frontend max chunk is 50 MB)
 
     public UploadController(VideoService videoService,
                             TranscodingService transcodingService,

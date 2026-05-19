@@ -2,7 +2,7 @@ server:
   port: ${SERVER_PORT:4000}
   address: 0.0.0.0
   tomcat:
-    max-swallow-size: 100MB
+    max-swallow-size: 200MB
 
 spring:
   application:
@@ -35,8 +35,8 @@ spring:
     multipart:
       enabled: true
       file-size-threshold: 2KB
-      max-file-size: 30MB       # per chunk — frontend sends 20MB chunks
-      max-request-size: 35MB
+      max-file-size: 55MB       # per chunk — frontend sends up to 50MB chunks for large files
+      max-request-size: 60MB
 
 jwt:
   secret: ${JWT_SECRET:4gTduyxJahQatgIkxwGErvADeIjfdulxI98B8bAGUOKStnBVTyngXfU5jM1rMbVR}

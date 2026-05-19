@@ -4,8 +4,24 @@ import videoService from '../services/videoService';
 const UploadContext = createContext(null);
 export const useUpload = () => useContext(UploadContext);
 
-const CHUNK_SIZE  = 20 * 1024 * 1024; // 20 MB
 const MAX_RETRIES = 3;
+
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
+// Scale chunk size with file size:
+//   < 50 MB  →  2 MB  (few chunks, fast start for tiny files)
+//   < 200 MB →  5 MB
+//   < 500 MB → 10 MB
+//   < 2 GB   → 20 MB
+//   ≥ 2 GB   → 50 MB  (fewer round-trips for huge files)
+function getChunkSize(fileSize) {
+  if (fileSize < 50  * MB) return  2 * MB;
+  if (fileSize < 200 * MB) return  5 * MB;
+  if (fileSize < 500 * MB) return 10 * MB;
+  if (fileSize <  2  * GB) return 20 * MB;
+  return 50 * MB;
+}
 
 async function fetchUploadConfig() {
   try {
@@ -132,8 +148,9 @@ export const UploadProvider = ({ children }) => {
     cancelRef.current.set(id, { ctrl, videoId: null });
     const signal = ctrl.signal;
 
-    const cfg = uploadConfigRef.current;
-    const chunks = Math.ceil(file.size / CHUNK_SIZE);
+    const cfg       = uploadConfigRef.current;
+    const CHUNK_SIZE = getChunkSize(file.size);
+    const chunks    = Math.ceil(file.size / CHUNK_SIZE);
     startTimeRef.current.set(id, Date.now());
     bytesRef.current.set(id, 0);
 
