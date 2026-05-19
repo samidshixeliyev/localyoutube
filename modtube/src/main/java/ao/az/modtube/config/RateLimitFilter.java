@@ -12,16 +12,20 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Per-IP token-bucket rate limiter.
- * Global limit:  RATE_LIMIT_RPS        (default 100 req/s)
- * Upload limit:  RATE_LIMIT_UPLOAD_RPS (default 4 req/s)
+ * Global limit:      RATE_LIMIT_RPS        (default 200 req/s)
+ * Chunk/init limit:  RATE_LIMIT_UPLOAD_RPS (default 20 req/s)
+ *
+ * Only /api/upload/chunk and /api/upload/init go through the strict upload bucket.
+ * Status, cancel, config, and video-list endpoints use the global bucket only —
+ * they are lightweight polling calls, not bandwidth-intensive.
  */
 @Component
 public class RateLimitFilter implements Filter {
 
-    @Value("${RATE_LIMIT_RPS:100}")
+    @Value("${RATE_LIMIT_RPS:200}")
     private int maxRps;
 
-    @Value("${RATE_LIMIT_UPLOAD_RPS:4}")
+    @Value("${RATE_LIMIT_UPLOAD_RPS:20}")
     private int uploadMaxRps;
 
     private final Map<String, Bucket> globalBuckets = new ConcurrentHashMap<>();
@@ -34,11 +38,15 @@ public class RateLimitFilter implements Filter {
         HttpServletRequest  request  = (HttpServletRequest)  req;
         HttpServletResponse response = (HttpServletResponse) res;
 
-        String ip       = clientIp(request);
-        String uri      = request.getRequestURI();
-        boolean isUpload = uri.startsWith("/api/upload/");
+        String ip  = clientIp(request);
+        String uri = request.getRequestURI();
 
-        if (isUpload) {
+        // Only chunk uploads and init are bandwidth-intensive; apply strict bucket
+        boolean isChunkEndpoint = uri.startsWith("/api/upload/chunk") ||
+                                  uri.startsWith("/api/upload/init")  ||
+                                  uri.startsWith("/api/upload/complete");
+
+        if (isChunkEndpoint) {
             Bucket b = uploadBuckets.computeIfAbsent(ip, k -> new Bucket(uploadMaxRps));
             if (!b.tryConsume()) {
                 tooMany(response, "Yükləmə limiti aşıldı — gözləyin və yenidən cəhd edin");
