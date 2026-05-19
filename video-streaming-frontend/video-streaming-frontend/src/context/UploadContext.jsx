@@ -231,6 +231,15 @@ export const UploadProvider = ({ children }) => {
   const minimizeUpload = useCallback((id) => patchUpload(id, { minimized: true  }), [patchUpload]);
   const expandUpload   = useCallback((id) => patchUpload(id, { minimized: false }), [patchUpload]);
 
+  const clearAllUploads = useCallback(() => {
+    stopAllPolls();
+    runningCountRef.current = 0;
+    bytesRef.current.clear();
+    startTimeRef.current.clear();
+    setUploads([]);
+    setQueue([]);
+  }, []);
+
   // ── Backward compat (first upload acts like the old single state) ──────────
 
   const firstUpload = uploads[0];
@@ -269,6 +278,7 @@ export const UploadProvider = ({ children }) => {
       dismissUpload,
       minimizeUpload,
       expandUpload,
+      clearAllUploads,
       queueLength: queue.length,
     }}>
       {children}

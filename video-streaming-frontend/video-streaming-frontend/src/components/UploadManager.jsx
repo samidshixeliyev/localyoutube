@@ -119,16 +119,14 @@ function UploadRow({ u, onDismiss, navigate }) {
 }
 
 export default function UploadManager() {
-  const { uploads, dismissUpload, queueLength, dismiss } = useUpload();
+  const { uploads, dismissUpload, queueLength, clearAllUploads } = useUpload();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [allMinimized, setAllMinimized] = useState(false);
 
-  // Clear the upload mini-window when the user logs out
+  // Clear ALL uploads when the user logs out
   useEffect(() => {
-    if (!isAuthenticated && uploads.length > 0) {
-      dismiss();
-    }
+    if (!isAuthenticated) clearAllUploads();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
