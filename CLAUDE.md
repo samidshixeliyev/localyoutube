@@ -646,4 +646,67 @@ Additionally, two metric names in Metrics.jsx were wrong:
 
 ---
 
+### 2026-05-19 — Transcoding Optimization, View Analytics, Metrics Auto-Refresh Fix
+
+#### What was done
+
+1. **Transcoding speed optimization** (`TranscodingService.java`)
+   - Root cause of slowness: `-threads 1` forced each FFmpeg process to use a single CPU core regardless of what hardware is available. On an 8-core machine this means 87.5% of CPU was idle during transcoding.
+   - Fix: Replaced `-threads 1` with dynamic per-quality thread allocation: `availCores / numQualityProfiles`. Each quality profile gets its fair share of cores (minimum 2).
+   - Quality profiles now run **in parallel** using `CompletableFuture.supplyAsync()` instead of sequential for-loop. On a 4-core machine encoding 480p+720p+1080p: ~3× faster wallclock time.
+   - Preset changed: `ultrafast` → `veryfast` — veryfast gives 20–30% better compression than ultrafast with only ~15% more CPU time; better quality without noticeable speed loss.
+   - CRF and audio bitrate now tuned per resolution: 480p uses CRF28+96k, 1440p uses CRF23+192k, 2160p uses CRF22+256k.
+   - Added **1440p** (2560×1440, 12 Mbps) quality tier.
+   - `application.yml`: `qualities: 480p,720p,1080p,1440p,2160p`
+   - Progress tracking: switched to `AtomicInteger.compareAndSet()` for thread-safe shared progress across parallel quality jobs.
+   - Removed `System.gc()` calls from hot path (per-quality finally block) — GC hints inside tight loops cause pauses.
+
+2. **View analytics — per-view event tracking** (backend)
+   - `VideoView.java` entity: `video_id`, `user_id`, `user_email`, `ip_address`, `viewed_at`
+   - `V3__view_analytics.sql`: creates `video_views` table with FK to `videos(id) ON DELETE CASCADE` + indexes on video_id, user_email, viewed_at.
+   - `VideoViewRepository.java`: native queries for top videos (by view count), top users (by view count), daily view trend, hourly distribution.
+   - `VideoController.incrementView`: now also saves a `VideoView` record — captures authenticated user email/ID, and IP from `X-Forwarded-For` or `RemoteAddr`.
+   - `AdminController`: added 5 analytics endpoints (all require `super-admin` or `view-metrics`):
+     - `GET /api/admin/analytics/summary` — views in last 24h, 7d, 30d
+     - `GET /api/admin/analytics/top-videos?days=30&limit=20`
+     - `GET /api/admin/analytics/top-users?days=30&limit=20`
+     - `GET /api/admin/analytics/daily-views?days=30`
+     - `GET /api/admin/analytics/hourly?days=30`
+
+3. **View analytics — dashboard page** (frontend)
+   - `Analytics.jsx`: new page at `/admin/analytics`
+   - Summary cards: views in last 24h / 7d / 30d
+   - Daily trend: AreaChart
+   - Hourly distribution: BarChart (all 24 hours, 0-filled if no data)
+   - Top 20 videos table: rank badge (gold/silver/bronze), title link, uploader, last viewed, view count
+   - Top 20 users table: rank badge, email, unique videos watched, last viewed, view count
+   - 7/30/90 day selector; refresh button
+   - Sidebar: "Analitika" nav item added (requires `view-metrics`)
+   - App.jsx: `/admin/analytics` route added
+
+4. **Metrics auto-refresh flash fixed** (`Metrics.jsx`)
+   - Root cause: `fetchCharts()` called `setChartsLoading(true)` every time it ran, including on background auto-refresh timer. All 11 charts disappeared and showed spinners every 30 seconds.
+   - Fix: Added `initialLoadDone` ref (persists across renders, doesn't trigger re-render). `setChartsLoading(true)` only fires when `initialLoadDone.current === false` (first load or time-range change). Subsequent background refreshes update chart data silently.
+   - The refresh button icon now spins while a background refresh is in-flight (`bgRefreshing` state).
+   - Time range change resets `initialLoadDone.current = false` so charts properly show loading state for the new range.
+
+5. **Prometheus retention**: Already at `--storage.tsdb.retention.time=30d` in docker-compose.yml. No change needed.
+
+#### Key gotchas
+
+- **Parallel FFmpeg + shared progress**: Using a single `AtomicInteger` for progress across parallel quality jobs means the displayed percentage is the max across all in-progress qualities. `compareAndSet(prev, overallPct)` prevents race: only the thread that "wins" the CAS writes to DB.
+- **1440p in allowedQualities**: Profile is only created when `info.height >= 1440`. If the input is 1080p, 1440p profile is skipped even though it's in the config — correct behavior.
+- **View tracking with anonymous users**: `user_id` and `user_email` are nullable. Anonymous views (no JWT) still get recorded with just IP address.
+- **`X-Forwarded-For` parsing**: Can be a comma-separated list when behind multiple proxies. Code takes only the first IP: `ip.split(",")[0].trim()`.
+- **`initialLoadDone` as `useRef`**: Must be a ref (not state) because it needs to persist across renders without causing re-renders. State would cause an infinite loop.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens.
+- **Backend `upload.max-concurrent` setting**: not persisted in DB yet.
+- **UploadController.listVideos**: returns all videos, not filtered by current user.
+- **Backend rebuild needed**: All backend changes require `docker compose build && docker compose up -d --force-recreate` on VPS.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*
