@@ -25,7 +25,7 @@ const qualityLabel = (level) =>
   level < 0 ? 'Avtomatik' : `${level.height}p`;
 
 /* ─── ShortItem ────────────────────────────────────────────────── */
-function ShortItem({ video, muted, onToggleMute, onVisible, isLast, onLastVisible }) {
+function ShortItem({ video, muted, onToggleMute, onForceMute, onVisible, isLast, onLastVisible }) {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
 
@@ -107,7 +107,12 @@ function ShortItem({ video, muted, onToggleMute, onVisible, isLast, onLastVisibl
     if (!vid) return;
     if (isInView) {
       vid.muted = muted;
-      vid.play().catch(() => {});
+      vid.play().catch(() => {
+        // Browser blocked autoplay with sound — fall back to muted
+        vid.muted = true;
+        onForceMute?.();
+        vid.play().catch(() => {});
+      });
     } else {
       vid.pause();
       vid.currentTime = 0;
@@ -477,7 +482,7 @@ const Shorts = () => {
   const [page,        setPage]        = useState(0);
   const [hasMore,     setHasMore]     = useState(true);
   const [activeId,    setActiveId]    = useState(null);
-  const [muted,       setMuted]       = useState(true);
+  const [muted,       setMuted]       = useState(false);
   const [error,       setError]       = useState('');
   const scrollRef = useRef(null);
   const PAGE_SIZE = 10;
@@ -600,6 +605,7 @@ const Shorts = () => {
               video={video}
               muted={muted}
               onToggleMute={() => setMuted(m => !m)}
+              onForceMute={() => setMuted(true)}
               onVisible={setActiveId}
               isLast={i === shorts.length - 1}
               onLastVisible={handleLastVisible}
