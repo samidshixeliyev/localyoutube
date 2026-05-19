@@ -275,8 +275,8 @@ export default function UploadPage() {
 
             {/* Restricted emails */}
             {visibility === 'restricted' && (
-              <div className="bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-800 rounded-xl p-4">
-                <label className="block text-sm font-medium text-purple-900 dark:text-purple-200 mb-2">İcazəli istifadəçilər *</label>
+              <div className="bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-200 dark:border-primary-800 rounded-xl p-4">
+                <label className="block text-sm font-medium text-primary-900 dark:text-primary-200 mb-2">İcazəli istifadəçilər *</label>
                 <div className="flex gap-2 mb-3 relative">
                   <div className="relative flex-1">
                     <input
@@ -286,16 +286,16 @@ export default function UploadPage() {
                       onFocus={() => { if (userSuggestions.length > 0) setShowSuggestions(true); }}
                       onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addEmail())}
                       placeholder="user@example.com"
-                      className="w-full px-3 py-2 border border-purple-300 dark:border-purple-700 dark:bg-army-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+                      className="w-full px-3 py-2 border border-primary-300 dark:border-primary-700 dark:bg-army-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg text-sm outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                     />
                     {showSuggestions && userSuggestions.length > 0 && (
-                      <div ref={suggestRef} className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-army-800 border border-purple-200 dark:border-purple-800 rounded-xl shadow-lg z-10 overflow-hidden">
+                      <div ref={suggestRef} className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-army-800 border border-primary-200 dark:border-primary-800 rounded-xl shadow-lg z-10 overflow-hidden">
                         {userSuggestions.map(u => (
                           <button
                             key={u.email}
                             type="button"
                             onMouseDown={() => selectSuggestion(u)}
-                            className="w-full text-left px-4 py-2.5 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                            className="w-full text-left px-4 py-2.5 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                           >
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{u.fullName || u.name || u.email}</p>
                             <p className="text-xs text-gray-500 dark:text-gray-400">{u.email}</p>
@@ -304,12 +304,12 @@ export default function UploadPage() {
                       </div>
                     )}
                   </div>
-                  <button type="button" onClick={addEmail} className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">Əlavə et</button>
+                  <button type="button" onClick={addEmail} className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700">Əlavə et</button>
                 </div>
                 {allowedEmails.length > 0 && (
                   <div className="space-y-1.5 max-h-36 overflow-y-auto">
                     {allowedEmails.map(e => (
-                      <div key={e} className="flex items-center justify-between bg-white dark:bg-army-900 px-3 py-2 rounded-lg border border-purple-200 dark:border-purple-800">
+                      <div key={e} className="flex items-center justify-between bg-white dark:bg-army-900 px-3 py-2 rounded-lg border border-primary-200 dark:border-primary-800">
                         <span className="text-sm text-gray-800 dark:text-gray-200">{e}</span>
                         <button type="button" onClick={() => setAllowedEmails(allowedEmails.filter(x => x !== e))} className="text-red-500 hover:text-red-600">
                           <X className="w-4 h-4" />

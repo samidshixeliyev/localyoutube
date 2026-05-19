@@ -21,7 +21,7 @@ const VISIBILITY = {
   PUBLIC:     { icon: Globe,  label: 'İctimai',      color: 'bg-green-500',  border: 'border-green-500' },
   UNLISTED:   { icon: Link2,  label: 'Siyahısız',    color: 'bg-yellow-500', border: 'border-yellow-500' },
   PRIVATE:    { icon: Lock,   label: 'Gizli',        color: 'bg-red-500',    border: 'border-red-500' },
-  RESTRICTED: { icon: Users,  label: 'Məhdud',       color: 'bg-purple-500', border: 'border-purple-500' },
+  RESTRICTED: { icon: Users,  label: 'Məhdud',       color: 'bg-army-600',   border: 'border-army-600' },
 };
 const getVis = (v) => VISIBILITY[(v || 'PUBLIC').toUpperCase()] || VISIBILITY.PUBLIC;
 
@@ -579,8 +579,8 @@ const VideoDetail = () => {
 
                   {/* Restricted emails */}
                   {editForm.visibility === 'RESTRICTED' && (
-                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
-                      <label className="block text-sm font-medium text-purple-800 dark:text-purple-300 mb-2">İcazəli istifadəçilər</label>
+                    <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-4">
+                      <label className="block text-sm font-medium text-primary-800 dark:text-primary-300 mb-2">İcazəli istifadəçilər</label>
                       <div className="flex gap-2 mb-3">
                         <div className="relative flex-1" ref={emailSugRef}>
                           <input type="email" value={emailInput}
@@ -588,9 +588,9 @@ const VideoDetail = () => {
                             onKeyDown={e => e.key==='Enter' && (e.preventDefault(), addEmail())}
                             onFocus={() => emailInput.length >= 2 && emailSuggestions.length > 0 && setShowEmailSug(true)}
                             placeholder="user@example.com"
-                            className="w-full px-3 py-2 border border-purple-300 dark:border-purple-700 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                            className="w-full px-3 py-2 border border-primary-300 dark:border-primary-700 rounded-lg bg-white dark:bg-army-900 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                           {showEmailSug && emailSuggestions.length > 0 && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-army-800 border border-purple-200 dark:border-purple-700 rounded-xl shadow-lg z-20 overflow-hidden">
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-army-800 border border-primary-200 dark:border-primary-700 rounded-xl shadow-lg z-20 overflow-hidden">
                               {emailSuggestions.map(u => (
                                 <button key={u.email} type="button"
                                   onMouseDown={() => {
@@ -598,7 +598,7 @@ const VideoDetail = () => {
                                       setEditForm(p => ({ ...p, allowedEmails: [...p.allowedEmails, u.email] }));
                                     setEmailInput(''); setShowEmailSug(false);
                                   }}
-                                  className="w-full text-left px-3 py-2.5 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors border-b border-gray-100 dark:border-army-700 last:border-0">
+                                  className="w-full text-left px-3 py-2.5 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors border-b border-gray-100 dark:border-army-700 last:border-0">
                                   <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{u.fullName || u.name || u.email}</p>
                                   <p className="text-xs text-gray-500 dark:text-gray-400">{u.email}</p>
                                 </button>
@@ -606,7 +606,7 @@ const VideoDetail = () => {
                             </div>
                           )}
                         </div>
-                        <button onClick={addEmail} className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex-shrink-0">
+                        <button onClick={addEmail} className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex-shrink-0">
                           <Plus className="h-4 w-4" />
                         </button>
                       </div>

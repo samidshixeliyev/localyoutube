@@ -161,9 +161,9 @@ const VideoEditModal = ({ video, isOpen, onClose, onSave }) => {
       icon: Users, 
       label: 'Restricted', 
       description: 'Only specific users can view',
-      color: 'text-purple-600',
-      borderColor: 'border-purple-500',
-      bgColor: 'bg-purple-50'
+      color: 'text-primary-600',
+      borderColor: 'border-primary-500',
+      bgColor: 'bg-primary-50'
     }
   ];
 
@@ -319,8 +319,8 @@ const VideoEditModal = ({ video, isOpen, onClose, onSave }) => {
 
           {/* Restricted Access Email List */}
           {formData.visibility === 'restricted' && (
-            <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-5">
-              <label className="block text-sm font-semibold text-purple-900 mb-3 flex items-center space-x-2">
+            <div className="bg-primary-50 border-2 border-primary-200 rounded-lg p-5">
+              <label className="block text-sm font-semibold text-primary-900 mb-3 flex items-center space-x-2">
                 <Users className="h-5 w-5" />
                 <span>Allowed Users *</span>
               </label>
@@ -332,12 +332,12 @@ const VideoEditModal = ({ video, isOpen, onClose, onSave }) => {
                   onChange={(e) => setEmailInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail())}
                   placeholder="user@example.com"
-                  className="flex-1 px-4 py-2 border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="flex-1 px-4 py-2 border-2 border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
                 <button
                   type="button"
                   onClick={addEmail}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-1"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center space-x-1"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Add</span>
@@ -347,7 +347,7 @@ const VideoEditModal = ({ video, isOpen, onClose, onSave }) => {
               {formData.allowedEmails.length > 0 ? (
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {formData.allowedEmails.map(email => (
-                    <div key={email} className="flex items-center justify-between bg-white px-4 py-2 rounded-lg border border-purple-200">
+                    <div key={email} className="flex items-center justify-between bg-white px-4 py-2 rounded-lg border border-primary-200">
                       <span className="text-sm text-gray-900">{email}</span>
                       <button
                         type="button"
@@ -360,15 +360,15 @@ const VideoEditModal = ({ video, isOpen, onClose, onSave }) => {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6 bg-white rounded-lg border-2 border-dashed border-purple-200">
-                  <Users className="h-8 w-8 text-purple-300 mx-auto mb-2" />
-                  <p className="text-sm text-purple-600">No users added yet</p>
-                  <p className="text-xs text-purple-500 mt-1">Add email addresses above</p>
+                <div className="text-center py-6 bg-white rounded-lg border-2 border-dashed border-primary-200">
+                  <Users className="h-8 w-8 text-primary-300 mx-auto mb-2" />
+                  <p className="text-sm text-primary-600">No users added yet</p>
+                  <p className="text-xs text-primary-500 mt-1">Add email addresses above</p>
                 </div>
               )}
 
               <div className="mt-4">
-                <label className="block text-sm font-medium text-purple-900 mb-2">
+                <label className="block text-sm font-medium text-primary-900 mb-2">
                   Restriction Note (Optional)
                 </label>
                 <input
@@ -376,7 +376,7 @@ const VideoEditModal = ({ video, isOpen, onClose, onSave }) => {
                   value={formData.restrictionNote}
                   onChange={(e) => setFormData({ ...formData, restrictionNote: e.target.value })}
                   placeholder="e.g., 'Team members only'"
-                  className="w-full px-4 py-2 border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border-2 border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
             </div>
