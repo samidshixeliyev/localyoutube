@@ -251,6 +251,20 @@ public class AdminController {
             }).collect(Collectors.toList()));
     }
 
+    @GetMapping("/analytics/weekday")
+    @PreAuthorize("hasAnyAuthority('super-admin', 'view-metrics')")
+    public ResponseEntity<List<Map<String, Object>>> weekdayDistribution(
+            @RequestParam(defaultValue = "30") int days) {
+        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+        return ResponseEntity.ok(videoViewRepository.findWeekdayDistribution(since).stream()
+            .map(r -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("dow", ((Number) r[0]).intValue());
+                m.put("count", ((Number) r[1]).longValue());
+                return m;
+            }).collect(java.util.stream.Collectors.toList()));
+    }
+
     @GetMapping("/analytics/summary")
     @PreAuthorize("hasAnyAuthority('super-admin', 'view-metrics')")
     public ResponseEntity<Map<String, Object>> analyticsSummary(

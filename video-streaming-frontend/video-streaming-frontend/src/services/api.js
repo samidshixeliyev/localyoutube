@@ -235,6 +235,9 @@ export const adminDailyViews = (days = 30) =>
 export const adminHourlyViews = (days = 30) =>
     api.get('/admin/analytics/hourly', { params: { days } });
 
+export const adminWeekdayViews = (days = 30) =>
+    api.get('/admin/analytics/weekday', { params: { days } });
+
 // ═══════════════════════════════════════════════════════════════
 // PLAYLISTS
 // ═══════════════════════════════════════════════════════════════

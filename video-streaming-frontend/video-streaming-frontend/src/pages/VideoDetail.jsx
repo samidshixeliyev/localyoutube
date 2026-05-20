@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import videoService from "../services/videoService";
 import VideoPlayer from "../components/VideoPlayer";
 import ThumbnailUpload from "../components/ThumbnailUpload";
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useMiniPlayer } from "../context/MiniPlayerContext";
-import api, { adminGetUsers, getMyPlaylists, addToPlaylist, createPlaylist } from "../services/api";
+import api, { adminGetUsers, getMyPlaylists, addToPlaylist, createPlaylist, getPlaylist } from "../services/api";
 
 /* ── visibility helpers ──────────────────────────────────────── */
 const VISIBILITY = {
@@ -46,7 +46,9 @@ const VideoDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const startTime = parseInt(searchParams.get('t') || '0', 10) || 0;
+  const startTime  = parseInt(searchParams.get('t')     || '0', 10) || 0;
+  const listId     = searchParams.get('list') || null;
+  const listIndex  = parseInt(searchParams.get('index') || '0', 10) || 0;
   const { isAuthenticated, user } = useAuth();
   const { activateMiniPlayer, closeMiniPlayer } = useMiniPlayer();
 
@@ -68,6 +70,10 @@ const VideoDetail = () => {
   // Autoplay next video
   const [nextVideo, setNextVideo] = useState(null);
   const [autoplayCountdown, setAutoplayCountdown] = useState(null);
+
+  // Playlist context (set when opened from a playlist)
+  const [playlistCtx, setPlaylistCtx] = useState(null);
+  const playlistCtxRef = useRef(null);
 
   // Edit
   const [isEditing, setIsEditing] = useState(false);
@@ -113,6 +119,18 @@ const VideoDetail = () => {
       setShowEmailSug(users.length > 0);
     } catch { setEmailSuggestions([]); }
   };
+
+  // Load playlist context when ?list= param is present
+  useEffect(() => {
+    if (!listId) { setPlaylistCtx(null); playlistCtxRef.current = null; return; }
+    getPlaylist(listId)
+      .then(res => {
+        const ctx = { id: listId, name: res.data.name, videos: res.data.videos || [], currentIndex: listIndex };
+        setPlaylistCtx(ctx);
+        playlistCtxRef.current = ctx;
+      })
+      .catch(() => { setPlaylistCtx(null); playlistCtxRef.current = null; });
+  }, [listId, listIndex]);
 
   // Keep activateMiniPlayer ref fresh
   useEffect(() => { activateMiniPlayerRef.current = activateMiniPlayer; });
@@ -197,23 +215,46 @@ const VideoDetail = () => {
   };
 
   // Autoplay-next handlers
-  const handleNextVideoReady = useCallback((v) => { setNextVideo(v); }, []);
+  const handleNextVideoReady = useCallback((v) => {
+    // Only use suggestion as next video when not in a playlist
+    if (!playlistCtxRef.current) setNextVideo(v);
+  }, []);
 
   const handleVideoEnded = useCallback(() => {
+    const ctx = playlistCtxRef.current;
+    if (ctx) {
+      const nextIdx = ctx.currentIndex + 1;
+      if (nextIdx < ctx.videos.length) {
+        const nv = ctx.videos[nextIdx];
+        setNextVideo({ ...nv, id: nv.videoId });
+        setAutoplayCountdown(5);
+      }
+      return;
+    }
     if (!nextVideo) return;
     setAutoplayCountdown(5);
   }, [nextVideo]);
 
+  const navigateToNext = useCallback(() => {
+    const ctx = playlistCtxRef.current;
+    if (ctx && nextVideo?.videoId) {
+      const nextIdx = ctx.currentIndex + 1;
+      navigate(`/video/${nextVideo.videoId}?list=${ctx.id}&index=${nextIdx}`);
+    } else if (nextVideo?.id) {
+      navigate(`/video/${nextVideo.id}`);
+    }
+  }, [nextVideo, navigate]);
+
   useEffect(() => {
     if (autoplayCountdown === null) return;
     if (autoplayCountdown === 0) {
-      navigate(`/video/${nextVideo.id}`);
+      navigateToNext();
       setAutoplayCountdown(null);
       return;
     }
     const t = setTimeout(() => setAutoplayCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [autoplayCountdown, nextVideo, navigate]);
+  }, [autoplayCountdown, navigateToNext]);
 
   // Reset autoplay state when navigating to a new video
   useEffect(() => {
@@ -222,9 +263,7 @@ const VideoDetail = () => {
   }, [id]);
 
   const cancelAutoplay = () => setAutoplayCountdown(null);
-  const playNextNow = () => {
-    if (nextVideo) navigate(`/video/${nextVideo.id}`);
-  };
+  const playNextNow = () => navigateToNext();
 
   const handleLike = async () => {
     if (!currentUser) { navigate('/login'); return; }
@@ -371,6 +410,24 @@ const VideoDetail = () => {
                   </div>
                 )}
               </div>
+
+              {/* Playlist context banner */}
+              {playlistCtx && (
+                <div className="flex items-center gap-3 bg-army-800/80 dark:bg-army-800 border border-army-700 rounded-xl px-4 py-2.5">
+                  <ListVideo className="h-4 w-4 text-primary-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-300 flex-1 min-w-0 truncate">
+                    <span className="text-gray-400">Pleylist: </span>
+                    <span className="font-medium text-white">{playlistCtx.name}</span>
+                    <span className="text-gray-500 ml-2">
+                      {playlistCtx.currentIndex + 1}/{playlistCtx.videos.length}
+                    </span>
+                  </span>
+                  <Link to={`/playlists/${playlistCtx.id}`}
+                    className="text-xs text-primary-400 hover:text-primary-300 flex-shrink-0 transition-colors">
+                    Pleylistə bax →
+                  </Link>
+                </div>
+              )}
 
               {/* Autoplay next video countdown */}
               {autoplayCountdown !== null && nextVideo && (

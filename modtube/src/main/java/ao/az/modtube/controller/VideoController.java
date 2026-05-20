@@ -162,8 +162,15 @@ public class VideoController {
             if (videoOpt.isEmpty()) return ResponseEntity.notFound().build();
             Video video = videoOpt.get();
             List<Video> suggestions = videoService.getSuggestionsByTags(video.getTags(), id, size);
+            if (suggestions.isEmpty()) {
+                suggestions = videoService.getPublicVideos(0, size + 1).stream()
+                        .filter(v -> !v.getId().equals(id))
+                        .limit(size)
+                        .collect(Collectors.toList());
+            }
+            final List<Video> finalSuggestions = suggestions;
             return ResponseEntity.ok(Map.of(
-                    "videos", suggestions.stream().map(v -> toResponse(v, null)).collect(Collectors.toList())
+                    "videos", finalSuggestions.stream().map(v -> toResponse(v, null)).collect(Collectors.toList())
             ));
         } catch (Exception e) {
             log.error("Error getting suggestions", e);

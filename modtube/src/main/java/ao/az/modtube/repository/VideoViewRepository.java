@@ -70,4 +70,13 @@ public interface VideoViewRepository extends JpaRepository<VideoView, Long> {
         SELECT COUNT(DISTINCT video_id) FROM video_views WHERE viewed_at >= :since
         """, nativeQuery = true)
     long countWatchedVideos(@Param("since") Instant since);
+
+    @Query(value = """
+        SELECT EXTRACT(DOW FROM viewed_at) AS dow, COUNT(*) AS view_count
+        FROM video_views
+        WHERE viewed_at >= :since
+        GROUP BY EXTRACT(DOW FROM viewed_at)
+        ORDER BY dow
+        """, nativeQuery = true)
+    List<Object[]> findWeekdayDistribution(@Param("since") Instant since);
 }

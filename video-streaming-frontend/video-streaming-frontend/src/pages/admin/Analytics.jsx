@@ -11,7 +11,7 @@ import {
 import Navbar from '../../components/Navbar';
 import {
   adminAnalyticsSummary, adminTopVideos, adminTopUsers,
-  adminDailyViews, adminHourlyViews,
+  adminDailyViews, adminHourlyViews, adminWeekdayViews,
 } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -76,17 +76,19 @@ export default function Analytics() {
   const [topUsers, setTopUsers]   = useState([]);
   const [daily, setDaily]         = useState([]);
   const [hourly, setHourly]       = useState([]);
+  const [weekday, setWeekday]     = useState([]);
   const [loading, setLoading]     = useState(true);
 
   const load = useCallback(async (d) => {
     setLoading(true);
     try {
-      const [sumRes, vidRes, usrRes, dayRes, hrRes] = await Promise.allSettled([
+      const [sumRes, vidRes, usrRes, dayRes, hrRes, wdRes] = await Promise.allSettled([
         adminAnalyticsSummary(d),
         adminTopVideos(d, 20),
         adminTopUsers(d, 20),
         adminDailyViews(d),
         adminHourlyViews(d),
+        adminWeekdayViews(d),
       ]);
       if (sumRes.status === 'fulfilled') setSummary(sumRes.value.data);
       if (vidRes.status === 'fulfilled') setTopVideos(vidRes.value.data);
@@ -103,6 +105,15 @@ export default function Analytics() {
         setHourly(Array.from({ length: 24 }, (_, h) => ({
           hour: `${String(h).padStart(2, '0')}:00`,
           'Baxış': map[h] ?? 0,
+        })));
+      }
+      const AZ_DAYS = ['Bazar', 'B.ertəsi', 'Çərş.ax.', 'Çərşənbə', 'Cümə ax.', 'Cümə', 'Şənbə'];
+      if (wdRes.status === 'fulfilled') {
+        const map = {};
+        wdRes.value.data.forEach(r => { map[r.dow] = r.count; });
+        setWeekday(Array.from({ length: 7 }, (_, d) => ({
+          day: AZ_DAYS[d],
+          'Baxış': map[d] ?? 0,
         })));
       }
     } finally {
@@ -216,6 +227,29 @@ export default function Analytics() {
                       <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} allowDecimals={false} />
                       <Tooltip contentStyle={{ fontSize: 12 }} />
                       <Bar dataKey="Baxış" fill={C.purple} radius={[2, 2, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>}
+            </div>
+          </div>
+
+          {/* Weekday distribution */}
+          <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-200 dark:border-army-700 shadow-sm overflow-hidden mb-6">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-army-700 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Həftə Günləri Bölgüsü</p>
+            </div>
+            <div className="p-4" style={{ height: 200 }}>
+              {loading
+                ? <div className="h-full flex items-center justify-center">
+                    <RefreshCw className="w-5 h-5 text-gray-300 animate-spin" />
+                  </div>
+                : <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={weekday} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                      <XAxis dataKey="day" tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                      <YAxis tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} allowDecimals={false} />
+                      <Tooltip contentStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="Baxış" fill={C.teal} radius={[3, 3, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>}
             </div>

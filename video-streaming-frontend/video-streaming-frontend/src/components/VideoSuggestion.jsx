@@ -99,29 +99,27 @@ const VideoSuggestions = ({ videoId, tags, onNextVideoReady }) => {
 
     const load = async () => {
       try {
-        // Try tag-based suggestions first
-        if (tags && tags.length > 0) {
-          const res = await getVideoSuggestions(videoId, 15);
-          const data = Array.isArray(res.data?.videos)   ? res.data.videos
-                     : Array.isArray(res.data?.content)  ? res.data.content
-                     : Array.isArray(res.data)           ? res.data : [];
-          const filtered = data.filter(v => v.id !== videoId);
-          if (!cancelled && filtered.length > 0) {
-            setSuggestions(filtered);
-            if (onNextVideoReady && filtered.length > 0) onNextVideoReady(filtered[0]);
-            return;
-          }
-        }
-
-        // Fallback: latest videos
-        const res = await getVideos(0, 15);
+        // Always try tag-based suggestions first (backend falls back to recent when no tags)
+        const res = await getVideoSuggestions(videoId, 15);
         const data = Array.isArray(res.data?.videos)   ? res.data.videos
                    : Array.isArray(res.data?.content)  ? res.data.content
                    : Array.isArray(res.data)           ? res.data : [];
-        if (!cancelled) {
-          const filtered = data.filter(v => v.id !== videoId);
+        const filtered = data.filter(v => v.id !== videoId);
+        if (!cancelled && filtered.length > 0) {
           setSuggestions(filtered);
-          if (onNextVideoReady && filtered.length > 0) onNextVideoReady(filtered[0]);
+          if (onNextVideoReady) onNextVideoReady(filtered[0]);
+          return;
+        }
+
+        // Fallback: latest videos
+        const res2 = await getVideos(0, 15);
+        const data2 = Array.isArray(res2.data?.videos)   ? res2.data.videos
+                    : Array.isArray(res2.data?.content)  ? res2.data.content
+                    : Array.isArray(res2.data)           ? res2.data : [];
+        if (!cancelled) {
+          const filtered2 = data2.filter(v => v.id !== videoId);
+          setSuggestions(filtered2);
+          if (onNextVideoReady && filtered2.length > 0) onNextVideoReady(filtered2[0]);
         }
       } catch {
         /* silent fail */

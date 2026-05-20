@@ -307,11 +307,14 @@ public class TranscodingService {
                            ":force_original_aspect_ratio=decrease,pad=" +
                            profile.width + ":" + profile.height + ":(ow-iw)/2:(oh-ih)/2",
                     "-c:v",      "libx264",
-                    "-preset",   "veryfast",
+                    "-preset",   "fast",
                     "-crf",      String.valueOf(profile.crf()),
                     "-profile:v", profile.h264Profile(),
                     "-level",    profile.h264Level(),
                     "-pix_fmt",  "yuv420p",
+                    "-g",        String.valueOf(segmentDuration * 30),
+                    "-keyint_min", String.valueOf(segmentDuration * 30),
+                    "-force_key_frames", "expr:gte(t,n_forced*" + segmentDuration + ")",
                     "-c:a",      "aac",
                     "-b:a",      profile.audioBitrate(),
                     "-ar",       "44100",
@@ -544,12 +547,12 @@ public class TranscodingService {
         /** CRF tuned per resolution: lower res tolerates higher CRF */
         int crf() {
             return switch (label) {
-                case "480p"  -> 28;
-                case "720p"  -> 26;
-                case "1080p" -> 24;
-                case "1440p" -> 23;
-                case "2160p" -> 22;
-                default      -> 26;
+                case "480p"  -> 23;
+                case "720p"  -> 21;
+                case "1080p" -> 19;
+                case "1440p" -> 18;
+                case "2160p" -> 17;
+                default      -> 21;
             };
         }
         /** Audio bitrate per resolution */
@@ -566,8 +569,9 @@ public class TranscodingService {
         /** H.264 profile: baseline for ≤720p (broad device compat), high for ≥1080p (quality) */
         String h264Profile() {
             return switch (label) {
-                case "480p", "720p" -> "baseline";
-                default             -> "high";
+                case "480p" -> "baseline";
+                case "720p" -> "main";
+                default     -> "high";
             };
         }
         /** H.264 level matching resolution/framerate requirements */
