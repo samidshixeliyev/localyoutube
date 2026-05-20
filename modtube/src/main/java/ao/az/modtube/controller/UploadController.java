@@ -56,9 +56,12 @@ public class UploadController {
     }
 
     @GetMapping("/videos")
-    public ResponseEntity<List<Map<String, Object>>> listVideos() {
+    @PreAuthorize("hasAnyAuthority('upload-video', 'admin-modtube', 'super-admin')")
+    public ResponseEntity<List<Map<String, Object>>> listVideos(
+            @AuthenticationPrincipal ModTubeUserDetails user) {
+        if (user == null) return ResponseEntity.status(401).build();
         try {
-            List<Video> videos = videoService.getAllVideos();
+            List<Video> videos = videoService.getVideosByUploaderEmail(user.getEmail());
             List<Map<String, Object>> result = videos.stream()
                     .map(this::videoToMap)
                     .collect(Collectors.toList());

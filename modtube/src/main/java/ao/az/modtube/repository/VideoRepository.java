@@ -38,6 +38,8 @@ public interface VideoRepository extends JpaRepository<Video, String> {
 
     long countByUploaderId(Long uploaderId);
 
+    List<Video> findByUploaderEmailOrderByUploadedAtDesc(String uploaderEmail);
+
     // ─── Status counts ───────────────────────────────────────────────────────
 
     long countByStatus(VideoStatus status);

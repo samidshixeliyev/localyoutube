@@ -112,6 +112,10 @@ public class VideoService {
         return videoRepository.findAllOrdered();
     }
 
+    public List<Video> getVideosByUploaderEmail(String email) {
+        return videoRepository.findByUploaderEmailOrderByUploadedAtDesc(email);
+    }
+
     public List<Video> getAllVideos(int page, int size) {
         return videoRepository.findAll(page, size);
     }
