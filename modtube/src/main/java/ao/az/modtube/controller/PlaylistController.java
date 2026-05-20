@@ -5,6 +5,7 @@ import ao.az.modtube.domain.Playlist;
 import ao.az.modtube.domain.PlaylistItem;
 import ao.az.modtube.repository.PlaylistItemRepository;
 import ao.az.modtube.service.PlaylistService;
+import ao.az.modtube.service.VideoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,7 @@ public class PlaylistController {
 
     private final PlaylistService playlistService;
     private final PlaylistItemRepository playlistItemRepository;
+    private final VideoService videoService;
 
     @GetMapping("/mine")
     public ResponseEntity<List<Map<String, Object>>> getMyPlaylists(
@@ -40,6 +42,12 @@ public class PlaylistController {
             m.put("allowedEmails",p.getAllowedEmailList());
             m.put("itemCount",    playlistItemRepository.countByPlaylistId(p.getId()));
             m.put("createdAt",    p.getCreatedAt());
+            String coverUrl = playlistItemRepository
+                    .findFirstByPlaylistIdOrderByPositionAsc(p.getId())
+                    .flatMap(item -> videoService.getVideo(item.getVideoId()))
+                    .map(v -> v.getThumbnailUrl())
+                    .orElse(null);
+            m.put("coverUrl", coverUrl);
             return m;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(result);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { MessageSquare, Send, Trash2, Loader2, AlertCircle } from "lucide-react";
 import api from "../services/api";
+import ConfirmModal from "./ConfirmModal";
 
 const fmtAge = (ts) => {
   if (!ts) return '';
@@ -25,6 +26,7 @@ const CommentSection = ({ videoId, currentUserId }) => {
   const [page,          setPage]          = useState(0);
   const [totalComments, setTotalComments] = useState(0);
   const [hasMore,       setHasMore]       = useState(false);
+  const [deleteTarget,  setDeleteTarget]  = useState(null);
 
   useEffect(() => { loadComments(); }, [videoId, page]);
 
@@ -56,13 +58,14 @@ const CommentSection = ({ videoId, currentUserId }) => {
     } finally { setSubmitting(false); }
   };
 
-  const handleDelete = async (commentId) => {
-    if (!window.confirm('Bu şərhi silmək istədiyinizə əminsinizmi?')) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.delete(`/videos/${videoId}/comments/${commentId}`);
-      setComments(p => p.filter(c => c.id !== commentId));
+      await api.delete(`/videos/${videoId}/comments/${deleteTarget}`);
+      setComments(p => p.filter(c => c.id !== deleteTarget));
       setTotalComments(p => Math.max(0, p - 1));
-    } catch { alert('Şərh silinə bilmədi'); }
+    } catch { setError('Şərh silinə bilmədi'); }
+    finally { setDeleteTarget(null); }
   };
 
   const initials = (name) => name ? name.charAt(0).toUpperCase() : '?';
@@ -153,7 +156,7 @@ const CommentSection = ({ videoId, currentUserId }) => {
                     <span className="text-xs text-gray-400 dark:text-gray-500">{fmtAge(c.createdAt)}</span>
                   </div>
                   {currentUserId && c.userId === currentUserId && (
-                    <button onClick={() => handleDelete(c.id)}
+                    <button onClick={() => setDeleteTarget(c.id)}
                       className="opacity-0 group-hover:opacity-100 text-gray-300 dark:text-gray-600
                                  hover:text-red-500 dark:hover:text-red-400 transition-all">
                       <Trash2 className="h-3.5 w-3.5" />
@@ -178,6 +181,15 @@ const CommentSection = ({ videoId, currentUserId }) => {
           )}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Şərh silinsin?"
+        message="Bu şərhi silmək istədiyinizə əminsinizmi?"
+        confirmLabel="Sil"
+        onConfirm={handleDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

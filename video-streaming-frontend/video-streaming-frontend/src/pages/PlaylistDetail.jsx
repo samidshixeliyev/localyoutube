@@ -5,6 +5,7 @@ import {
   Globe, Users, Link2, Shuffle, RotateCcw, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
+import ConfirmModal from '../components/ConfirmModal';
 import { getPlaylist, removeFromPlaylist } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -53,6 +54,8 @@ export default function PlaylistDetail() {
   const [descOpen,   setDescOpen]   = useState(false);
   const [shuffled,   setShuffled]   = useState(false);
   const [displayOrder, setDisplayOrder] = useState([]); // indices into playlist.videos
+  const [removeTarget, setRemoveTarget] = useState(null); // videoId pending removal
+  const [removeError,  setRemoveError]  = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -76,15 +79,16 @@ export default function PlaylistDetail() {
     if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [currentIdx]);
 
-  const handleRemove = async (videoId) => {
-    if (!window.confirm('Bu video pleylistdən silinsin?')) return;
+  const confirmRemove = async () => {
+    if (!removeTarget) return;
     try {
-      await removeFromPlaylist(id, videoId);
-      const newVideos = playlist.videos.filter(v => v.videoId !== videoId);
+      await removeFromPlaylist(id, removeTarget);
+      const newVideos = playlist.videos.filter(v => v.videoId !== removeTarget);
       setPlaylist(p => ({ ...p, videos: newVideos, totalItems: p.totalItems - 1 }));
       setDisplayOrder(newVideos.map((_, i) => i));
       if (currentIdx >= newVideos.length) setCurrentIdx(Math.max(0, newVideos.length - 1));
-    } catch { alert('Silinə bilmədi'); }
+    } catch { setRemoveError('Video silinə bilmədi'); }
+    finally { setRemoveTarget(null); }
   };
 
   const toggleShuffle = () => {
@@ -358,7 +362,7 @@ export default function PlaylistDetail() {
                         {/* Remove (owner only) */}
                         {isOwner && (
                           <button
-                            onClick={e => { e.stopPropagation(); handleRemove(v.videoId); }}
+                            onClick={e => { e.stopPropagation(); setRemoveTarget(v.videoId); }}
                             className="flex-shrink-0 p-1.5 text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all rounded-lg"
                             title="Pleylistdən sil"
                           >
@@ -385,6 +389,22 @@ export default function PlaylistDetail() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!removeTarget}
+        title="Video silinsin?"
+        message="Bu video pleylistdən silinsin? Video özü silinmir."
+        confirmLabel="Sil"
+        onConfirm={confirmRemove}
+        onClose={() => setRemoveTarget(null)}
+      />
+
+      {removeError && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg"
+          onClick={() => setRemoveError('')}>
+          {removeError}
+        </div>
+      )}
     </>
   );
 }

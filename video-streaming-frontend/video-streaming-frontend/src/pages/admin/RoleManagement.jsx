@@ -10,6 +10,7 @@ import {
   adminDeletePermission,
 } from '../../services/api';
 import Navbar from '../../components/Navbar';
+import ConfirmModal from '../../components/ConfirmModal';
 import {
   ArrowLeft, Shield, Plus, Edit2, Trash2, X, Check,
   Lock, Save, AlertTriangle, ChevronDown, ChevronUp, Key,
@@ -437,6 +438,7 @@ const RoleManagement = () => {
   const [permSaving, setPermSaving] = useState(false);
   const [permErr, setPermErr] = useState('');
   const [permTab, setPermTab] = useState('Hamısı');
+  const [confirmPerm, setConfirmPerm] = useState(null);
 
   useEffect(() => {
     Promise.all([adminGetRoles(), adminGetPermissions()])
@@ -467,8 +469,7 @@ const RoleManagement = () => {
   };
 
   const handleDeletePermission = async (perm) => {
-    if (SYSTEM_PERMISSIONS.has(perm.name)) return;
-    if (!window.confirm(`"${perm.name}" icazəsini silmək istədiyinizə əminsinizmi?`)) return;
+    if (!perm) return;
     try {
       await adminDeletePermission(perm.id);
       setPermissions(prev => prev.filter(p => p.id !== perm.id));
@@ -629,7 +630,8 @@ const RoleManagement = () => {
             {/* Permission cards grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-5 pb-5">
               {visiblePerms.map(p => (
-                <PermCard key={p.id} perm={p} selectable={false} onDelete={handleDeletePermission} />
+                <PermCard key={p.id} perm={p} selectable={false}
+                  onDelete={SYSTEM_PERMISSIONS.has(p.name) ? undefined : setConfirmPerm} />
               ))}
             </div>
           </div>
@@ -672,6 +674,15 @@ const RoleManagement = () => {
       )}
 
       <Toast msg={toast.msg} type={toast.type} />
+
+      <ConfirmModal
+        open={!!confirmPerm}
+        title="İcazə silinsin?"
+        message={`"${confirmPerm?.name}" icazəsini silmək istədiyinizə əminsinizmi?`}
+        confirmLabel="Sil"
+        onConfirm={() => handleDeletePermission(confirmPerm)}
+        onClose={() => setConfirmPerm(null)}
+      />
     </>
   );
 };

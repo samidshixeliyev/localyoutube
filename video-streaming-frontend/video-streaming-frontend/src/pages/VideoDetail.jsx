@@ -6,6 +6,7 @@ import ThumbnailUpload from "../components/ThumbnailUpload";
 import CommentSection from "../components/CommentSection";
 import VideoSuggestions from "../components/VideoSuggestion";
 import Navbar from "../components/Navbar";
+import ConfirmModal from "../components/ConfirmModal";
 import {
   ThumbsUp, Eye, Calendar, Trash2, Loader2, Image,
   Edit2, Lock, Globe, Link2, Users, Save, X, Check,
@@ -81,6 +82,16 @@ const VideoDetail = () => {
   const [emailInput, setEmailInput] = useState('');
   const [tagInput,   setTagInput]   = useState('');
   const [saving,     setSaving]     = useState(false);
+
+  // Delete confirm
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Edit form errors
+  const [editError, setEditError] = useState('');
+  const [tagError,  setTagError]  = useState('');
+
+  // Playlist error
+  const [plError, setPlError] = useState('');
 
   // Embed (admin only)
   const [showEmbedModal, setShowEmbedModal] = useState(false);
@@ -279,33 +290,33 @@ const VideoDetail = () => {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Bu videonu silmək istədiyinizə əminsinizmi? Bu əməliyyat geri alına bilməz.')) return;
     try {
       await videoService.deleteVideo(id);
       navigate('/my-videos');
     } catch (err) {
-      alert('Video silinə bilmədi: ' + (err.response?.data?.message || err.message));
+      setError('Video silinə bilmədi: ' + (err.response?.data?.message || err.message));
     }
   };
 
   const handleSaveEdit = async () => {
-    if (!editForm.title.trim()) { alert('Başlıq tələb olunur'); return; }
+    if (!editForm.title.trim()) { setEditError('Başlıq tələb olunur'); return; }
     if (editForm.visibility === 'RESTRICTED' && editForm.allowedEmails.length === 0) {
-      alert('Məhdud giriş üçün ən azı bir e-poçt əlavə edin'); return;
+      setEditError('Məhdud giriş üçün ən azı bir e-poçt əlavə edin'); return;
     }
+    setEditError('');
     setSaving(true);
     try {
       await api.put(`/videos/${id}`, { title: editForm.title, description: editForm.description, tags: editForm.tags });
       await api.post(`/videos/${id}/privacy`, { visibility: editForm.visibility, allowedUserEmails: editForm.allowedEmails });
       await loadVideo();
       setIsEditing(false);
-    } catch (err) { alert('Yenilənə bilmədi: ' + (err.response?.data?.message || err.message)); }
+    } catch (err) { setEditError('Yenilənə bilmədi: ' + (err.response?.data?.message || err.message)); }
     finally { setSaving(false); }
   };
 
   const addEmail = () => {
     const e = emailInput.trim().toLowerCase();
-    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { alert('Düzgün e-poçt daxil edin'); return; }
+    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return;
     if (editForm.allowedEmails.includes(e)) return;
     setEditForm(p => ({ ...p, allowedEmails: [...p.allowedEmails, e] }));
     setEmailInput('');
@@ -315,7 +326,8 @@ const VideoDetail = () => {
   const addTag = () => {
     const t = tagInput.replace(/^#+/, '').trim().toLowerCase();
     if (!t || editForm.tags.includes(t) || editForm.tags.length >= 10) return;
-    if (!/^[a-z0-9-]+$/.test(t)) { alert('Etiketlər yalnız hərf, rəqəm və tire içərə bilər'); return; }
+    if (!/^[a-z0-9-]+$/.test(t)) { setTagError('Etiketlər yalnız hərf, rəqəm və tire içərə bilər'); return; }
+    setTagError('');
     setEditForm(p => ({ ...p, tags: [...p.tags, t] }));
     setTagInput('');
   };
@@ -532,7 +544,7 @@ const VideoDetail = () => {
                         </>
                       )}
                       {canDelete && (
-                        <button onClick={handleDelete}
+                        <button onClick={() => setShowDeleteConfirm(true)}
                           className="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-full text-sm font-semibold hover:bg-red-700 transition-colors">
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -586,6 +598,11 @@ const VideoDetail = () => {
               {isEditing && (
                 <div className="bg-white dark:bg-army-800 rounded-xl border border-gray-200 dark:border-army-700 p-5 space-y-4">
                   <h2 className="font-bold text-gray-900 dark:text-gray-100 text-lg">Videonu redaktə et</h2>
+                  {editError && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 text-sm text-red-700 dark:text-red-400">
+                      {editError}
+                    </div>
+                  )}
 
                   {/* Title */}
                   <div>
@@ -620,6 +637,7 @@ const VideoDetail = () => {
                         <Plus className="h-4 w-4" />
                       </button>
                     </div>
+                    {tagError && <p className="text-xs text-red-500 mt-1">{tagError}</p>}
                     <div className="flex flex-wrap gap-1.5">
                       {editForm.tags.map(t => (
                         <span key={t} className="inline-flex items-center gap-1 bg-primary-100 dark:bg-primary-900/40 text-primary-800 dark:text-primary-300 px-2 py-0.5 rounded-full text-xs font-medium">
@@ -755,6 +773,12 @@ const VideoDetail = () => {
               </button>
             </div>
             <div className="p-4 max-h-72 overflow-y-auto">
+              {plError && (
+                <div className="mb-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-2.5 text-xs text-red-700 dark:text-red-400 flex items-center justify-between">
+                  {plError}
+                  <button onClick={() => setPlError('')} className="ml-2 text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                </div>
+              )}
               {playlists.length === 0 ? (
                 <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">Pleylist yoxdur</p>
               ) : (
@@ -768,8 +792,7 @@ const VideoDetail = () => {
                           await addToPlaylist(pl.id, id);
                           setShowPlaylistModal(false);
                         } catch (e) {
-                          if (e.response?.status === 409) alert('Video artıq pleylistdədir');
-                          else alert('Əlavə edilə bilmədi');
+                          setPlError(e.response?.status === 409 ? 'Video artıq pleylistdədir' : 'Əlavə edilə bilmədi');
                         } finally { setPlAdding(null); }
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-army-700 transition-colors text-left">
@@ -796,7 +819,7 @@ const VideoDetail = () => {
                       await addToPlaylist(r.data.id, id);
                       setShowPlaylistModal(false);
                       setPlNewName('');
-                    } catch { alert('Yaradıla bilmədi'); }
+                    } catch { setPlError('Yaradıla bilmədi'); }
                     finally { setPlCreating(false); }
                   })()}
                 />
@@ -809,7 +832,7 @@ const VideoDetail = () => {
                       await addToPlaylist(r.data.id, id);
                       setShowPlaylistModal(false);
                       setPlNewName('');
-                    } catch { alert('Yaradıla bilmədi'); }
+                    } catch { setPlError('Yaradıla bilmədi'); }
                     finally { setPlCreating(false); }
                   }}
                   className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50 transition-colors">
@@ -820,6 +843,16 @@ const VideoDetail = () => {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <ConfirmModal
+        open={showDeleteConfirm}
+        title="Videonu sil"
+        message="Bu videonu silmək istədiyinizə əminsinizmi? Bu əməliyyat geri alına bilməz."
+        confirmLabel="Sil"
+        onConfirm={handleDelete}
+        onClose={() => setShowDeleteConfirm(false)}
+      />
 
       {/* Embed modal — admin only */}
       {showEmbedModal && isAdmin && (

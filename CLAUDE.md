@@ -800,4 +800,34 @@ Additionally, two metric names in Metrics.jsx were wrong:
 
 ---
 
+### 2026-05-20 — Confirm Modals + YouTube-Style Playlists
+
+#### What was done
+
+1. **Replaced all `alert()`/`window.confirm()` with proper modals**
+   - Created `src/components/ConfirmModal.jsx` — reusable centered dialog with danger/info variants, Escape key support, backdrop dismiss.
+   - Files updated: `VideoDetail.jsx`, `PlaylistDetail.jsx`, `MyPlaylists.jsx`, `CommentSection.jsx`, `RoleManagement.jsx`.
+   - Validation errors in VideoDetail edit form (`editError`, `tagError`) now show as inline banners instead of popups.
+   - Playlist-add errors (`plError`) shown inside the playlist modal.
+
+2. **MyPlaylists.jsx — YouTube-style grid redesign**
+   - Grid layout: `grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5`.
+   - Each playlist card: aspect-video thumbnail with stacked-depth effect, video count badge, play-all overlay on hover, title (2-line clamp), visibility badge, 3-dot context menu (edit/delete).
+   - "New playlist" `+` card in grid alongside existing playlists.
+   - Create/edit now opens in a centered modal overlay (`PlaylistModal` component) — no more inline form.
+   - Delete uses `ConfirmModal`.
+
+3. **Backend: playlist list includes `coverUrl`**
+   - `PlaylistItemRepository`: added `findFirstByPlaylistIdOrderByPositionAsc()` Spring Data method.
+   - `PlaylistController`: injected `VideoService`; `getMyPlaylists()` now includes `coverUrl` from first video's thumbnail.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens.
+- **Backend `upload.max-concurrent` setting**: not persisted in DB yet.
+- **UploadController.listVideos**: returns all videos, not filtered by current user.
+- **Backend rebuild needed**: `PlaylistController`/`PlaylistItemRepository` changes require `docker compose build && docker compose up -d --force-recreate` on VPS.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*

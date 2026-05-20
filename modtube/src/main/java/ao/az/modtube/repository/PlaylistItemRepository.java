@@ -13,6 +13,7 @@ import java.util.Optional;
 @Repository
 public interface PlaylistItemRepository extends JpaRepository<PlaylistItem, Long> {
     List<PlaylistItem> findByPlaylistIdOrderByPositionAsc(String playlistId);
+    Optional<PlaylistItem> findFirstByPlaylistIdOrderByPositionAsc(String playlistId);
     Optional<PlaylistItem> findByPlaylistIdAndVideoId(String playlistId, String videoId);
     boolean existsByPlaylistIdAndVideoId(String playlistId, String videoId);
 
