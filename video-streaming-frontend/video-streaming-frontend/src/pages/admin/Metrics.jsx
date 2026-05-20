@@ -73,12 +73,14 @@ const fmtUptime = s  => {
 // ── Time range config ─────────────────────────────────────────────────────────
 
 const TIME_RANGES = [
-  { label: '1 dəq',   seconds: 60,    step: 10,   rateWin: '30s' },
-  { label: '5 dəq',   seconds: 300,   step: 15,   rateWin: '1m'  },
-  { label: '30 dəq',  seconds: 1800,  step: 30,   rateWin: '2m'  },
-  { label: '1 saat',  seconds: 3600,  step: 60,   rateWin: '5m'  },
-  { label: '6 saat',  seconds: 21600, step: 360,  rateWin: '10m' },
-  { label: '24 saat', seconds: 86400, step: 1440, rateWin: '30m' },
+  { label: '1 dəq',   seconds: 60,      step: 10,    rateWin: '30s' },
+  { label: '5 dəq',   seconds: 300,     step: 15,    rateWin: '1m'  },
+  { label: '30 dəq',  seconds: 1800,    step: 30,    rateWin: '2m'  },
+  { label: '1 saat',  seconds: 3600,    step: 60,    rateWin: '5m'  },
+  { label: '6 saat',  seconds: 21600,   step: 360,   rateWin: '10m' },
+  { label: '24 saat', seconds: 86400,   step: 1440,  rateWin: '30m' },
+  { label: '7 gün',   seconds: 604800,  step: 3600,  rateWin: '2h'  },
+  { label: '30 gün',  seconds: 2592000, step: 86400, rateWin: '6h'  },
 ];
 
 // ── Colour palette ────────────────────────────────────────────────────────────
@@ -379,10 +381,15 @@ export default function Metrics() {
     return () => { clearInterval(timerRef.current); clearInterval(countRef.current); };
   }, [autoRefresh, fetchStats, fetchCharts, fetchDbStats]);
 
-  // ── Tick formatter — shows seconds for very short ranges ─────────────────
+  // ── Tick formatter — adapts to range granularity ──────────────────────────
+  const AZ_MONTHS_SHORT = ['Yan','Fev','Mar','Apr','May','İyn','İyl','Avq','Sen','Okt','Noy','Dek'];
   const tickFmt = range_.step < 60
     ? ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    : ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    : range_.step < 3600
+    ? ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : range_.step < 86400
+    ? ts => { const d = new Date(ts); return `${d.getDate()} ${AZ_MONTHS_SHORT[d.getMonth()]} ${String(d.getHours()).padStart(2,'0')}:00`; }
+    : ts => { const d = new Date(ts); return `${d.getDate()} ${AZ_MONTHS_SHORT[d.getMonth()]}`; };
 
   // ── Derived colours ───────────────────────────────────────────────────────
   const cpuColor  = stats.cpu  > 85 ? C.red : stats.cpu  > 70 ? C.amber : C.green;
