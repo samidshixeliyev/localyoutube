@@ -36,7 +36,8 @@ public class SystemSettingController {
             "idp.claim.username",
             // Upload behaviour
             "upload.max-parallel",
-            "upload.max-concurrent"
+            "upload.max-concurrent",
+            "upload.max-quality"
     );
 
     private final SystemSettingService settingService;

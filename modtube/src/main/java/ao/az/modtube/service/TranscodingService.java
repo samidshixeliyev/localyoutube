@@ -3,6 +3,7 @@ package ao.az.modtube.service;
 import ao.az.modtube.domain.Video;
 import ao.az.modtube.domain.VideoStatus;
 import ao.az.modtube.metrics.ModTubeMetrics;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -43,6 +44,9 @@ public class TranscodingService {
     private final Path thumbnailDir;
     private final int segmentDuration;
     private final List<String> allowedQualities;
+
+    @Autowired
+    private SystemSettingService settingService;
     private final ConcurrentHashMap<String, Process> activeProcesses = new ConcurrentHashMap<>();
 
     /** Human-readable stage exposed via GET /api/upload/status/{id} */
@@ -477,21 +481,30 @@ public class TranscodingService {
     }
 
     private List<QualityProfile> buildQualityProfiles(VideoInfo info) {
+        // Admin-configurable cap: "upload.max-quality" → 480p/720p/1080p/1440p/2160p
+        int maxHeight = switch (settingService.get("upload.max-quality", "2160p")) {
+            case "480p"  -> 480;
+            case "720p"  -> 720;
+            case "1080p" -> 1080;
+            case "1440p" -> 1440;
+            default      -> 2160;
+        };
+
         List<QualityProfile> profiles = new ArrayList<>();
 
-        if (allowedQualities.contains("480p")) {
+        if (allowedQualities.contains("480p") && maxHeight >= 480) {
             profiles.add(new QualityProfile("480p", 854, 480, 1_500_000));
         }
-        if (info.height >= 720 && allowedQualities.contains("720p")) {
+        if (info.height >= 720 && allowedQualities.contains("720p") && maxHeight >= 720) {
             profiles.add(new QualityProfile("720p", 1280, 720, 3_000_000));
         }
-        if (info.height >= 1080 && allowedQualities.contains("1080p")) {
+        if (info.height >= 1080 && allowedQualities.contains("1080p") && maxHeight >= 1080) {
             profiles.add(new QualityProfile("1080p", 1920, 1080, 6_000_000));
         }
-        if (info.height >= 1440 && allowedQualities.contains("1440p")) {
+        if (info.height >= 1440 && allowedQualities.contains("1440p") && maxHeight >= 1440) {
             profiles.add(new QualityProfile("1440p", 2560, 1440, 12_000_000));
         }
-        if (info.height >= 2160 && allowedQualities.contains("2160p")) {
+        if (info.height >= 2160 && allowedQualities.contains("2160p") && maxHeight >= 2160) {
             profiles.add(new QualityProfile("2160p", 3840, 2160, 25_000_000));
         }
 

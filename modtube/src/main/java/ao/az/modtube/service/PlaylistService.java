@@ -131,7 +131,7 @@ public class PlaylistService {
         if (viewer != null && viewer.isSuperAdmin()) return true;
         String vis = p.getVisibility() != null ? p.getVisibility().toUpperCase() : "PUBLIC";
         return switch (vis) {
-            case "PUBLIC" -> true;
+            case "PUBLIC", "UNLISTED" -> true;
             case "PRIVATE" -> false;
             case "RESTRICTED" -> viewer != null && p.getAllowedEmailList().stream()
                     .anyMatch(e -> e.equalsIgnoreCase(viewer.getEmail()));
@@ -144,6 +144,7 @@ public class PlaylistService {
         return switch (v.toUpperCase()) {
             case "PRIVATE"    -> "PRIVATE";
             case "RESTRICTED" -> "RESTRICTED";
+            case "UNLISTED"   -> "UNLISTED";
             default           -> "PUBLIC";
         };
     }
