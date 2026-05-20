@@ -61,7 +61,7 @@ const VideoCard = ({ video, highlight, showVisibility = false }) => {
         return `${Math.floor(days / 365)} il əvvəl`;
     };
 
-    const visibility = video.visibility || 'public';
+    const visibility = (video.visibility || 'public').toLowerCase();
     const badge = VISIBILITY_BADGES[visibility] || VISIBILITY_BADGES.public;
 
     return (
