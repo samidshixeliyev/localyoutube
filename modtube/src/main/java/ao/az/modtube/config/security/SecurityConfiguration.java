@@ -56,6 +56,7 @@ public class SecurityConfiguration {
                         .requestMatchers("/login", "/callback", "/logged_out",
                                 "/video/**", "/embed/**", "/search", "/shorts",
                                 "/upload", "/my-videos", "/change-password",
+                                "/playlists", "/playlists/**", "/my-playlists",
                                 "/admin/**").permitAll()
 
                         // AUTHENTICATION - Public
@@ -114,13 +115,15 @@ public class SecurityConfiguration {
                         // Everything else (user/role management etc.) — super-admin only
                         .requestMatchers("/api/admin/**").hasAnyAuthority("super-admin", "ROLE_SUPER_ADMIN")
 
-                        .requestMatchers("/api/upload/**").hasAnyAuthority("admin-modtube", "super-admin")
+                        .requestMatchers("/api/upload/**").hasAnyAuthority("upload-video", "admin-modtube", "super-admin")
 
-                        .requestMatchers(HttpMethod.PUT, "/api/videos/*").hasAnyAuthority("admin-modtube", "super-admin")
-                        .requestMatchers(HttpMethod.PATCH, "/api/videos/*").hasAnyAuthority("admin-modtube", "super-admin")
-                        .requestMatchers(HttpMethod.DELETE, "/api/videos/*").hasAnyAuthority("admin-modtube", "super-admin")
-                        .requestMatchers(HttpMethod.POST, "/api/videos/*/thumbnail").hasAnyAuthority("admin-modtube", "super-admin")
-                        .requestMatchers(HttpMethod.POST, "/api/videos/*/privacy").hasAnyAuthority("admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.PUT, "/api/videos/*").hasAnyAuthority("upload-video", "admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.PATCH, "/api/videos/*").hasAnyAuthority("upload-video", "admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.DELETE, "/api/videos/*").hasAnyAuthority("delete-video", "upload-video", "admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/thumbnail").hasAnyAuthority("upload-video", "admin-modtube", "super-admin")
+                        .requestMatchers(HttpMethod.POST, "/api/videos/*/privacy").hasAnyAuthority("upload-video", "admin-modtube", "super-admin")
+
+                        .requestMatchers("/api/playlists/**").authenticated()
 
                         // Actuator - admin-modtube OR super-admin
                         .requestMatchers("/actuator/**").hasAnyAuthority("admin-modtube", "super-admin")

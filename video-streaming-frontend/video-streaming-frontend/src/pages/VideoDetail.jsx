@@ -10,11 +10,11 @@ import {
   ThumbsUp, Eye, Calendar, Trash2, Loader2, Image,
   Edit2, Lock, Globe, Link2, Users, Save, X, Check,
   Plus, Hash, Code2, Copy, CheckCheck, ChevronDown, ChevronUp,
-  Play, SkipForward
+  Play, SkipForward, ListVideo
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useMiniPlayer } from "../context/MiniPlayerContext";
-import api, { adminGetUsers } from "../services/api";
+import api, { adminGetUsers, getMyPlaylists, addToPlaylist, createPlaylist } from "../services/api";
 
 /* ── visibility helpers ──────────────────────────────────────── */
 const VISIBILITY = {
@@ -79,6 +79,13 @@ const VideoDetail = () => {
   // Embed (admin only)
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [embedCopied,    setEmbedCopied]    = useState(false);
+
+  // Playlist
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [playlists,         setPlaylists]         = useState([]);
+  const [plNewName,         setPlNewName]         = useState('');
+  const [plAdding,          setPlAdding]          = useState(null);
+  const [plCreating,        setPlCreating]        = useState(false);
 
   // Email autocomplete for restricted edit
   const [emailSuggestions, setEmailSuggestions] = useState([]);
@@ -432,6 +439,18 @@ const VideoDetail = () => {
                         {video.likes || 0}
                       </button>
 
+                      {/* Add to playlist — authenticated users */}
+                      {currentUser && (
+                        <button onClick={async () => {
+                          try { const r = await getMyPlaylists(); setPlaylists(r.data || []); } catch { setPlaylists([]); }
+                          setShowPlaylistModal(true);
+                        }}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 dark:bg-army-800 text-gray-700 dark:text-gray-300 rounded-full text-sm font-semibold hover:bg-gray-200 dark:hover:bg-army-700 transition-colors">
+                          <ListVideo className="h-4 w-4" />
+                          Pleylist
+                        </button>
+                      )}
+
                       {/* Embed — admin only */}
                       {isAdmin && (
                         <button onClick={() => setShowEmbedModal(true)}
@@ -661,6 +680,89 @@ const VideoDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Add to Playlist modal */}
+      {showPlaylistModal && currentUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+             onClick={() => setShowPlaylistModal(false)}>
+          <div className="bg-white dark:bg-army-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-army-700 w-full max-w-sm"
+               onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-army-700">
+              <div className="flex items-center gap-2">
+                <ListVideo className="h-5 w-5 text-primary-600" />
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Pleylistə əlavə et</h3>
+              </div>
+              <button onClick={() => setShowPlaylistModal(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-army-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 max-h-72 overflow-y-auto">
+              {playlists.length === 0 ? (
+                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">Pleylist yoxdur</p>
+              ) : (
+                <div className="space-y-1">
+                  {playlists.map(pl => (
+                    <button key={pl.id}
+                      disabled={plAdding === pl.id}
+                      onClick={async () => {
+                        setPlAdding(pl.id);
+                        try {
+                          await addToPlaylist(pl.id, id);
+                          setShowPlaylistModal(false);
+                        } catch (e) {
+                          if (e.response?.status === 409) alert('Video artıq pleylistdədir');
+                          else alert('Əlavə edilə bilmədi');
+                        } finally { setPlAdding(null); }
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-army-700 transition-colors text-left">
+                      <ListVideo className="w-4 h-4 text-primary-500 flex-shrink-0" />
+                      <span className="flex-1 min-w-0 text-sm text-gray-800 dark:text-gray-200 truncate">{pl.name}</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">{pl.itemCount}</span>
+                      {plAdding === pl.id && <Loader2 className="w-4 h-4 animate-spin text-primary-500" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-4 pb-4 border-t border-gray-100 dark:border-army-700 pt-3">
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-army-600 bg-white dark:bg-army-700 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Yeni pleylist adı"
+                  value={plNewName}
+                  onChange={e => setPlNewName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !plCreating && plNewName.trim() && (async () => {
+                    setPlCreating(true);
+                    try {
+                      const r = await createPlaylist(plNewName.trim());
+                      await addToPlaylist(r.data.id, id);
+                      setShowPlaylistModal(false);
+                      setPlNewName('');
+                    } catch { alert('Yaradıla bilmədi'); }
+                    finally { setPlCreating(false); }
+                  })()}
+                />
+                <button
+                  disabled={plCreating || !plNewName.trim()}
+                  onClick={async () => {
+                    setPlCreating(true);
+                    try {
+                      const r = await createPlaylist(plNewName.trim());
+                      await addToPlaylist(r.data.id, id);
+                      setShowPlaylistModal(false);
+                      setPlNewName('');
+                    } catch { alert('Yaradıla bilmədi'); }
+                    finally { setPlCreating(false); }
+                  }}
+                  className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50 transition-colors">
+                  {plCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Embed modal — admin only */}
       {showEmbedModal && isAdmin && (

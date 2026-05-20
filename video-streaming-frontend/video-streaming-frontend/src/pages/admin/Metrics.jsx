@@ -73,12 +73,12 @@ const fmtUptime = s  => {
 // ── Time range config ─────────────────────────────────────────────────────────
 
 const TIME_RANGES = [
-  { label: '1d',  seconds: 60,    step: 10,   rateWin: '30s' },
-  { label: '5d',  seconds: 300,   step: 15,   rateWin: '1m'  },
-  { label: '30d', seconds: 1800,  step: 30,   rateWin: '2m'  },
-  { label: '1s',  seconds: 3600,  step: 60,   rateWin: '5m'  },
-  { label: '6s',  seconds: 21600, step: 360,  rateWin: '10m' },
-  { label: '24s', seconds: 86400, step: 1440, rateWin: '30m' },
+  { label: '1 dəq',   seconds: 60,    step: 10,   rateWin: '30s' },
+  { label: '5 dəq',   seconds: 300,   step: 15,   rateWin: '1m'  },
+  { label: '30 dəq',  seconds: 1800,  step: 30,   rateWin: '2m'  },
+  { label: '1 saat',  seconds: 3600,  step: 60,   rateWin: '5m'  },
+  { label: '6 saat',  seconds: 21600, step: 360,  rateWin: '10m' },
+  { label: '24 saat', seconds: 86400, step: 1440, rateWin: '30m' },
 ];
 
 // ── Colour palette ────────────────────────────────────────────────────────────
@@ -291,10 +291,11 @@ export default function Metrics() {
         range(`sum(rate(node_disk_read_bytes_total[${rw}]))`, S, E, T),
         range(`sum(rate(node_disk_written_bytes_total[${rw}]))`, S, E, T),
         range(`(sum(rate(http_server_requests_seconds_count{status=~"[45].."}[${rw}])) or vector(0)) / sum(rate(http_server_requests_seconds_count[${rw}])) * 100`, S, E, T),
+        range('jvm_threads_live_threads', S, E, T),
       ]);
       const [cpuTs, memTs, httpTs, p95Ts, heapUsed, heapMax,
              uploadRate, viewRate, diskTs, transTs,
-             netInTs, netOutTs, loadTs, diskRdTs, diskWrTs, errRateTs] =
+             netInTs, netOutTs, loadTs, diskRdTs, diskWrTs, errRateTs, threadsTs] =
         chartSettled.map(r => r.status === 'fulfilled' ? r.value : empty);
 
       const heapData = (() => {
@@ -332,6 +333,7 @@ export default function Metrics() {
         diskIo:     diskIoData,
         load:       toSeries(loadTs,     () => 'Yük'),
         errRate:    toSeries(errRateTs,  () => 'Xəta %'),
+        threads:    toSeries(threadsTs,  () => 'Aktiv İplər'),
         rawMem:     toSeries(memTs,      () => 'İstifadə'),
       });
     } catch {/* charts fail gracefully */}
@@ -696,6 +698,24 @@ export default function Metrics() {
                   <Area type="monotone" dataKey="İstifadə" stroke={C.sky}  fill="url(#gHeap)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="Maksimum" stroke={C.red}  strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
                 </ComposedChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="JVM Thread Sayı" loading={chartsLoading} empty={!charts.threads?.length}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={charts.threads} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gThreads" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={C.teal} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={C.teal} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: tickColor }} stroke={axisColor} />
+                  <Tooltip content={<ChartTooltip unit=" ip" />} />
+                  <Area type="monotone" dataKey="Aktiv İplər" stroke={C.teal} fill="url(#gThreads)" strokeWidth={2} dot={false} />
+                </AreaChart>
               </ResponsiveContainer>
             </ChartCard>
           </div>

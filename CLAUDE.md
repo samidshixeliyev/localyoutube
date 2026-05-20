@@ -743,4 +743,61 @@ Additionally, two metric names in Metrics.jsx were wrong:
 
 ---
 
+### 2026-05-20 — Bug Fixes, Feature Parity Verification, Playlist Visibility
+
+#### Bug fixes (from previous session)
+
+1. **IDP user role not applying after admin assigns new role**
+   - Root cause: `AuthContext.loginWithIdp()` hardcoded `permissions: []` and `role: 'USER'`.
+   - Fix: Made `loginWithIdp` async; after storing IDP token it calls new `GET /api/auth/profile` endpoint which returns DB-backed role+permissions via `@AuthenticationPrincipal ModTubePrincipal`.
+   - `AuthController.java`: new `@GetMapping("/profile")` uses the Spring Security principal resolved by `JwtAuthenticationFilter` (works for both HS256 local tokens and RS256 IDP tokens).
+
+2. **Private video shown as public after upload / Restricted video allowed users can't see**
+   - Root cause: `upload-video` permission was missing from `SecurityConfiguration` filter chain rules for `PUT /api/videos/*`, `POST /api/videos/*/privacy`, `POST /api/videos/*/thumbnail`. Filter chain blocked the request before `@PreAuthorize` could run.
+   - Fix: Added `upload-video` to all video-mutation filter chain rules. Also fixed `@PreAuthorize` on those three endpoints.
+
+#### New features
+
+3. **Dark mode army backgrounds → YouTube-style dark neutral grays**
+   - `tailwind.config.js`: `army-500` → `#606060`, `army-600` → `#4d4d4d`, `army-700` → `#3d3d3d`, `army-800` → `#212121`, `army-900` → `#0f0f0f`, `army-950` → `#070707`.
+
+4. **Metrics: JVM Thread count trend chart**
+   - Added `jvm_threads_live_threads` to range queries and new AreaChart "JVM Thread Sayı" on Metrics page.
+
+5. **Metrics: readable time range labels**
+   - Changed from `1d`, `5s` etc. to `1 dəq`, `5 dəq`, `30 dəq`, `1 saat`, `6 saat`, `24 saat`.
+
+6. **Home page: infinite scroll pagination**
+   - Replaced "Daha çox yüklə" button with IntersectionObserver sentinel div + spinner. Next page loads automatically when the sentinel enters the viewport.
+
+7. **Playlist feature (YouTube-like)**
+   - Backend: `V4__playlists.sql` (tables), `Playlist.java`, `PlaylistItem.java` entities, `PlaylistRepository`, `PlaylistItemRepository`, `PlaylistService`, `PlaylistController`.
+   - REST: `GET /api/playlists/mine`, `POST /api/playlists`, `PUT /api/playlists/{id}`, `DELETE /api/playlists/{id}`, `GET /api/playlists/{id}`, `POST /api/playlists/{id}/videos`, `DELETE /api/playlists/{id}/videos/{videoId}`.
+   - Privacy filter in `PlaylistService.getPlaylistWithVideos()` — checks each video's visibility against the viewer's permissions before returning it.
+   - Frontend: `MyPlaylists.jsx` (list/create/edit/delete), `PlaylistDetail.jsx` (queue + current video panel), playlist modal in `VideoDetail.jsx`, `Pleylistlərim` nav item in `Sidebar.jsx`, routes in `App.jsx`.
+
+8. **Playlist visibility (PUBLIC / PRIVATE / RESTRICTED)**
+   - `V5__playlist_visibility.sql`: adds `visibility` and `allowed_emails` columns to `playlists` table.
+   - `Playlist.java`: `visibility` (String, default `"PUBLIC"`) and `allowedEmails` (TEXT, comma-separated), `getAllowedEmailList()` helper.
+   - `PlaylistService`: `canViewPlaylist()` enforces visibility before returning any data; `normalizeVisibility()` sanitizes input; create/update accept `visibility` + `allowedEmails`.
+   - `PlaylistController`: exposes `visibility` and `allowedEmails` fields in all responses.
+   - `api.js`: `createPlaylist` and `updatePlaylist` accept `visibility` and `allowedEmails` params.
+   - `MyPlaylists.jsx`: visibility toggle buttons (İctimai/Gizli/Məhdud) in create/edit form; email textarea shown for RESTRICTED; `VisBadge` displayed on each playlist card.
+   - `PlaylistDetail.jsx`: `VisBadge` in header; 403 error renders a proper "Giriş qadağandır" page instead of redirect.
+
+#### Key gotchas
+
+- **`@OneToMany(mappedBy = "playlistId")` invalid mapping**: `Playlist` must NOT declare `@OneToMany` for `PlaylistItem` because `playlistId` is a plain `String` (not a `@ManyToOne` reference). Use `PlaylistItemRepository.countByPlaylistId()` instead.
+- **`Map.of()` rejects null values**: Always use `new HashMap<>()` when any map value could be null (e.g., description).
+- **IDP provisioning fallback**: If `JwtAuthenticationFilter.getOrCreate()` fails, the principal falls back to `OidcUserDetails` which has `getUserId() = null`. `AuthController.getProfile()` catches this and returns 500; `loginWithIdp` catches 500 and keeps defaults. Acceptable degradation.
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens.
+- **Backend `upload.max-concurrent` setting**: not persisted in DB yet.
+- **UploadController.listVideos**: returns all videos, not filtered by current user.
+- **Backend rebuild needed**: All Java backend changes require `docker compose build && docker compose up -d --force-recreate` on VPS.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*

@@ -224,12 +224,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const loginWithIdp = (token, idpUser) => {
+  const loginWithIdp = async (token, idpUser) => {
     localStorage.setItem('jwt_token', token);
 
-    // Read claim names from the IDP config that was fetched before the OAuth redirect.
-    // This means the admin can rename claim mappings in Settings and they take effect
-    // on next login without any frontend rebuild.
     const config = (() => {
       try { return JSON.parse(sessionStorage.getItem('idp_config') || '{}'); }
       catch { return {}; }
@@ -271,6 +268,17 @@ export const AuthProvider = ({ children }) => {
       role:         'USER',
       isIdpUser:    true,
     };
+
+    // Fetch DB-backed role and permissions using the IDP token now in localStorage.
+    // JwtAuthenticationFilter provisions the IDP user in DB on the first call.
+    try {
+      const resp = await api.get('/auth/profile');
+      if (resp.data?.role)        userData.role        = resp.data.role;
+      if (resp.data?.permissions) userData.permissions = resp.data.permissions;
+    } catch {
+      // Offline or IDP validation failed — keep defaults (empty permissions, USER role)
+    }
+
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
   };

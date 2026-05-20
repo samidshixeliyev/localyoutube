@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Home, PlaySquare, Film, Upload,
-  Users, Shield, Settings, Activity, BarChart2, Menu,
+  Users, Shield, Settings, Activity, BarChart2, Menu, ListVideo,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
@@ -14,8 +14,12 @@ const MAIN_NAV = [
 ];
 
 const CONTENT_NAV = [
-  { to: '/my-videos', icon: Film,   label: 'Videolarım', perms: ['upload-video', 'admin-modtube'] },
-  { to: '/upload',    icon: Upload, label: 'Yüklə',      perms: ['upload-video', 'admin-modtube'] },
+  { to: '/my-videos',    icon: Film,      label: 'Videolarım',  perms: ['upload-video', 'admin-modtube'] },
+  { to: '/upload',       icon: Upload,    label: 'Yüklə',       perms: ['upload-video', 'admin-modtube'] },
+];
+
+const USER_NAV = [
+  { to: '/my-playlists', icon: ListVideo, label: 'Pleylistlərim' },
 ];
 
 const ADMIN_NAV = [
@@ -89,6 +93,15 @@ export default function Sidebar() {
         {MAIN_NAV.map(item => (
           <NavItem key={item.to} {...item} isOpen={isOpen} />
         ))}
+
+        {isAuthenticated && (
+          <>
+            <Divider />
+            {USER_NAV.map(item => (
+              <NavItem key={item.to} {...item} isOpen={isOpen} />
+            ))}
+          </>
+        )}
 
         {visibleContent.length > 0 && (
           <>

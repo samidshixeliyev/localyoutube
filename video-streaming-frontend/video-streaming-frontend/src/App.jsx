@@ -31,6 +31,8 @@ const IdpSettings    = lazy(() => import('./pages/admin/IdpSettings'));
 const Metrics        = lazy(() => import('./pages/admin/Metrics'));
 const Analytics      = lazy(() => import('./pages/admin/Analytics'));
 const Embed          = lazy(() => import('./pages/Embed'));
+const MyPlaylists    = lazy(() => import('./pages/MyPlaylists'));
+const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-primary-50 dark:bg-army-900">
@@ -106,6 +108,15 @@ function AppContent() {
                     </PrivateRoute>
                   }
                 />
+                <Route
+                  path="/my-playlists"
+                  element={
+                    <PrivateRoute>
+                      <MyPlaylists />
+                    </PrivateRoute>
+                  }
+                />
+                <Route path="/playlists/:id" element={<PlaylistDetail />} />
 
                 {/* upload-video OR admin-modtube */}
                 <Route

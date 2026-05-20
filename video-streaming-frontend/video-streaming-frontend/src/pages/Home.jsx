@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getVideos, getShorts } from '../services/api';
 import Navbar from '../components/Navbar';
@@ -199,27 +199,34 @@ const Home = () => {
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const sentinelRef = useRef(null);
+  const pageRef = useRef(0);
+  const hasMoreRef = useRef(true);
+  const loadingMoreRef = useRef(false);
 
   const PAGE_SIZE = 12;
 
   const loadVideos = useCallback(async (p) => {
     try {
       p === 0 ? setLoading(true) : setLoadingMore(true);
+      loadingMoreRef.current = true;
       const res = await getVideos(p, PAGE_SIZE);
       const data = Array.isArray(res.data?.videos) ? res.data.videos
                  : Array.isArray(res.data?.content) ? res.data.content
                  : Array.isArray(res.data) ? res.data : [];
-      const total = res.data?.totalElements ?? 0;
       const totalPages = res.data?.totalPages ?? 1;
       if (p === 0) setVideos(data);
       else setVideos(prev => [...prev, ...data]);
-      setHasMore(p + 1 < totalPages && data.length > 0);
+      const more = p + 1 < totalPages && data.length > 0;
+      setHasMore(more);
+      hasMoreRef.current = more;
       setError('');
     } catch {
       setError('Videolar yüklənə bilmədi. Yenidən cəhd edin.');
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      loadingMoreRef.current = false;
     }
   }, []);
 
@@ -233,11 +240,21 @@ const Home = () => {
       .catch(() => {});
   }, []);
 
-  const handleLoadMore = () => {
-    const next = page + 1;
-    setPage(next);
-    loadVideos(next);
-  };
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMoreRef.current && !loadingMoreRef.current) {
+        const next = pageRef.current + 1;
+        pageRef.current = next;
+        setPage(next);
+        loadVideos(next);
+      }
+    }, { threshold: 0.1 });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadVideos]);
 
   // Separate shorts from regular for the main grid
   const regularVideos = videos.filter(v => !v.isShort);
@@ -333,20 +350,15 @@ const Home = () => {
               {gridVideos.map(v => <VideoCard key={v.id} video={v} />)}
             </div>
 
-            {hasMore && (
-              <div className="text-center mt-8">
-                <button
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="inline-flex items-center gap-2 px-8 py-3 bg-primary-600 text-white text-sm font-semibold
-                             rounded-full hover:bg-primary-700 active:bg-primary-800
-                             disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg">
-                  {loadingMore
-                    ? <><Loader2 className="h-4 w-4 animate-spin" />Yüklənir…</>
-                    : 'Daha çox yüklə'}
-                </button>
-              </div>
-            )}
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef} className="h-8 mt-4 flex items-center justify-center">
+              {loadingMore && (
+                <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500 text-sm">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary-500" />
+                  <span>Yüklənir…</span>
+                </div>
+              )}
+            </div>
           </section>
         )}
       </div>

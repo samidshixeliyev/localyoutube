@@ -235,4 +235,32 @@ export const adminDailyViews = (days = 30) =>
 export const adminHourlyViews = (days = 30) =>
     api.get('/admin/analytics/hourly', { params: { days } });
 
+// ═══════════════════════════════════════════════════════════════
+// PLAYLISTS
+// ═══════════════════════════════════════════════════════════════
+
+export const getMyPlaylists = () =>
+    api.get('/playlists/mine');
+
+export const createPlaylist = (name, description = '', visibility = 'PUBLIC', allowedEmails = '') =>
+    api.post('/playlists', { name, description, visibility, allowedEmails });
+
+export const updatePlaylist = (id, name, description = '', visibility = 'PUBLIC', allowedEmails = '') =>
+    api.put(`/playlists/${id}`, { name, description, visibility, allowedEmails });
+
+export const deletePlaylist = (id) =>
+    api.delete(`/playlists/${id}`);
+
+export const getPlaylist = (id) =>
+    api.get(`/playlists/${id}`);
+
+export const addToPlaylist = (playlistId, videoId) =>
+    api.post(`/playlists/${playlistId}/videos`, { videoId });
+
+export const removeFromPlaylist = (playlistId, videoId) =>
+    api.delete(`/playlists/${playlistId}/videos/${videoId}`);
+
+export const adminAnalyzeMetrics = (snapshot) =>
+    api.post('/admin/metrics/analyze', snapshot, { timeout: 90000 });
+
 export default api;

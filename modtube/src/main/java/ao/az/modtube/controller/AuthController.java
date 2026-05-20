@@ -153,7 +153,7 @@ public class AuthController {
     }
 
     /**
-     * Verify token and return user info
+     * Verify token and return user info (HS256 local tokens only).
      */
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(@RequestHeader("Authorization") String authHeader) {
@@ -181,6 +181,40 @@ public class AuthController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new ErrorResponse("Invalid token"));
+        }
+    }
+
+    /**
+     * Returns DB-backed profile for the currently authenticated user.
+     * Works for both local HS256 and IDP RS256 tokens — uses the Spring Security
+     * principal resolved by JwtAuthenticationFilter (which provisions IDP users in DB).
+     */
+    @GetMapping("/profile")
+    public ResponseEntity<?> getProfile(@AuthenticationPrincipal ModTubePrincipal principal) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Not authenticated"));
+        }
+        try {
+            User user = userRepository.findById(principal.getUserId())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            String roleName = user.getRole() != null ? user.getRole().getName() : "USER";
+            List<String> permissions = user.getRole() != null
+                    ? user.getRole().getPermissions().stream().map(p -> p.getName()).collect(Collectors.toList())
+                    : List.of();
+
+            return ResponseEntity.ok(LoginResponse.builder()
+                    .email(user.getEmail())
+                    .name(user.getName())
+                    .fullName(user.getFullName())
+                    .userId(user.getId())
+                    .role(roleName)
+                    .permissions(permissions)
+                    .build());
+        } catch (Exception e) {
+            log.error("Profile fetch failed for user id={}: {}", principal.getUserId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("Profile fetch failed"));
         }
     }
 
