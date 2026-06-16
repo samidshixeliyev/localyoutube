@@ -8,7 +8,7 @@
 | Backend   | Spring Boot (Java), Prometheus metrics         |
 | Auth      | JWT + PKCE OAuth2 IDP                          |
 | Video     | HLS streaming via nginx, thumbnails            |
-| Dev proxy | Vite proxies `/api`, `/hls`, `/thumbnails`, `/uploads` → `localhost:8080` |
+| Dev proxy | Vite proxies `/api`, `/hls`, `/thumbnails`, `/uploads`, `/ws` → `VITE_BACKEND_URL` (default `localhost:4000`) |
 
 ## Directory Layout
 
@@ -38,17 +38,30 @@ localyoutube/
 │   │       ├── SearchResults.jsx
 │   │       ├── UploadPage.jsx
 │   │       ├── MyVideos.jsx
+│   │       ├── MyPlaylists.jsx / PlaylistDetail.jsx
+│   │       ├── VideoMeetings.jsx    ← Live meeting list/create (NEW)
+│   │       ├── MeetingRoom.jsx      ← WebRTC mesh call room (NEW)
 │   │       └── admin/
 │   │           ├── Metrics.jsx      ← Prometheus metrics dashboard
 │   │           ├── UserManagement.jsx
 │   │           ├── RoleManagement.jsx
 │   │           └── IdpSettings.jsx
 │   ├── tailwind.config.js           ← Army/olive green palette (primary-*, army-*, tan-*)
+│   ├── .env.example                 ← VITE_BACKEND_URL / VITE_PORT (NEW)
 │   └── vite.config.js
 └── modtube/                          ← Spring Boot backend
     └── src/main/java/ao/az/modtube/
-        ├── controller/MetricsProxyController.java  ← Proxies Prometheus queries
-        └── config/security/
+        ├── controller/
+        │   ├── MetricsProxyController.java   ← Proxies Prometheus queries
+        │   └── VideoMeetingController.java   ← /api/meetings (NEW)
+        ├── service/VideoMeetingService.java  ← (NEW)
+        ├── domain/VideoMeeting.java          ← (NEW)
+        ├── websocket/MeetingSignalingHandler.java ← WebRTC signaling (NEW)
+        └── config/
+            ├── WebSocketConfig.java          ← /ws/meetings/* (NEW)
+            └── security/
+                ├── MeetingHandshakeInterceptor.java ← WS JWT auth (NEW)
+                └── ...
 ```
 
 ## Tailwind Custom Colors
@@ -65,6 +78,7 @@ localyoutube/
 | `admin-modtube`| Upload, manage own videos                        |
 | `super-admin`  | All admin pages (users, roles, settings, metrics)|
 | `view-metrics` | Metrics page (same as super-admin for that page) |
+| `video-call`   | Create/join live video meetings (`/meetings`)    |
 
 ---
 
@@ -830,4 +844,141 @@ Additionally, two metric names in Metrics.jsx were wrong:
 
 ---
 
+### 2026-06-11 — Video Meetings (Live WebRTC) Feature
+
+#### What was done
+
+1. **New `video-call` permission** — seeded via `V6__video_meetings.sql`, wired through
+   `permissions.js` (`PERMS.VIDEO_CALL` / `FEATURE.VIDEO_CALL`), `Sidebar.jsx` (`Görüşlər`
+   nav item), `App.jsx` routes, `RoleManagement.jsx` `PERM_META`, and
+   `SecurityConfiguration.java` (`/api/meetings/**` requires `video-call` or `super-admin`).
+
+2. **Backend — `video_meetings` table + entity/service/controller**
+   - `V6__video_meetings.sql`: `video_meetings` table (`room_code` UUID, `status`
+     SCHEDULED/LIVE/ENDED, `visibility` PUBLIC/RESTRICTED + `allowed_emails`).
+   - `VideoMeeting.java`, `VideoMeetingRepository`, `VideoMeetingService`
+     (create/list/get/start/end/delete, `canAccessMeeting()` mirrors
+     `PlaylistService.canViewPlaylist()`).
+   - `VideoMeetingController` at `/api/meetings`: CRUD + `/start`, `/end`,
+     `/ice-config` (returns STUN/TURN servers from `modtube.webrtc.*` config).
+
+3. **Backend — WebRTC mesh signaling over raw WebSocket**
+   - Added `spring-boot-starter-websocket` dependency.
+   - `WebSocketConfig` registers `MeetingSignalingHandler` at `/ws/meetings/*`.
+   - `MeetingHandshakeInterceptor`: since browsers can't set `Authorization` headers
+     on WS handshakes, the JWT is passed as `?token=...`. The interceptor replicates
+     `JwtAuthenticationFilter`'s dual-path validation (RS256 IDP / HS256 local),
+     resolves the meeting by `roomCode`, and checks `canAccessMeeting()` before
+     accepting the upgrade.
+   - `MeetingSignalingHandler`: relays `offer`/`answer`/`ice-candidate` between
+     participants of the same room (`peers`, `peer-joined`, `peer-left`,
+     `meeting-ended` message types). `endRoom()` is called by
+     `VideoMeetingService.endMeeting()` to disconnect everyone when the host ends.
+
+4. **Frontend — `VideoMeetings.jsx`** (mirrors `MyPlaylists.jsx` grid pattern)
+   - Grid of meeting cards with status badge (Planlaşdırılıb/Canlı/Bitib) and
+     visibility badge (İctimai/Məhdud).
+   - "Yeni görüş" modal: title/description/visibility + `UserEmailPicker` for
+     RESTRICTED (extracted into its own component, `src/components/UserEmailPicker.jsx`,
+     reused from `MyPlaylists.jsx`).
+   - Host actions: Başlat (start → navigates to room), Bitir (end), Sil (delete via
+     `ConfirmModal`, blocked while LIVE). Non-host: Qoşul (enabled only when LIVE).
+
+5. **Frontend — `MeetingRoom.jsx`** — full mesh WebRTC call UI
+   - Loads meeting via `getMeeting(id)`; if host and `SCHEDULED`, calls
+     `startMeeting(id)` automatically. 403 → "Giriş qadağandır" page.
+   - `getIceConfig()` → `RTCPeerConnection` config (STUN by default).
+   - `getUserMedia({video, audio})` for local stream + muted local tile.
+   - Opens `wss://.../ws/meetings/{roomCode}?token=...`; maintains
+     `Map<peerId, RTCPeerConnection>` and `peerInfoRef` (id → {email, name}
+     from `peers`/`peer-joined` messages, since offer/answer/ice-candidate relays
+     don't carry sender metadata). Queues ICE candidates that arrive before
+     `setRemoteDescription`.
+   - Controls: mic/camera toggle (via `track.enabled`), "Tərk et" (cleanup +
+     navigate), host-only "Görüşü bitir".
+   - `App.jsx` `SidebarAwareLayout`: `/meetings/:id/room` excluded from sidebar
+     (regex `/^\/meetings\/[^/]+\/room$/`), same as `/embed/*`.
+
+6. **Configurability pass** (user request: "everything host port other thing
+   should be configurable")
+   - `vite.config.js`: rewrote to use `loadEnv` — proxy target and dev server
+     port now come from `VITE_BACKEND_URL` (default `http://localhost:4000`,
+     was hardcoded `:8080`) and `VITE_PORT` (default `3000`). New `/ws` proxy
+     entry with `ws: true`.
+   - New `video-streaming-frontend/video-streaming-frontend/.env.example`
+     documenting `VITE_BACKEND_URL` / `VITE_PORT`.
+   - `application.yml`: new `modtube.webrtc.*` block (`ice-servers`, `turn-url`,
+     `turn-username`, `turn-credential`), all env-overridable
+     (`WEBRTC_ICE_SERVERS`, `WEBRTC_TURN_URL`, `WEBRTC_TURN_USERNAME`,
+     `WEBRTC_TURN_CREDENTIAL`).
+   - `docker-compose.yml` and root `.env.example`: added the same `WEBRTC_*`
+     env vars so they can be set without editing compose/yaml directly.
+
+#### Key gotchas
+
+- **WS auth via query param**: `MeetingHandshakeInterceptor` is the only place
+  doing JWT validation for `/ws/**` — `SecurityConfiguration` permits `/ws/**`
+  at the filter-chain level since the handshake interceptor handles auth.
+- **Signaling messages don't carry sender email/name** except `peers` (initial
+  snapshot) and `peer-joined` (broadcast on join). `MeetingRoom.jsx` caches
+  `peerId → {email, name}` from those two message types and looks it up when
+  an `offer` arrives from that peer.
+- **ICE candidate ordering**: candidates can arrive via WS before
+  `setRemoteDescription` resolves — they're queued per-peer and flushed after
+  `setRemoteDescription` succeeds.
+- **Mesh topology**: only suitable for small meetings (~4-6 participants).
+  Larger groups would need an SFU — out of scope.
+- **No TURN by default**: STUN-only (`stun:stun.l.google.com:19302`). Cross-NAT
+  calls may fail to establish; same-LAN works via host ICE candidates. Set
+  `WEBRTC_TURN_URL`/`WEBRTC_TURN_USERNAME`/`WEBRTC_TURN_CREDENTIAL` to add a
+  TURN server.
+- **No AI analysis/summary** for meetings — explicitly declined by user.
+- **Backend rebuild needed**: all of the above requires
+  `docker compose build && docker compose up -d --force-recreate`. Verified
+  `./gradlew compileJava` succeeds (Java 21, JDK temurin container) and
+  `npm run build` succeeds (new `MeetingRoom`/`VideoMeetings` chunks present).
+
+#### Known remaining issues (carried forward)
+
+- **Mobile sidebar**: no hide logic on small screens.
+- **Backend `upload.max-concurrent` setting**: not persisted in DB yet.
+- **UploadController.listVideos**: returns all videos, not filtered by current user.
+- **Backend rebuild needed**: new WebSocket dependency, `V6__video_meetings.sql`
+  migration, and all video-meetings backend code require
+  `docker compose build && docker compose up -d --force-recreate` on VPS.
+
+---
+
 *Update this file every session with: what was attempted, what was fixed, what is still broken, and any gotchas found.*
+
+---
+
+### 2026-06-12 — IDP Role Fix, MinIO Migration, Meeting Mgmt, SPA/Mobile Fixes
+
+#### Bugs fixed
+1. **IDP super-admin role not applying** — `IdpJwtValidator` derived email from `mail` claim → fell back to `sub` (UUID) when absent; `/idp/sync-profile` then rewrote the email, so the next login's UUID lookup failed and re-provisioned a fresh USER row, orphaning the admin-assigned role. Fix: new stable `idp_subject` column (`V8__idp_subject.sql`), matched first in `IdpUserProvisioningService.getOrCreate(email, name, subject)`; `OidcUserDetails.subject` carried through `JwtAuthenticationFilter` + `MeetingHandshakeInterceptor`. `OAuthCallback.jsx` now `await`s `loginWithIdp` after sync-profile so role/permissions apply before navigation.
+2. **Meeting link / refresh → JSON error** — `SpaController` forward list was missing `/meetings/**`, `/playlists`, `/my-playlists`. Added them.
+3. **App crash-loop (500s, slow/“network abuse”)** — a new MinIO `MediaController` mapped `/hls/**`, colliding with the pre-existing `HlsController` → Spring `Ambiguous mapping`, exiting every ~60s (Flyway re-ran each restart). Deleted `HlsController`; `MediaController` now serves both `/hls/**` + `/thumbnails/**`.
+
+#### MinIO migration (video storage)
+- Fresh-start, serve-through-app design. New `StorageService` (io.minio 8.5.17): bucket auto-create w/ retry, `uploadDirectory`, `getObject`, `deletePrefix`, content-type map.
+- `TranscodingService` uploads HLS dir + thumbnail to MinIO after transcode (local dirs now scratch), then deletes scratch. `VideoService.deleteVideo` → `deletePrefix`; custom thumbnails → `putStream`. `WebConfig` no longer serves hls/thumbnails.
+- Config: `modtube.storage.minio.*` (`MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET`). MinIO runs as a **separate** stack: `docker-compose.minio.yml`; app reaches it via `host.docker.internal:9000` (`extra_hosts: host-gateway`). Prod: point `MINIO_ENDPOINT` at existing MinIO.
+
+#### Meeting improvements
+- Screen share quality: `getDisplayMedia` 1080p/30–60fps, `contentHint='detail'`, `maxBitrate=5Mbps` via `setParameters` (existing + new peers).
+- One-sharer lock already server-enforced; full/PiP layout, ESC to minimize.
+- **Admin management**: `toResponse` adds `canManage` (host OR super-admin) + `canDelete`; new `PUT /api/meetings/{id}` (edit); DELETE returns the reason (LIVE meetings can’t be deleted). Frontend `VideoMeetings.jsx`: super-admins get the manage menu, edit modal, end-then-delete flow, error toast, 10s auto-refresh.
+
+#### Mobile sidebar (carried-forward) — fixed
+- `SidebarAwareLayout` content padding now `sm:` only (no mobile squash) + mobile backdrop. Sidebar slides off-screen on mobile when collapsed. New mobile hamburger in `Navbar` toggles the drawer.
+
+#### Verified
+- `docker compose build` ✓ (backend+frontend), app boots clean (`Started ModtubeApplication`, `MinIO bucket 'modtube' ready`), 0 errors, home ~20ms, all endpoints 7–40ms, mem 480MB/3GB.
+- Run order: `docker compose -f docker-compose.minio.yml up -d` then `docker compose up -d`.
+- Image exported: `Downloads/tars/modtube-latest.tar` (`ao-images/modtube:latest`).
+
+#### Known remaining
+- Local login still matched by username/email (unchanged); only IDP path uses idp_subject.
+- HLS proxied through app (2× internal bandwidth app↔MinIO) — fine for LAN; use presigned URLs if exposing MinIO later.
+- Mesh WebRTC still ~4–6 participants; no TURN by default.

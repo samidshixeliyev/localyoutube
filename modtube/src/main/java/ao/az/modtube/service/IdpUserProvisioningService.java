@@ -25,57 +25,88 @@ public class IdpUserProvisioningService {
     private final RoleRepository roleRepository;
 
     /**
-     * Returns the existing DB user for the given email, or creates a new one
-     * with the default USER role. Subsequent logins update the display name
-     * if it changed in the IDP.
+     * Backwards-compatible overload (no stable subject available).
      */
     @Transactional
     public User getOrCreate(String email, String displayName) {
-        return userRepository.findUserByEmail(email)
-                .map(existing -> {
-                    // Sync display name in case it changed on the IDP side
-                    String[] parts = splitName(displayName != null ? displayName : email);
-                    boolean changed = false;
-                    if (!parts[0].equals(existing.getName())) {
-                        existing.setName(parts[0]);
-                        changed = true;
-                    }
-                    String newSurname = parts.length > 1 ? parts[1] : null;
-                    if (!java.util.Objects.equals(newSurname, existing.getSurname())) {
-                        existing.setSurname(newSurname);
-                        changed = true;
-                    }
-                    if (changed) {
-                        existing.setUpdatedAt(LocalDateTime.now());
-                        userRepository.save(existing);
-                    }
-                    return existing;
-                })
-                .orElseGet(() -> {
-                    log.info("Auto-provisioning IDP user: {}", email);
+        return getOrCreate(email, displayName, null);
+    }
 
-                    Role userRole = roleRepository.findByName("USER")
-                            .orElseGet(() -> roleRepository.findAll().stream()
-                                    .filter(r -> r.getName().equalsIgnoreCase("user"))
-                                    .findFirst()
-                                    .orElseThrow(() -> new RuntimeException(
-                                            "No USER role found — cannot provision IDP user")));
+    /**
+     * Resolves the DB user for an IDP login, matching by the stable {@code subject}
+     * ('sub' claim) first so admin-assigned roles survive email changes, then falling
+     * back to email for legacy rows provisioned before the idp_subject column existed.
+     * Creates a new USER-role record on first login. The subject is persisted/backfilled
+     * so all future logins match by it.
+     */
+    @Transactional
+    public User getOrCreate(String email, String displayName, String subject) {
+        // 1) Stable match by IDP subject — immune to email changes.
+        if (subject != null && !subject.isBlank()) {
+            var bySubject = userRepository.findByIdpSubject(subject);
+            if (bySubject.isPresent()) {
+                return syncNameIfChanged(bySubject.get(), displayName, email, subject);
+            }
+        }
 
-                    String[] parts = splitName(displayName != null ? displayName : email.split("@")[0]);
-                    User user = new User();
-                    user.setName(parts[0]);
-                    user.setSurname(parts.length > 1 ? parts[1] : null);
-                    user.setEmail(email);
-                    // Non-usable placeholder — IDP users never authenticate with password
-                    user.setPassword("{idp}" + UUID.randomUUID());
-                    user.setRole(userRole);
-                    user.setCreatedAt(LocalDateTime.now());
-                    user.setUpdatedAt(LocalDateTime.now());
+        // 2) Legacy / first-login match by email — backfill the subject onto the row.
+        var byEmail = userRepository.findUserByEmail(email);
+        if (byEmail.isPresent()) {
+            return syncNameIfChanged(byEmail.get(), displayName, email, subject);
+        }
 
-                    User saved = userRepository.save(user);
-                    log.info("IDP user provisioned: id={} email={}", saved.getId(), email);
-                    return saved;
-                });
+        // 3) New user.
+        log.info("Auto-provisioning IDP user: email={} sub={}", email, subject);
+
+        Role userRole = roleRepository.findByName("USER")
+                .orElseGet(() -> roleRepository.findAll().stream()
+                        .filter(r -> r.getName().equalsIgnoreCase("user"))
+                        .findFirst()
+                        .orElseThrow(() -> new RuntimeException(
+                                "No USER role found — cannot provision IDP user")));
+
+        String[] parts = splitName(displayName != null ? displayName : email.split("@")[0]);
+        User user = new User();
+        user.setName(parts[0]);
+        user.setSurname(parts.length > 1 ? parts[1] : null);
+        user.setEmail(email);
+        user.setIdpSubject(subject);
+        // Non-usable placeholder — IDP users never authenticate with password
+        user.setPassword("{idp}" + UUID.randomUUID());
+        user.setRole(userRole);
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+
+        User saved = userRepository.save(user);
+        log.info("IDP user provisioned: id={} email={} sub={}", saved.getId(), email, subject);
+        return saved;
+    }
+
+    /** Syncs display name + backfills idp_subject if missing. */
+    private User syncNameIfChanged(User existing, String displayName, String email, String subject) {
+        boolean changed = false;
+
+        String[] parts = splitName(displayName != null ? displayName : email);
+        if (!parts[0].equals(existing.getName())) {
+            existing.setName(parts[0]);
+            changed = true;
+        }
+        String newSurname = parts.length > 1 ? parts[1] : null;
+        if (!java.util.Objects.equals(newSurname, existing.getSurname())) {
+            existing.setSurname(newSurname);
+            changed = true;
+        }
+        // Backfill the stable subject on legacy rows so future logins match by it.
+        if (subject != null && !subject.isBlank() && existing.getIdpSubject() == null) {
+            existing.setIdpSubject(subject);
+            changed = true;
+        }
+
+        if (changed) {
+            existing.setUpdatedAt(LocalDateTime.now());
+            userRepository.save(existing);
+        }
+        return existing;
     }
 
     /**

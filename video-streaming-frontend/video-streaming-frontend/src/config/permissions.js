@@ -25,6 +25,7 @@ export const PERMS = {
   MANAGE_SHORTS:    'manage-shorts',       // flag / unflag short-form content
   COMMENT_MODERATE: 'comment-moderate',    // delete any comment
   VIEW_REPORTS:     'view-reports',        // analytics / report pages
+  VIDEO_CALL:       'video-call',          // create / join live video meetings
 };
 
 /**
@@ -50,6 +51,9 @@ export const FEATURE = {
   MANAGE_SETTINGS:  [PERMS.MANAGE_SETTINGS],
   MANAGE_USERS:     [PERMS.MANAGE_USERS],
   MANAGE_ROLES:     [PERMS.MANAGE_ROLES],
+
+  // Live video meetings
+  VIDEO_CALL:       [PERMS.VIDEO_CALL],
 };
 
 /**

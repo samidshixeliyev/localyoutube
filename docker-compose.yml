@@ -7,7 +7,9 @@ services:
     container_name: modtube
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-4000}:4000"
+      - "0.0.0.0:8080:80"
+      - "0.0.0.0:8443:443"
+      - "0.0.0.0:${APP_PORT:-4000}:4000"   # direct Spring Boot access (debug / internal)
     environment:
       # ── PostgreSQL (internal) ─────────────────────────────────────────
       PGDATA: /var/lib/postgresql/data
@@ -21,18 +23,34 @@ services:
       # ── Admin seed account ────────────────────────────────────────────
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@modtube.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      # ── Host / public URL ─────────────────────────────────────────────
+      # APP_HOST is passed into the container so docker-entrypoint.sh can
+      # include it in the self-signed TLS certificate SAN.
+      # PUBLIC_BASE_URL is the full https URL used for IDP OAuth2 callbacks.
+      APP_HOST: ${APP_HOST:-localhost}
       # ── IDP (AO ID) ───────────────────────────────────────────────────
-      # Set IDP_HOST and APP_HOST in .env — all IDP URLs are built from them.
       IDP_BASE_URL: https://${IDP_HOST:-localhost}
       IDP_CLIENT_ID: ${IDP_CLIENT_ID:-EFxbQK-ekDX1OkWov51cjg}
-      IDP_REDIRECT_URI: http://${APP_HOST:-localhost}:${APP_PORT:-4000}/
-      IDP_LOGOUT_REDIRECT_URI: http://${APP_HOST:-localhost}:${APP_PORT:-4000}/logged_out
+      IDP_REDIRECT_URI: ${PUBLIC_BASE_URL:-https://localhost}/
+      IDP_LOGOUT_REDIRECT_URI: ${PUBLIC_BASE_URL:-https://localhost}/logged_out
       IDP_JWKS_URI: https://${IDP_HOST:-localhost}/jwks
       IDP_ISSUER: ${IDP_ISSUER:-https://auth.ao.az}
       IDP_SKIP_SSL: ${IDP_SKIP_SSL:-true}
       # ── Rate limiting ─────────────────────────────────────────────────
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-100}
       RATE_LIMIT_UPLOAD_RPS: ${RATE_LIMIT_UPLOAD_RPS:-4}
+      # ── WebRTC (video meetings) ────────────────────────────────────────
+      WEBRTC_ICE_SERVERS: ${WEBRTC_ICE_SERVERS:-stun:stun.l.google.com:19302}
+      WEBRTC_TURN_URL: ${WEBRTC_TURN_URL:-}
+      WEBRTC_TURN_USERNAME: ${WEBRTC_TURN_USERNAME:-}
+      WEBRTC_TURN_CREDENTIAL: ${WEBRTC_TURN_CREDENTIAL:-}
+      # ── Object storage (MinIO) ─────────────────────────────────────────
+      # In production, point MINIO_ENDPOINT at your existing MinIO and set
+      # real credentials. Defaults below target the bundled test `minio` service.
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://host.docker.internal:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-modtube}
     deploy:
       resources:
         limits:
@@ -53,3 +71,8 @@ services:
       timeout: 10s
       retries: 5
       start_period: 90s
+    # MinIO runs as a separate stack (docker-compose.minio.yml) or your existing
+    # production MinIO. Reached via the host gateway by default; override
+    # MINIO_ENDPOINT to point anywhere.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

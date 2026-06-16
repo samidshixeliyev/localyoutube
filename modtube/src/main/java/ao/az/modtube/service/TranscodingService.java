@@ -40,6 +40,7 @@ public class TranscodingService {
 
     private final VideoService videoService;
     private final ModTubeMetrics metrics;
+    private final StorageService storageService;
     private final Path hlsDir;
     private final Path thumbnailDir;
     private final int segmentDuration;
@@ -111,12 +112,14 @@ public class TranscodingService {
 
     public TranscodingService(VideoService videoService,
                               ModTubeMetrics metrics,
+                              StorageService storageService,
                               @Value("${modtube.storage.hls-dir}") String hlsDirPath,
                               @Value("${modtube.storage.thumbnail-dir}") String thumbnailDirPath,
                               @Value("${modtube.transcoding.segment-duration}") int segmentDuration,
                               @Value("${modtube.transcoding.qualities}") List<String> qualities) {
         this.videoService = videoService;
         this.metrics = metrics;
+        this.storageService = storageService;
         this.hlsDir = Paths.get(hlsDirPath);
         this.thumbnailDir = Paths.get(thumbnailDirPath);
         this.segmentDuration = segmentDuration;
@@ -204,8 +207,16 @@ public class TranscodingService {
             videoService.updateProcessingProgress(videoId, 95);
             Files.writeString(outputDir.resolve("master.m3u8"), masterPlaylist.toString());
 
+            // Stage 5: push HLS output to MinIO, then free local scratch space.
+            processingStages.put(videoId, "Uploading to storage");
+            storageService.uploadDirectory(outputDir, "hls/" + videoId);
+            log.info("[Transcoding] Uploaded HLS to MinIO for video={}", videoId);
+
             try { Files.deleteIfExists(inputFile); }
             catch (IOException e) { log.warn("[Transcoding] Could not delete original: {}", e.getMessage()); }
+            // Remove local HLS + thumbnail scratch — everything now lives in MinIO.
+            deleteDirectoryRecursive(outputDir);
+            deleteDirectoryRecursive(thumbnailDir.resolve(videoId));
 
             videoService.updateProcessingProgress(videoId, 100);
             videoService.updateVideoStatus(videoId, VideoStatus.READY);
@@ -264,6 +275,14 @@ public class TranscodingService {
                 log.warn("Thumbnail generation timed out for {}", videoId);
             } else {
                 log.debug("Generated thumbnail for {}", videoId);
+                // Push to MinIO immediately so the UI can show it during transcoding.
+                try {
+                    if (Files.exists(thumbFile)) {
+                        storageService.putObject("thumbnails/" + videoId + "/default.jpg", thumbFile, "image/jpeg");
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to upload thumbnail for {}: {}", videoId, e.getMessage());
+                }
             }
         } catch (Exception e) {
             log.warn("Failed to generate thumbnail: {}", e.getMessage());

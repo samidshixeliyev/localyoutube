@@ -49,6 +49,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends grafana && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# ── Nginx + OpenSSL (HTTPS reverse proxy — separate layer preserves cache above)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends nginx openssl && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # ── Java 21 JRE (Eclipse Temurin) ────────────────────────────────────────────
 RUN set -eux; \
     ARCH=$(dpkg --print-architecture); \
@@ -96,6 +101,7 @@ RUN mkdir -p \
         /data/uploads /data/hls /data/thumbnails /data/temp \
         /var/log/supervisor \
         /var/log/grafana \
+        /etc/nginx/ssl \
         /var/lib/grafana/dashboards \
         /var/lib/grafana/plugins \
         /var/lib/prometheus \
@@ -113,15 +119,17 @@ COPY prometheus.yml              /etc/prometheus/prometheus.yml
 COPY grafana-datasources.yml     /etc/grafana/provisioning/datasources/datasources.yml
 COPY grafana-dashboards.yml      /etc/grafana/provisioning/dashboards/dashboards.yml
 COPY supervisord.conf            /etc/supervisor/conf.d/supervisord.conf
+COPY nginx.conf                  /etc/nginx/nginx.conf
 COPY docker-entrypoint.sh        /docker-entrypoint.sh
 COPY start-spring.sh             /start-spring.sh
 
 RUN chmod +x /docker-entrypoint.sh /start-spring.sh
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
-# 4000 — Spring Boot (serves frontend + API)
-# Grafana is installed but disabled — not exposed
-EXPOSE 4000
+# 80  — nginx HTTP (redirects to HTTPS)
+# 443 — nginx HTTPS (reverse proxy to Spring Boot)
+# 4000 — Spring Boot direct (internal / debug only)
+EXPOSE 80 443 4000
 
 VOLUME ["/data", "/var/lib/postgresql/data", "/var/lib/prometheus"]
 

@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ModTubeLogo from '../components/ModTubeLogo';
+import { decodeJwt } from '../utils/jwt';
 
 function decodeJwtPayload(token) {
   try {
-    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(base64));
+    return decodeJwt(token);
   } catch {
     return {};
   }
@@ -70,8 +70,8 @@ const OAuthCallback = () => {
           ? decodeJwtPayload(idToken)
           : decodeJwtPayload(accessToken);
 
-        loginWithIdp(authToken, userInfoPayload);
-
+        // Sync display name / real email into the DB FIRST, so the subsequent
+        // /auth/profile call inside loginWithIdp returns the up-to-date record.
         try {
           await fetch('/api/auth/idp/sync-profile', {
             method: 'POST',
@@ -82,6 +82,9 @@ const OAuthCallback = () => {
             body: JSON.stringify(userInfoPayload),
           });
         } catch (_) {}
+
+        // Await so DB-backed role + permissions are applied before we navigate.
+        await loginWithIdp(authToken, userInfoPayload);
 
         window.history.replaceState({}, '', '/');
         navigate('/', { replace: true });

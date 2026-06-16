@@ -11,24 +11,12 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${modtube.storage.upload-dir}")
     private String uploadDir;
 
-    @Value("${modtube.storage.hls-dir}")
-    private String hlsDir;
-
-    @Value("${modtube.storage.thumbnail-dir}")
-    private String thumbnailDir;
-
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // /hls/** and /thumbnails/** are now served from MinIO by MediaController.
+        // Only raw uploads remain on local disk (transcoding scratch space).
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations("file:" + uploadDir + "/")
-                .setCachePeriod(3600);
-
-        registry.addResourceHandler("/hls/**")
-                .addResourceLocations("file:" + hlsDir + "/")
-                .setCachePeriod(0);
-
-        registry.addResourceHandler("/thumbnails/**")
-                .addResourceLocations("file:" + thumbnailDir + "/")
                 .setCachePeriod(3600);
     }
 }

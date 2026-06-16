@@ -1,0 +1,172 @@
+package ao.az.modtube.service;
+
+import ao.az.modtube.config.security.ModTubePrincipal;
+import ao.az.modtube.config.security.ModTubeUserDetails;
+import ao.az.modtube.config.security.OidcUserDetails;
+import ao.az.modtube.domain.VideoMeeting;
+import ao.az.modtube.repository.VideoMeetingRepository;
+import ao.az.modtube.websocket.MeetingSignalingHandler;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class VideoMeetingService {
+
+    private final VideoMeetingRepository videoMeetingRepository;
+    private final MeetingSignalingHandler meetingSignalingHandler;
+    private final NotificationService notificationService;
+
+    public List<VideoMeeting> listMeetings(ModTubePrincipal viewer) {
+        return videoMeetingRepository.findAllByOrderByCreatedAtDesc().stream()
+                .filter(m -> canAccessMeeting(m, viewer))
+                .toList();
+    }
+
+    @Transactional
+    public VideoMeeting createMeeting(String title, String description, String visibility,
+                                       String allowedEmails, ModTubePrincipal user) {
+        VideoMeeting m = new VideoMeeting();
+        m.setTitle(title);
+        m.setDescription(description);
+        m.setVisibility(normalizeVisibility(visibility));
+        m.setAllowedEmails(allowedEmails);
+        m.setHostId(user.getUserId());
+        m.setHostEmail(user.getEmail());
+        m.setHostName(resolveDisplayName(user));
+        m = videoMeetingRepository.save(m);
+
+        // Notify invited users of a restricted meeting
+        if ("RESTRICTED".equals(m.getVisibility())) {
+            final Long meetingId = m.getId();
+            final String meetingTitle = m.getTitle();
+            m.getAllowedEmailList().stream()
+                    .filter(e -> !e.equalsIgnoreCase(user.getEmail()))
+                    .forEach(email -> notificationService.createAndPush(
+                            email, "MEETING_INVITE",
+                            "Görüşə dəvət",
+                            "\"" + meetingTitle + "\" görüşünə dəvət olundunuz",
+                            meetingId));
+        }
+        return m;
+    }
+
+    public VideoMeeting getMeeting(Long id, ModTubePrincipal viewer) {
+        VideoMeeting m = videoMeetingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Görüş tapılmadı"));
+        if (!canAccessMeeting(m, viewer)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bu görüşə qoşulmaq icazəniz yoxdur");
+        }
+        return m;
+    }
+
+    @Transactional
+    public VideoMeeting updateMeeting(Long id, String title, String description,
+                                      String visibility, String allowedEmails, ModTubePrincipal user) {
+        VideoMeeting m = getOwned(id, user);
+        if (title != null && !title.isBlank()) m.setTitle(title.trim());
+        m.setDescription(description);
+        if (visibility != null) m.setVisibility(normalizeVisibility(visibility));
+        m.setAllowedEmails(allowedEmails);
+        return videoMeetingRepository.save(m);
+    }
+
+    public VideoMeeting findByRoomCode(String roomCode) {
+        return videoMeetingRepository.findByRoomCode(roomCode)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Görüş tapılmadı"));
+    }
+
+    @Transactional
+    public VideoMeeting startMeeting(Long id, ModTubePrincipal user) {
+        VideoMeeting m = getOwned(id, user);
+        if (!"ENDED".equals(m.getStatus())) {
+            m.setStatus("LIVE");
+            if (m.getStartedAt() == null) m.setStartedAt(LocalDateTime.now());
+            videoMeetingRepository.save(m);
+
+            // Notify invited users that the meeting is now live
+            if ("RESTRICTED".equals(m.getVisibility())) {
+                final Long meetingId = m.getId();
+                final String meetingTitle = m.getTitle();
+                m.getAllowedEmailList().stream()
+                        .filter(e -> !e.equalsIgnoreCase(user.getEmail()))
+                        .forEach(email -> notificationService.createAndPush(
+                                email, "MEETING_STARTED",
+                                "Görüş başladı",
+                                "\"" + meetingTitle + "\" görüşü canlıya keçdi — indi qoşulun",
+                                meetingId));
+            }
+        }
+        return m;
+    }
+
+    @Transactional
+    public VideoMeeting endMeeting(Long id, ModTubePrincipal user) {
+        VideoMeeting m = getOwned(id, user);
+        m.setStatus("ENDED");
+        m.setEndedAt(LocalDateTime.now());
+        videoMeetingRepository.save(m);
+        meetingSignalingHandler.endRoom(m.getRoomCode());
+        return m;
+    }
+
+    @Transactional
+    public void deleteMeeting(Long id, ModTubePrincipal user) {
+        VideoMeeting m = getOwned(id, user);
+        if ("LIVE".equals(m.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Canlı görüşü silmək olmaz");
+        }
+        videoMeetingRepository.delete(m);
+    }
+
+    /**
+     * Access rules:
+     *  - host or super-admin: always
+     *  - PUBLIC: any authenticated user (joinable by link without video-call permission)
+     *  - RESTRICTED: only users whose email is in allowedEmails
+     */
+    public boolean canAccessMeeting(VideoMeeting m, ModTubePrincipal viewer) {
+        if (viewer == null) return false;
+        if (viewer.isSuperAdmin()) return true;
+        if (viewer.getEmail().equalsIgnoreCase(m.getHostEmail())) return true;
+        String vis = m.getVisibility() != null ? m.getVisibility().toUpperCase() : "PUBLIC";
+        return switch (vis) {
+            case "PUBLIC" -> true;
+            case "RESTRICTED" -> m.getAllowedEmailList().stream()
+                    .anyMatch(e -> e.equalsIgnoreCase(viewer.getEmail()));
+            default -> false;
+        };
+    }
+
+    private String resolveDisplayName(ModTubePrincipal user) {
+        if (user instanceof ModTubeUserDetails details) {
+            String fullName = details.getUser().getFullName();
+            if (fullName != null && !fullName.isBlank()) return fullName;
+        }
+        if (user instanceof OidcUserDetails oidc) return oidc.getDisplayName();
+        return user.getEmail();
+    }
+
+    private String normalizeVisibility(String v) {
+        if (v == null) return "PUBLIC";
+        return switch (v.toUpperCase()) {
+            case "RESTRICTED" -> "RESTRICTED";
+            default -> "PUBLIC";
+        };
+    }
+
+    private VideoMeeting getOwned(Long id, ModTubePrincipal user) {
+        VideoMeeting m = videoMeetingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Görüş tapılmadı"));
+        if (!m.getHostEmail().equalsIgnoreCase(user.getEmail()) && !user.isSuperAdmin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bu görüş sizin deyil");
+        }
+        return m;
+    }
+}

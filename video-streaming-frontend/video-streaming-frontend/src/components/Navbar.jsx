@@ -2,15 +2,18 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { Search, Sun, Moon, X } from "lucide-react";
+import { Search, Sun, Moon, X, Menu } from "lucide-react";
 import UserDropdown from "./UserDropdown";
 import ModTubeLogo from "./ModTubeLogo";
+import NotificationBell from "./NotificationBell";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../services/api";
 
 const Navbar = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { dark, toggle } = useTheme();
+  const { toggle: toggleSidebar } = useSidebar();
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [showSug, setShowSug] = useState(false);
@@ -49,6 +52,16 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 bg-white dark:bg-army-800 border-b-2 border-primary-600/30 dark:border-primary-700/50 shadow-sm transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 gap-3">
+
+          {/* ── Mobile sidebar toggle (hidden on sm+) ────────────────── */}
+          <button
+            onClick={toggleSidebar}
+            className="sm:hidden flex-shrink-0 p-2 -ml-1 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-army-700 transition-colors"
+            title="Menyu"
+            aria-label="Menyu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
 
           {/* ── Logo ─────────────────────────────────────────────────── */}
           <Link to="/" className="flex-shrink-0 flex items-center">
@@ -108,6 +121,8 @@ const Navbar = () => {
               title={dark ? 'İşıqlı rejim' : 'Qaranlıq rejim'}>
               {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>
+
+            <NotificationBell />
 
             {isAuthenticated
               ? <UserDropdown />

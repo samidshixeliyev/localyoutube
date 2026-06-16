@@ -14,6 +14,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findUserByEmail(String email);
 
+    Optional<User> findByIdpSubject(String idpSubject);
+
     @Query(nativeQuery = true, value = """
         SELECT DISTINCT u.* FROM users u
         LEFT JOIN roles r ON u.role_id = r.id

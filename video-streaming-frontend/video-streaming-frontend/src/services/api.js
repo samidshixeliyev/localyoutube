@@ -266,4 +266,48 @@ export const removeFromPlaylist = (playlistId, videoId) =>
 export const adminAnalyzeMetrics = (snapshot) =>
     api.post('/admin/metrics/analyze', snapshot, { timeout: 90000 });
 
+// ═══════════════════════════════════════════════════════════════
+// VIDEO MEETINGS
+// ═══════════════════════════════════════════════════════════════
+
+export const getMeetings = () =>
+    api.get('/meetings');
+
+export const createMeeting = (title, description = '', visibility = 'PUBLIC', allowedEmails = '') =>
+    api.post('/meetings', { title, description, visibility, allowedEmails });
+
+export const updateMeeting = (id, title, description = '', visibility = 'PUBLIC', allowedEmails = '') =>
+    api.put(`/meetings/${id}`, { title, description, visibility, allowedEmails });
+
+export const getMeeting = (id) =>
+    api.get(`/meetings/${id}`);
+
+export const startMeeting = (id) =>
+    api.post(`/meetings/${id}/start`);
+
+export const endMeeting = (id) =>
+    api.post(`/meetings/${id}/end`);
+
+export const deleteMeeting = (id) =>
+    api.delete(`/meetings/${id}`);
+
+export const getIceConfig = () =>
+    api.get('/meetings/ice-config');
+
+// ═══════════════════════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════
+
+export const getNotifications = () =>
+    api.get('/notifications');
+
+export const getUnreadCount = () =>
+    api.get('/notifications/unread-count');
+
+export const markAllNotificationsRead = () =>
+    api.put('/notifications/read-all');
+
+export const markNotificationRead = (id) =>
+    api.put(`/notifications/${id}/read`);
+
 export default api;

@@ -23,7 +23,12 @@ public class SpaController {
             "/change-password",
             "/video/**",
             "/embed/**",
-            "/admin/**"
+            "/admin/**",
+            "/meetings",
+            "/meetings/**",
+            "/playlists",
+            "/playlists/**",
+            "/my-playlists"
     })
     public String forwardToIndex(HttpServletRequest request) {
         return "forward:/index.html";

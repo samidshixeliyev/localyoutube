@@ -95,7 +95,7 @@ public class IdpJwtValidator {
                 lastClaim,     jwt.getClaimAsString(lastClaim),
                 usernameClaim, jwt.getClaimAsString(usernameClaim));
 
-        return new OidcUserDetails(email, displayName);
+        return new OidcUserDetails(email, displayName, jwt.getSubject());
     }
 
     private static String firstNonNull(String... values) {

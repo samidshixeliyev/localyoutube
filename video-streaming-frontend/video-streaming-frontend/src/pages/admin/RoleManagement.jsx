@@ -35,6 +35,7 @@ const PERM_META = {
   'delete-video':     { category: 'Video',      icon: '🗑️', color: 'red',     desc: 'Video silmək' },
   'view-private':     { category: 'Video',      icon: '🔒', color: 'primary', desc: 'Gizli və məhdud videoları izləmək' },
   'manage-shorts':    { category: 'Video',      icon: '⚡', color: 'yellow',  desc: 'Shorts videoları idarə etmək' },
+  'video-call':       { category: 'Video',      icon: '📹', color: 'primary', desc: 'Canlı video görüşləri yaratmaq və onlara qoşulmaq' },
   'comment-moderate': { category: 'Kontent',    icon: '💬', color: 'teal',    desc: 'Şərhləri silmək' },
 };
 const DEFAULT_META = { category: 'Digər', icon: '🔑', color: 'gray', desc: '' };

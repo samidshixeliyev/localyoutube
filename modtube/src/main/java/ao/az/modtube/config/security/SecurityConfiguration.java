@@ -57,7 +57,11 @@ public class SecurityConfiguration {
                                 "/video/**", "/embed/**", "/search", "/shorts",
                                 "/upload", "/my-videos", "/change-password",
                                 "/playlists", "/playlists/**", "/my-playlists",
+                                "/meetings", "/meetings/**",
                                 "/admin/**").permitAll()
+
+                        // WebSocket signaling — auth handled by the handshake interceptor
+                        .requestMatchers("/ws/**").permitAll()
 
                         // AUTHENTICATION - Public
                         .requestMatchers("/api/auth/login").permitAll()
@@ -124,6 +128,22 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/videos/*/privacy").hasAnyAuthority("upload-video", "admin-modtube", "super-admin")
 
                         .requestMatchers("/api/playlists/**").authenticated()
+
+                        // ── Meetings — split by operation ──────────────────────────────
+                        // Creating/managing meetings requires video-call permission
+                        .requestMatchers(HttpMethod.GET,    "/api/meetings").hasAnyAuthority("video-call", "super-admin")
+                        .requestMatchers(HttpMethod.POST,   "/api/meetings").hasAnyAuthority("video-call", "super-admin")
+                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/start").hasAnyAuthority("video-call", "super-admin")
+                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/end").hasAnyAuthority("video-call", "super-admin")
+                        .requestMatchers(HttpMethod.PUT,    "/api/meetings/*").hasAnyAuthority("video-call", "super-admin")
+                        .requestMatchers(HttpMethod.DELETE, "/api/meetings/*").hasAnyAuthority("video-call", "super-admin")
+                        // GET single meeting or ice-config: any authenticated user (join by link)
+                        .requestMatchers(HttpMethod.GET, "/api/meetings/**").authenticated()
+
+                        // ── Notifications ──────────────────────────────────────────────
+                        // /stream uses ?token= auth (EventSource can't set headers)
+                        .requestMatchers("/api/notifications/stream").permitAll()
+                        .requestMatchers("/api/notifications/**").authenticated()
 
                         // Actuator - admin-modtube OR super-admin
                         .requestMatchers("/actuator/**").hasAnyAuthority("admin-modtube", "super-admin")

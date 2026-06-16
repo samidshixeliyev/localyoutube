@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Home, PlaySquare, Film, Upload,
-  Users, Shield, Settings, Activity, BarChart2, Menu, ListVideo,
+  Users, Shield, Settings, Activity, BarChart2, Menu, ListVideo, Video,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
@@ -16,6 +16,7 @@ const MAIN_NAV = [
 const CONTENT_NAV = [
   { to: '/my-videos',    icon: Film,      label: 'Videolarım',  perms: ['upload-video', 'admin-modtube'] },
   { to: '/upload',       icon: Upload,    label: 'Yüklə',       perms: ['upload-video', 'admin-modtube'] },
+  { to: '/meetings',     icon: Video,     label: 'Görüşlər',    perms: ['video-call'] },
 ];
 
 const USER_NAV = [
@@ -69,7 +70,7 @@ export default function Sidebar() {
       className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col overflow-hidden
                   transition-all duration-200 select-none
                   bg-white dark:bg-army-800 border-r border-gray-200 dark:border-army-700
-                  ${isOpen ? 'w-60' : 'w-16'}`}
+                  ${isOpen ? 'w-60 translate-x-0' : 'w-16 -translate-x-full sm:translate-x-0'}`}
     >
       {/* Header — matches navbar height */}
       <div className="flex items-center h-14 px-3 flex-shrink-0 border-b border-gray-200 dark:border-army-700">

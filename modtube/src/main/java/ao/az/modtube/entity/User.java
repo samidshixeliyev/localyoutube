@@ -30,6 +30,11 @@ public class User {
     @Column(nullable = false)
     private String password;
 
+    /** Stable IDP 'sub' claim — non-null only for IDP-provisioned users. Used to
+     *  re-match the user on every login regardless of email changes. */
+    @Column(name = "idp_subject", unique = true)
+    private String idpSubject;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "role_id")
     private Role role;

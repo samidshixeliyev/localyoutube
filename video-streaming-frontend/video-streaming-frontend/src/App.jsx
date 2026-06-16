@@ -33,6 +33,8 @@ const Analytics      = lazy(() => import('./pages/admin/Analytics'));
 const Embed          = lazy(() => import('./pages/Embed'));
 const MyPlaylists    = lazy(() => import('./pages/MyPlaylists'));
 const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
+const VideoMeetings  = lazy(() => import('./pages/VideoMeetings'));
+const MeetingRoom    = lazy(() => import('./pages/MeetingRoom'));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-primary-50 dark:bg-army-900">
@@ -55,20 +57,27 @@ function RootRoute() {
 // Reads sidebar state and shifts the content area accordingly
 // Hides sidebar for login, callback, embed, and logged_out routes
 function SidebarAwareLayout({ children }) {
-  const { isOpen } = useSidebar();
+  const { isOpen, toggle } = useSidebar();
   const location = useLocation();
 
   const noSidebar = ['/login', '/callback', '/logged_out'].includes(location.pathname)
-    || location.pathname.startsWith('/embed/');
+    || location.pathname.startsWith('/embed/')
+    || /^\/meetings\/[^/]+\/room$/.test(location.pathname);
 
   if (noSidebar) return <>{children}</>;
 
+  // On mobile the sidebar is an overlay drawer (no content padding); on sm+ it
+  // shifts the content. This prevents the 64px rail from squashing mobile content.
   return (
     <>
       <Sidebar />
+      {/* Mobile backdrop — only when the drawer is open on small screens */}
+      {isOpen && (
+        <div className="sm:hidden fixed inset-0 bg-black/50 z-40" onClick={toggle} />
+      )}
       <div
-        className="min-h-screen bg-primary-50 dark:bg-army-900 transition-all duration-200"
-        style={{ paddingLeft: isOpen ? '240px' : '64px' }}
+        className={`min-h-screen bg-primary-50 dark:bg-army-900 transition-all duration-200
+                    ${isOpen ? 'sm:pl-60' : 'sm:pl-16'}`}
       >
         {children}
       </div>
@@ -192,6 +201,24 @@ function AppContent() {
                   element={
                     <PrivateRoute requiredPermission={['super-admin', 'view-metrics']}>
                       <Analytics />
+                    </PrivateRoute>
+                  }
+                />
+
+                {/* video-call */}
+                <Route
+                  path="/meetings"
+                  element={
+                    <PrivateRoute requiredPermission={['video-call']}>
+                      <VideoMeetings />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/meetings/:id/room"
+                  element={
+                    <PrivateRoute>
+                      <MeetingRoom />
                     </PrivateRoute>
                   }
                 />

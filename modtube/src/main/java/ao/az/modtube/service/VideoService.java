@@ -34,18 +34,21 @@ public class VideoService {
     private final VideoRepository videoRepository;
     private final VideoLikeRepository videoLikeRepository;
     private final CommentRepository commentRepository;
+    private final StorageService storageService;
     private final Path uploadDir;
     private final Path hlsDir;
     private final Path thumbnailDir;
 
     public VideoService(VideoRepository videoRepository, VideoLikeRepository videoLikeRepository,
                         CommentRepository commentRepository,
+                        StorageService storageService,
                         @Value("${modtube.storage.upload-dir}") String uploadDirPath,
                         @Value("${modtube.storage.hls-dir}") String hlsDirPath,
                         @Value("${modtube.storage.thumbnail-dir}") String thumbnailDirPath) {
         this.videoRepository = videoRepository;
         this.videoLikeRepository = videoLikeRepository;
         this.commentRepository = commentRepository;
+        this.storageService = storageService;
         this.uploadDir = Paths.get(uploadDirPath);
         this.hlsDir = Paths.get(hlsDirPath);
         this.thumbnailDir = Paths.get(thumbnailDirPath);
@@ -270,17 +273,18 @@ public class VideoService {
             throw new BadRequestException("File must be an image");
         }
 
-        Path thumbDir = thumbnailDir.resolve(videoId);
-        Files.createDirectories(thumbDir);
-
         String extension = getFileExtension(file.getOriginalFilename());
-        Path customThumbnail = thumbDir.resolve("custom." + extension);
+        String key = "thumbnails/" + videoId + "/custom." + extension;
 
         try (InputStream in = file.getInputStream()) {
-            Files.copy(in, customThumbnail, StandardCopyOption.REPLACE_EXISTING);
+            storageService.putStream(key, in, file.getSize(),
+                    StorageService.contentTypeFor("custom." + extension));
+        } catch (Exception e) {
+            throw new IOException("Failed to store thumbnail: " + e.getMessage(), e);
         }
 
-        video.setThumbnailUrl("/thumbnails/" + videoId + "/custom." + extension);
+        // Cache-bust so viewers see the new thumbnail immediately.
+        video.setThumbnailUrl("/thumbnails/" + videoId + "/custom." + extension + "?v=" + System.currentTimeMillis());
         videoRepository.save(video);
         log.info("Custom thumbnail uploaded for video: {}", videoId);
     }
@@ -295,6 +299,11 @@ public class VideoService {
         if (videoOpt.isPresent()) {
             Video video = videoOpt.get();
 
+            // Remove media from MinIO (primary store).
+            storageService.deletePrefix("hls/" + id);
+            storageService.deletePrefix("thumbnails/" + id);
+
+            // Defensively clean any local scratch left behind (e.g. failed transcode).
             if (video.getUploadPath() != null) {
                 deleteDirectoryRecursive(Paths.get(video.getUploadPath()));
             }

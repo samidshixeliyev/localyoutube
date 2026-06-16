@@ -14,13 +14,21 @@ public class OidcUserDetails implements ModTubePrincipal {
 
     private final String email;
     private final String displayName;
+    private final String subject;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public OidcUserDetails(String email, String displayName) {
+        this(email, displayName, null);
+    }
+
+    public OidcUserDetails(String email, String displayName, String subject) {
         this.email = email;
         this.displayName = displayName != null ? displayName : email;
+        this.subject = subject;
         this.authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
     }
+
+    public String getSubject() { return subject; }
 
     @Override public String getEmail() { return email; }
     @Override public Long getUserId() { return null; }

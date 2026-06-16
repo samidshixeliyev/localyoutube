@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import api from '../services/api';
+import { decodeJwt } from '../utils/jwt';
 
 function generateRandomString(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
@@ -107,15 +108,6 @@ export const useAuth = () => {
 // ── Synchronous bootstrap ────────────────────────────────────────────────────
 // Read and validate the JWT from localStorage before the first render so that
 // `loading` never needs to be true and no spinner ever flashes on page load.
-function decodeJwt(token) {
-  const base64Url = token.split('.')[1];
-  const base64    = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const json      = decodeURIComponent(
-    atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
-  );
-  return JSON.parse(json);
-}
-
 function loadUserSync() {
   try {
     const token = localStorage.getItem('jwt_token');
@@ -296,16 +288,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('jwt_token', token);
         
         // Decode token to get user info
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(
-          atob(base64)
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
-        );
-        
-        const decoded = JSON.parse(jsonPayload);
+        const decoded = decodeJwt(token);
         const userData = {
           email: decoded.email || decoded.sub,
           username: decoded.username || decoded.name || email.split('@')[0],

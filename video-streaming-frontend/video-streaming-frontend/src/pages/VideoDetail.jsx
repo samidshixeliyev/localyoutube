@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useMiniPlayer } from "../context/MiniPlayerContext";
+import { decodeJwt } from "../utils/jwt";
 import api, { adminGetUsers, getMyPlaylists, addToPlaylist, createPlaylist, getPlaylist } from "../services/api";
 
 /* ── visibility helpers ──────────────────────────────────────── */
@@ -172,7 +173,7 @@ const VideoDetail = () => {
     const token = localStorage.getItem('jwt_token');
     if (!token) { setCurrentUser(null); return; }
     try {
-      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      const payload = decodeJwt(token);
       const email = payload.email || payload.sub || payload.username;
       const perms = payload.permissions || [];
       const role  = payload.role || '';
