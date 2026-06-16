@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, LogOut,
   Users, Lock, Monitor, MonitorOff, RefreshCw,
   MessageSquare, Send, X, Minimize2, Maximize2,
+  KeyRound, UserPlus,
 } from 'lucide-react';
-import { getMeeting, startMeeting, endMeeting, getIceConfig } from '../services/api';
+import {
+  getMeeting, startMeeting, endMeeting, getIceConfig,
+  joinMeeting, inviteToMeeting, getMeetingParticipants,
+} from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 /* ─── helpers ─────────────────────────────────────────────────── */
@@ -152,13 +156,33 @@ function ChatPanel({ messages, onSend, onClose, messagesEndRef }) {
 export default function MeetingRoom() {
   const { id }   = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite') || '';
+  const { user, hasPermission } = useAuth();
 
   /* ── meeting ── */
   const [meeting,   setMeeting]   = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [ended,     setEnded]     = useState(false);
+  const [roomFull,  setRoomFull]  = useState(0);   // 0 = not full, else the cap
+
+  /* ── join gate (room code) ── */
+  const [roomCode,  setRoomCode]  = useState(null);   // null until access granted
+  const [pinNeeded, setPinNeeded] = useState(false);
+  const [pinInput,  setPinInput]  = useState('');
+  const [pinError,  setPinError]  = useState('');
+  const [joining,   setJoining]   = useState(false);
+
+  /* ── device availability (graceful no mic/cam) ── */
+  const [hasMic, setHasMic] = useState(true);
+  const [hasCam, setHasCam] = useState(true);
+
+  /* ── invite panel ── */
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteMsg, setInviteMsg] = useState('');
+  const [inviting, setInviting] = useState(false);
 
   /* ── media ── */
   const [camStream,    setCamStream]    = useState(null);
@@ -200,9 +224,19 @@ export default function MeetingRoom() {
   const peerInfoRef     = useRef(new Map());
   const pendingIceRef   = useRef(new Map());
   const iceConfigRef    = useRef({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  const leavingRef      = useRef(false);   // true once the user intentionally leaves/ends
+  const noReconnectRef  = useRef(false);   // true when meeting ended / room full (don't retry)
+  const reconnectsRef   = useRef(0);
 
+  // Per-tab room-code cache so a page refresh / brief network drop rejoins
+  // without re-entering the PIN.
+  const SS_KEY = `mt_room_${id}`;
   const displayName = user?.fullName || user?.name || user?.email || 'Mən';
   const isHost      = meeting?.isHost;
+
+  // Skip our own identity in peer lists so we never render a second tile of ourselves.
+  const isSelfEmail = (email) =>
+    !!email && !!user?.email && email.toLowerCase() === user.email.toLowerCase();
 
   /* derived */
   const isSomeoneSharing = !!screenSharingEmail;
@@ -246,7 +280,27 @@ export default function MeetingRoom() {
         const res = await getMeeting(id);
         let m = res.data;
         if (m.isHost && m.status === 'SCHEDULED') { const r2 = await startMeeting(id); m = r2.data; }
-        if (!cancelled) setMeeting(m);
+        if (cancelled) return;
+        setMeeting(m);
+
+        // Managers (host/super-admin/moderator) already receive roomCode directly.
+        if (m.roomCode) { setRoomCode(m.roomCode); sessionStorage.setItem(SS_KEY, m.roomCode); return; }
+
+        // Already passed the gate earlier this session (e.g. page refresh) →
+        // rejoin straight away without asking for the PIN again.
+        const saved = sessionStorage.getItem(SS_KEY);
+        if (saved) { setRoomCode(saved); return; }
+
+        // Invited via link → exchange the token for the roomCode, no PIN needed.
+        if (inviteToken) {
+          try {
+            const jr = await joinMeeting(id, { token: inviteToken });
+            if (!cancelled) { setRoomCode(jr.data.roomCode); sessionStorage.setItem(SS_KEY, jr.data.roomCode); }
+            return;
+          } catch { /* fall through to PIN entry */ }
+        }
+        // Otherwise require the 4-digit room code.
+        if (!cancelled) setPinNeeded(true);
       } catch (err) {
         if (cancelled) return;
         if (err?.response?.status === 403) setForbidden(true);
@@ -256,7 +310,35 @@ export default function MeetingRoom() {
       }
     })();
     return () => { cancelled = true; };
-  }, [id, navigate]);
+  }, [id, navigate, inviteToken]);
+
+  /* Submit the room-code PIN to obtain the roomCode and join. */
+  const submitPin = useCallback(async () => {
+    if (pinInput.trim().length < 4) { setPinError('4 rəqəmli kodu daxil edin'); return; }
+    setJoining(true); setPinError('');
+    try {
+      const jr = await joinMeeting(id, { pin: pinInput.trim() });
+      setRoomCode(jr.data.roomCode);
+      sessionStorage.setItem(SS_KEY, jr.data.roomCode);
+      setPinNeeded(false);
+    } catch (err) {
+      setPinError(err.response?.data?.error || 'Otaq kodu yanlışdır');
+    } finally { setJoining(false); }
+  }, [id, pinInput]);
+
+  /* Host/moderator sends an invite. */
+  const sendInvite = useCallback(async () => {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setInviting(true); setInviteMsg('');
+    try {
+      await inviteToMeeting(id, email);
+      setInviteMsg(`Dəvət göndərildi: ${email}`);
+      setInviteEmail('');
+    } catch (err) {
+      setInviteMsg(err.response?.data?.error || 'Dəvət göndərilə bilmədi');
+    } finally { setInviting(false); }
+  }, [id, inviteEmail]);
 
   /* ════════════════════════════════════════════════════════════
      Signaling helpers
@@ -399,7 +481,7 @@ export default function MeetingRoom() {
      Media + WebSocket
   ════════════════════════════════════════════════════════════ */
   useEffect(() => {
-    if (!meeting) return;
+    if (!meeting || !roomCode) return;   // wait until access is granted (roomCode resolved)
     let cancelled = false;
     setMediaError('');
     setMediaWarning('');
@@ -415,26 +497,51 @@ export default function MeetingRoom() {
       } else if (!navigator.mediaDevices?.getUserMedia) {
         setMediaError('Brauzeriniz kamera API-ni dəstəkləmir (Chrome/Firefox/Edge istifadə edin).');
       } else {
-        let stream = null;
+        // Enumerate devices FIRST so we never request a device that isn't present
+        // (avoids NotFoundError) and can disable the matching UI toggle.
+        let wantAudio = true, wantVideo = true;
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        } catch (err1) {
-          if (err1.name === 'NotAllowedError' || err1.name === 'PermissionDeniedError') {
-            setMediaError('Kamera/mikrofon girişi rədd edildi. Brauzer ünvan çubuğundakı kilid ikonasından icazə verin.');
-          } else {
-            try {
-              stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-              setMediaWarning('Kamera tapılmadı — yalnız mikrofon ilə qoşulursunuz.');
-            } catch (err2) {
-              if (err2.name === 'NotAllowedError' || err2.name === 'PermissionDeniedError') {
-                setMediaError('Mikrofon girişi rədd edildi. Brauzer kilid ikonasından icazə verin.');
-              } else {
-                setMediaWarning(`Cihaz əlçatınsız (${err2.name}) — izləyici kimi qoşulursunuz.`);
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          wantAudio = devices.some(d => d.kind === 'audioinput');
+          wantVideo = devices.some(d => d.kind === 'videoinput');
+        } catch { /* enumeration unsupported — assume both, fallbacks below handle it */ }
+        if (!cancelled) { setHasMic(wantAudio); setHasCam(wantVideo); }
+
+        if (!wantAudio && !wantVideo) {
+          setMediaWarning('Mikrofon və kamera tapılmadı — izləyici kimi qoşulursunuz.');
+        } else {
+          const tryGet = async (constraints) => navigator.mediaDevices.getUserMedia(constraints);
+          let stream = null;
+          try {
+            stream = await tryGet({ audio: wantAudio, video: wantVideo });
+          } catch (err1) {
+            if (err1.name === 'NotAllowedError' || err1.name === 'PermissionDeniedError') {
+              setMediaError('Kamera/mikrofon girişi rədd edildi. Brauzer ünvan çubuğundakı kilid ikonasından icazə verin.');
+            } else if (err1.name === 'OverconstrainedError' || err1.name === 'NotFoundError') {
+              // Retry audio-only — the camera may have vanished or constraints failed
+              try {
+                stream = await tryGet({ audio: wantAudio, video: false });
+                if (!cancelled) setHasCam(false);
+                setMediaWarning('Kamera əlçatınsızdır — yalnız mikrofon ilə qoşulursunuz.');
+              } catch (err2) {
+                if (err2.name === 'NotAllowedError') {
+                  setMediaError('Mikrofon girişi rədd edildi. Brauzer kilid ikonasından icazə verin.');
+                } else {
+                  if (!cancelled) { setHasMic(false); setHasCam(false); }
+                  setMediaWarning('Cihaz əlçatınsız — izləyici kimi qoşulursunuz.');
+                }
               }
+            } else {
+              setMediaWarning(`Cihaz əlçatınsız (${err1.name}) — izləyici kimi qoşulursunuz.`);
             }
           }
+          if (stream && !cancelled) {
+            camStreamRef.current = stream;
+            setCamStream(stream);
+            setMicOn(stream.getAudioTracks().length > 0);
+            setCamOn(stream.getVideoTracks().length > 0);
+          }
         }
-        if (stream && !cancelled) { camStreamRef.current = stream; setCamStream(stream); }
       }
 
       if (cancelled) return;
@@ -442,7 +549,7 @@ export default function MeetingRoom() {
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const token = localStorage.getItem('jwt_token') || '';
       const ws = new WebSocket(
-        `${proto}://${window.location.host}/ws/meetings/${meeting.roomCode}?token=${encodeURIComponent(token)}`
+        `${proto}://${window.location.host}/ws/meetings/${roomCode}?token=${encodeURIComponent(token)}`
       );
       wsRef.current = ws;
 
@@ -452,11 +559,13 @@ export default function MeetingRoom() {
         switch (msg.type) {
           case 'peers':
             (msg.peers || []).forEach(p => {
+              if (isSelfEmail(p.email)) return;   // never create a tile for ourselves
               peerInfoRef.current.set(p.id, { email: p.email, name: p.name });
               createPeerConnection(p.id, { email: p.email, name: p.name }, true);
             });
             break;
           case 'peer-joined':
+            if (isSelfEmail(msg.email)) break;     // ignore our own (e.g. stale) session
             peerInfoRef.current.set(msg.id, { email: msg.email, name: msg.name });
             setRemotePeers(prev =>
               prev.some(p => p.id === msg.id) ? prev
@@ -467,7 +576,8 @@ export default function MeetingRoom() {
           case 'answer':         handleAnswer(msg); break;
           case 'ice-candidate':  handleIce(msg); break;
           case 'peer-left':      removePeer(msg.id); break;
-          case 'meeting-ended':  setEnded(true); cleanup(); break;
+          case 'meeting-ended':  noReconnectRef.current = true; sessionStorage.removeItem(SS_KEY); setEnded(true); cleanup(); break;
+          case 'room-full':      noReconnectRef.current = true; setRoomFull(msg.max || 1); cleanup(); break;
           case 'screen-start':
             setScreenSharingEmail(msg.email);
             setScreenSharingPeerId(msg.from);
@@ -495,13 +605,35 @@ export default function MeetingRoom() {
           default: break;
         }
       };
+      ws.onopen = async () => {
+        reconnectsRef.current = 0;   // healthy connection — reset backoff
+        // Snapshot the current participant list from the server so late joiners
+        // see everyone immediately, not only those who join after us.
+        try {
+          const pr = await getMeetingParticipants(id);
+          (pr.data || []).forEach(p => {
+            if (!p.id || isSelfEmail(p.email)) return;   // skip our own session (no self-tile)
+            peerInfoRef.current.set(p.id, { email: p.email, name: p.name });
+            createPeerConnection(p.id, { email: p.email, name: p.name }, true);
+          });
+        } catch { /* WS 'peers' message is the primary path; ignore */ }
+      };
       ws.onerror = () => {};
-      ws.onclose = () => {};
+      ws.onclose = () => {
+        // Unintentional drop (refresh elsewhere / network blip) → auto-reconnect a
+        // few times instead of throwing the user out of the meeting.
+        if (cancelled || leavingRef.current || noReconnectRef.current) return;
+        if (reconnectsRef.current >= 6) return;   // give up after ~ a minute
+        reconnectsRef.current += 1;
+        setTimeout(() => {
+          if (!leavingRef.current && !noReconnectRef.current) setRetryKey(k => k + 1);
+        }, 2500);
+      };
     })();
 
     return () => { cancelled = true; cleanup(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meeting, retryKey]);
+  }, [meeting, roomCode, retryKey]);
 
   /* ════════════════════════════════════════════════════════════
      Controls
@@ -520,16 +652,37 @@ export default function MeetingRoom() {
     setCamOn(next);
   };
 
+  /** Renegotiate a single peer connection (used after addTrack changes the m-lines). */
+  const renegotiate = useCallback(async (peerId, pc) => {
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      sendSignal({ type: 'offer', target: peerId, sdp: pc.localDescription });
+    } catch { /* ignore — glare unlikely with single sharer */ }
+  }, [sendSignal]);
+
   /**
-   * Replace the outgoing video track on every peer connection.
+   * Replace (or add) the outgoing video track on every peer connection.
+   * If a peer has no existing video sender — e.g. we joined without a camera —
+   * the track is ADDED and that connection is renegotiated, so the screen share
+   * reaches every participant, not just those we already sent video to.
    * When `highBitrate` is set (screen sharing), raise the encoder ceiling so
    * text/detail stays sharp instead of being smeared by the default ~1 Mbps cap.
    */
   const replaceVideoTrack = useCallback((newTrack, highBitrate = false) => {
-    pcsRef.current.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (!sender) return;
-      sender.replaceTrack(newTrack).catch(() => {});
+    pcsRef.current.forEach((pc, peerId) => {
+      let sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (sender) {
+        sender.replaceTrack(newTrack).catch(() => {});
+      } else if (newTrack) {
+        try {
+          const stream = screenStreamRef.current || camStreamRef.current || new MediaStream([newTrack]);
+          sender = pc.addTrack(newTrack, stream);
+          renegotiate(peerId, pc);   // adding a track requires renegotiation
+        } catch { return; }
+      } else {
+        return;
+      }
       try {
         const params = sender.getParameters();
         if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
@@ -547,7 +700,40 @@ export default function MeetingRoom() {
         sender.setParameters(params).catch(() => {});
       } catch { /* setParameters unsupported — ignore */ }
     });
+  }, [renegotiate]);
+
+  /**
+   * Adaptive mesh quality. In a mesh every browser sends its camera to every
+   * other peer, so total uplink scales with participant count. To keep larger
+   * meetings usable we shrink each outgoing camera stream as the room grows.
+   * Screen sharing keeps its own high-bitrate path (handled in replaceVideoTrack).
+   */
+  const applyAdaptiveQuality = useCallback((participantCount) => {
+    let maxBitrate, scale;
+    if      (participantCount <= 4)  { maxBitrate = 1_200_000; scale = 1;   }
+    else if (participantCount <= 8)  { maxBitrate =   600_000; scale = 1.5; }
+    else if (participantCount <= 16) { maxBitrate =   300_000; scale = 2;   }
+    else                             { maxBitrate =   150_000; scale = 3;   }
+
+    pcsRef.current.forEach(pc => {
+      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      if (!sender || !sender.track) return;
+      try {
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+        params.encodings.forEach(e => { e.maxBitrate = maxBitrate; e.scaleResolutionDownBy = scale; });
+        params.degradationPreference = 'balanced';
+        sender.setParameters(params).catch(() => {});
+      } catch { /* setParameters unsupported — ignore */ }
+    });
   }, []);
+
+  /* Re-tune camera quality whenever the participant count changes (skip while
+     screen sharing — that stream is intentionally high-bitrate). */
+  useEffect(() => {
+    if (screenOn) return;
+    applyAdaptiveQuality(remotePeers.length + 1);
+  }, [remotePeers.length, screenOn, applyAdaptiveQuality]);
 
   const stopScreen = useCallback(() => {
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -590,10 +776,21 @@ export default function MeetingRoom() {
 
   const sendChat = useCallback((text) => sendSignal({ type: 'chat', text }), [sendSignal]);
 
-  const handleLeave = () => { cleanup(); navigate('/meetings'); };
-  const handleEnd   = async () => {
+  // Leave: I exit the meeting; it keeps running for everyone else.
+  const handleLeave = () => {
+    leavingRef.current = true;
+    sessionStorage.removeItem(SS_KEY);
+    cleanup();
+    navigate('/meetings');
+  };
+  // Finish: host only — ends the meeting for everyone.
+  const handleEnd = async () => {
+    leavingRef.current = true;
+    noReconnectRef.current = true;
+    sessionStorage.removeItem(SS_KEY);
     try { await endMeeting(id); } catch { /* ignore */ }
-    cleanup(); navigate('/meetings');
+    cleanup();
+    navigate('/meetings');
   };
 
   /* ════════════════════════════════════════════════════════════
@@ -626,9 +823,67 @@ export default function MeetingRoom() {
     </div>
   );
 
+  if (roomFull) return (
+    <div className="min-h-screen bg-army-950 flex items-center justify-center">
+      <div className="text-center px-4 max-w-sm">
+        <Users className="w-16 h-16 text-army-600 mx-auto mb-4" />
+        <h2 className="text-xl font-bold text-gray-100 mb-2">Görüş doludur</h2>
+        <p className="text-gray-400 mb-6">
+          Bu görüşdə maksimum iştirakçı sayına ({roomFull} nəfər) çatılıb. Bir az sonra yenidən cəhd edin.
+        </p>
+        <button onClick={() => navigate('/meetings')} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700">Görüşlərə qayıt</button>
+      </div>
+    </div>
+  );
+
   if (!meeting) return null;
 
+  // Room-code gate — non-managers must enter the 4-digit PIN before the roomCode
+  // (and thus the call) is revealed.
+  if (pinNeeded && !roomCode) return (
+    <div className="min-h-screen bg-army-950 flex items-center justify-center px-4">
+      <div className="w-full max-w-sm text-center">
+        <div className="w-14 h-14 rounded-2xl bg-primary-600/20 flex items-center justify-center mx-auto mb-4">
+          <KeyRound className="w-7 h-7 text-primary-400" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-100 mb-1">{meeting.title}</h2>
+        <p className="text-gray-400 text-sm mb-6">Qoşulmaq üçün 4 rəqəmli otaq kodunu daxil edin</p>
+        <input
+          autoFocus
+          inputMode="numeric"
+          maxLength={4}
+          value={pinInput}
+          onChange={e => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          onKeyDown={e => e.key === 'Enter' && submitPin()}
+          placeholder="••••"
+          className="w-40 mx-auto block text-center tracking-[0.6em] text-2xl font-bold py-3 rounded-xl
+                     bg-army-800 border border-army-600 text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        {pinError && <p className="text-red-400 text-sm mt-3">{pinError}</p>}
+        <div className="flex gap-2 mt-6">
+          <button onClick={() => navigate('/meetings')}
+            className="flex-1 px-4 py-2.5 bg-army-700 hover:bg-army-600 text-gray-200 rounded-xl text-sm font-medium transition-colors">
+            Ləğv et
+          </button>
+          <button onClick={submitPin} disabled={joining || pinInput.length < 4}
+            className="flex-1 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            {joining && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+            Qoşul
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Still resolving access (manager roomCode / invite token) — brief spinner.
+  if (!roomCode) return (
+    <div className="min-h-screen bg-army-950 flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
   const tileCount = remotePeers.length + 1;
+  const canManage = meeting.canManage;
 
   return (
     <div className="min-h-screen bg-army-950 flex flex-col">
@@ -646,6 +901,21 @@ export default function MeetingRoom() {
               {amISharing ? 'Siz paylaşırsınız' : `${screenSharingName} paylaşır`}
             </span>
           )}
+          {/* Room PIN — visible only to managers (host/super-admin/moderator) */}
+          {canManage && meeting.joinPin && (
+            <span className="hidden sm:flex items-center gap-1 text-gray-200 text-xs bg-army-800 px-2.5 py-1 rounded-full font-mono"
+                  title="Otaq kodu (yalnız siz görürsünüz)">
+              <KeyRound className="w-3.5 h-3.5 text-primary-400" />{meeting.joinPin}
+            </span>
+          )}
+          {/* Invite — managers only */}
+          {canManage && (
+            <button onClick={() => { setInviteOpen(o => !o); setInviteMsg(''); }}
+              className={`p-2 rounded-lg transition-colors ${inviteOpen ? 'bg-primary-600 text-white' : 'bg-army-800 text-gray-300 hover:bg-army-700'}`}
+              title="İstifadəçi dəvət et">
+              <UserPlus className="w-4 h-4" />
+            </button>
+          )}
           <div className="flex items-center gap-1 text-gray-300 text-xs bg-army-800 px-2.5 py-1 rounded-full">
             <Users className="w-3.5 h-3.5" />{tileCount}
           </div>
@@ -661,6 +931,37 @@ export default function MeetingRoom() {
           </button>
         </div>
       </div>
+
+      {/* ── Invite panel (managers) ─────────────────────────────── */}
+      {inviteOpen && canManage && (
+        <div className="absolute right-3 top-16 z-30 w-72 bg-army-800 border border-army-700 rounded-xl shadow-2xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-gray-200 text-sm font-semibold flex items-center gap-1.5">
+              <UserPlus className="w-4 h-4 text-primary-400" /> İstifadəçi dəvət et
+            </span>
+            <button onClick={() => setInviteOpen(false)} className="p-1 text-gray-400 hover:text-gray-200">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-500 mb-2 leading-snug">
+            Dəvət olunan istifadəçi bildiriş və birbaşa qoşulma linki alacaq (kod tələb olunmur).
+          </p>
+          <input
+            type="email"
+            value={inviteEmail}
+            onChange={e => setInviteEmail(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendInvite()}
+            placeholder="E-poçt ünvanı"
+            className="w-full px-3 py-2 rounded-lg bg-army-700 border border-army-600 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+          />
+          {inviteMsg && <p className="text-[11px] text-primary-300 mt-2">{inviteMsg}</p>}
+          <button onClick={sendInvite} disabled={inviting || !inviteEmail.trim()}
+            className="w-full mt-3 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            {inviting && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+            Dəvət göndər
+          </button>
+        </div>
+      )}
 
       {/* ── Main body ───────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -785,18 +1086,18 @@ export default function MeetingRoom() {
           {/* ── Controls ───────────────────────────────────────── */}
           <div className="flex items-center justify-center flex-wrap gap-2 sm:gap-3 px-4 py-3 border-t border-army-800 flex-shrink-0">
 
-            {/* Mic */}
-            <button onClick={toggleMic} disabled={!camStream}
-              title={micOn ? 'Mikrofonu söndür' : 'Mikrofonu aç'}
-              className={`p-3 rounded-full transition-colors disabled:opacity-40 ${micOn ? 'bg-army-700 hover:bg-army-600 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}>
-              {micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+            {/* Mic — disabled & labelled when no microphone is present */}
+            <button onClick={toggleMic} disabled={!hasMic || !camStreamRef.current?.getAudioTracks().length}
+              title={!hasMic ? 'Mikrofon tapılmadı' : micOn ? 'Mikrofonu söndür' : 'Mikrofonu aç'}
+              className={`p-3 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${micOn && hasMic ? 'bg-army-700 hover:bg-army-600 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}>
+              {micOn && hasMic ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
             </button>
 
-            {/* Camera */}
-            <button onClick={toggleCam} disabled={!camStream || screenOn}
-              title={camOn ? 'Kameranı söndür' : 'Kameranı aç'}
-              className={`p-3 rounded-full transition-colors disabled:opacity-40 ${camOn && !screenOn ? 'bg-army-700 hover:bg-army-600 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}>
-              {camOn && !screenOn ? <VideoIcon className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+            {/* Camera — disabled & labelled when no camera is present */}
+            <button onClick={toggleCam} disabled={!hasCam || screenOn || !camStreamRef.current?.getVideoTracks().length}
+              title={!hasCam ? 'Kamera tapılmadı' : camOn ? 'Kameranı söndür' : 'Kameranı aç'}
+              className={`p-3 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${camOn && !screenOn && hasCam ? 'bg-army-700 hover:bg-army-600 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}>
+              {camOn && !screenOn && hasCam ? <VideoIcon className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
             </button>
 
             {/* Screen share */}

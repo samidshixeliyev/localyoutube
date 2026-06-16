@@ -16,7 +16,7 @@ const MAIN_NAV = [
 const CONTENT_NAV = [
   { to: '/my-videos',    icon: Film,      label: 'Videolarım',  perms: ['upload-video', 'admin-modtube'] },
   { to: '/upload',       icon: Upload,    label: 'Yüklə',       perms: ['upload-video', 'admin-modtube'] },
-  { to: '/meetings',     icon: Video,     label: 'Görüşlər',    perms: ['video-call'] },
+  { to: '/meetings',     icon: Video,     label: 'Görüşlər',    perms: ['video-call', 'manage-meetings'] },
 ];
 
 const USER_NAV = [

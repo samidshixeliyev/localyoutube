@@ -294,6 +294,18 @@ export const deleteMeeting = (id) =>
 export const getIceConfig = () =>
     api.get('/meetings/ice-config');
 
+// Join a meeting: pass a PIN (public meetings) or an invite token. Returns { roomCode }.
+export const joinMeeting = (id, { pin = '', token = '' } = {}) =>
+    api.post(`/meetings/${id}/join`, { pin, token });
+
+// Host/moderator invites a user by email (sends a notification with a join link).
+export const inviteToMeeting = (id, email) =>
+    api.post(`/meetings/${id}/invite`, { email });
+
+// Snapshot of currently-connected participants (for late joiners).
+export const getMeetingParticipants = (id) =>
+    api.get(`/meetings/${id}/participants`);
+
 // ═══════════════════════════════════════════════════════════════
 // NOTIFICATIONS
 // ═══════════════════════════════════════════════════════════════

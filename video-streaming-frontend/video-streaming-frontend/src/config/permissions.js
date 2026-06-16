@@ -26,6 +26,7 @@ export const PERMS = {
   COMMENT_MODERATE: 'comment-moderate',    // delete any comment
   VIEW_REPORTS:     'view-reports',        // analytics / report pages
   VIDEO_CALL:       'video-call',          // create / join live video meetings
+  MANAGE_MEETINGS:  'manage-meetings',     // edit / end / delete ANY user's meeting
 };
 
 /**
@@ -53,7 +54,8 @@ export const FEATURE = {
   MANAGE_ROLES:     [PERMS.MANAGE_ROLES],
 
   // Live video meetings
-  VIDEO_CALL:       [PERMS.VIDEO_CALL],
+  VIDEO_CALL:       [PERMS.VIDEO_CALL,    PERMS.MANAGE_MEETINGS],
+  MANAGE_MEETINGS:  [PERMS.MANAGE_MEETINGS],
 };
 
 /**

@@ -62,6 +62,8 @@ modtube:
       access-key: ${MINIO_ACCESS_KEY:minioadmin}
       secret-key: ${MINIO_SECRET_KEY:minioadmin}
       bucket:     ${MINIO_BUCKET:modtube}
+      # Optional — only for region-aware S3 backends (real AWS S3 etc.). Blank for MinIO.
+      region:     ${MINIO_REGION:}
 
   transcoding:
     segment-duration: 6
@@ -72,6 +74,10 @@ modtube:
     turn-url: ${WEBRTC_TURN_URL:}
     turn-username: ${WEBRTC_TURN_USERNAME:}
     turn-credential: ${WEBRTC_TURN_CREDENTIAL:}
+    # Max participants per meeting room. Mesh WebRTC is heavy past a handful of
+    # peers; adaptive quality (frontend) lowers per-peer bitrate as the room
+    # grows so a fast LAN can sustain larger calls. 0 = unlimited (not advised).
+    max-participants: ${WEBRTC_MAX_PARTICIPANTS:30}
 
   idp:
     base-url: ${IDP_BASE_URL:https://13.61.159.58}
@@ -99,6 +105,15 @@ management:
   endpoint:
     health:
       show-details: always
+      # Expose liveness/readiness groups so the container healthcheck can hit a
+      # lightweight liveness probe instead of the full DB-touching health check.
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
   metrics:
     export:
       prometheus:

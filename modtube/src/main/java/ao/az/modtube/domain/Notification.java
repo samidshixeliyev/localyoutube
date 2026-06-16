@@ -31,6 +31,10 @@ public class Notification {
 
     private Long meetingId;
 
+    /** Optional payload — e.g. a signed invite token for a one-click join link. */
+    @Column(columnDefinition = "TEXT")
+    private String data;
+
     @Column(nullable = false)
     private boolean read = false;
 

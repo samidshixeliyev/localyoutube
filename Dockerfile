@@ -49,9 +49,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends grafana && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ── Nginx + OpenSSL (HTTPS reverse proxy — separate layer preserves cache above)
+# ── Nginx + OpenSSL (HTTPS reverse proxy) + coturn (bundled STUN/TURN) ─────────
+# coturn is bundled so live video meetings work fully offline with no extra
+# container. The entrypoint writes /etc/coturn/turnserver.conf at runtime.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends nginx openssl && \
+    apt-get install -y --no-install-recommends nginx openssl coturn && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── Java 21 JRE (Eclipse Temurin) ────────────────────────────────────────────
@@ -126,14 +128,16 @@ COPY start-spring.sh             /start-spring.sh
 RUN chmod +x /docker-entrypoint.sh /start-spring.sh
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
-# 80  — nginx HTTP (redirects to HTTPS)
-# 443 — nginx HTTPS (reverse proxy to Spring Boot)
+# 80   — nginx HTTP (redirects to HTTPS)
+# 443  — nginx HTTPS (reverse proxy to Spring Boot)
 # 4000 — Spring Boot direct (internal / debug only)
-EXPOSE 80 443 4000
+# 3478 — coturn STUN/TURN (TCP+UDP) for video meetings
+# 49152-49200/udp — coturn media relay range
+EXPOSE 80 443 4000 3478 3478/udp 49152-49200/udp
 
 VOLUME ["/data", "/var/lib/postgresql/data", "/var/lib/prometheus"]
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-    CMD curl -f http://localhost:4000/actuator/health || exit 1
+    CMD curl -f http://localhost:4000/actuator/health/liveness || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

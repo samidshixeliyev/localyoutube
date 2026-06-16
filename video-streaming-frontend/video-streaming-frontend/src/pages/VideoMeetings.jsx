@@ -266,6 +266,13 @@ function MeetingCard({ m, onJoin, onStart, onEnd, onDelete, onEdit, busy }) {
         <div className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">
           {m.hostName || m.hostEmail} · {created}
         </div>
+        {/* Room code — only managers receive joinPin from the API */}
+        {manage && m.joinPin && (
+          <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30 px-2 py-0.5 rounded-md w-fit"
+               title="Otaq kodu — qoşulanlara verin">
+            Kod: {m.joinPin}
+          </div>
+        )}
 
         <div className="mt-3 flex gap-2">
           {/* Start — managers, not yet started */}

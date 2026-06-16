@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle, Upload } from 'lucide-react';
+import { Settings, Save, RefreshCw, ArrowLeft, Shield, CheckCircle, AlertCircle, Upload, Video } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import { adminGetSettings, adminUpdateSettings } from '../../services/api';
 
@@ -31,13 +31,6 @@ const CONN_FIELDS = [
     label: 'Logout Redirect URI',
     placeholder: 'http://your-app:4000/logged_out',
     description: 'Must be registered in the IDP. Users are sent here after logout.',
-    type: 'url',
-  },
-  {
-    key: 'idp.jwks-uri',
-    label: 'JWKS URI',
-    placeholder: 'https://auth.example.com/jwks',
-    description: 'Endpoint exposing the public keys used to verify JWT signatures. Requires restart to apply.',
     type: 'url',
   },
   {
@@ -355,6 +348,84 @@ const IdpSettings = () => {
             </div>
           </div>
 
+          {/* Meeting Settings */}
+          <div className="mt-6 bg-white dark:bg-army-800 rounded-xl shadow-sm border border-gray-200 dark:border-army-700 divide-y divide-gray-100 dark:divide-army-700">
+            <div className="px-6 py-4 flex items-center gap-2">
+              <Video className="w-4 h-4 text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Görüş (Video Zəng) Parametrləri</h2>
+            </div>
+
+            {/* Max participants */}
+            <div className="px-6 py-5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Bir görüşdə maksimum iştirakçı sayı (2-50)
+              </label>
+              <div className="flex items-center gap-4">
+                <input
+                  type="range"
+                  min="2" max="50" step="1"
+                  value={values['meeting.max-participants'] || '30'}
+                  onChange={e => handleChange('meeting.max-participants', e.target.value)}
+                  className="flex-1 h-2 accent-primary-600 cursor-pointer"
+                />
+                <span className="w-10 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {values['meeting.max-participants'] || '30'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                Görüş otağı dolduqda yeni qoşulmalar rədd edilir. Diqqət: media serveri (SFU) olmadan
+                "mesh" texnologiyası çox iştirakçıda ağırlaşır — sürətli LAN-da adaptiv keyfiyyət sayəsində
+                daha çox iştirakçı mümkündür. Standart: 30.
+              </p>
+            </div>
+
+            {/* ICE servers */}
+            <div className="px-6 py-5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">STUN/ICE serverləri</label>
+              <input
+                type="text"
+                value={values['meeting.ice-servers'] || ''}
+                onChange={e => handleChange('meeting.ice-servers', e.target.value)}
+                placeholder="stun:stun.l.google.com:19302"
+                className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-army-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
+              />
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                Vergüllə ayrılmış STUN/ICE server siyahısı. Boş saxlasanız standart Google STUN istifadə olunur.
+              </p>
+            </div>
+
+            {/* TURN server */}
+            <div className="px-6 py-5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">TURN server URL (ixtiyari)</label>
+              <input
+                type="text"
+                value={values['meeting.turn-url'] || ''}
+                onChange={e => handleChange('meeting.turn-url', e.target.value)}
+                placeholder="turn:turn.example.com:3478"
+                className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-army-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
+              />
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                Müxtəlif şəbəkələr/NAT arxasındakı iştirakçılar üçün lazımdır. Boş = yalnız STUN (eyni LAN üçün kifayətdir).
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                <input
+                  type="text"
+                  value={values['meeting.turn-username'] || ''}
+                  onChange={e => handleChange('meeting.turn-username', e.target.value)}
+                  placeholder="TURN istifadəçi adı"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-army-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
+                />
+                <input
+                  type="text"
+                  value={values['meeting.turn-credential'] || ''}
+                  onChange={e => handleChange('meeting.turn-credential', e.target.value)}
+                  placeholder="TURN şifrə / credential"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-army-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Actions */}
           <div className="flex items-center justify-between mt-6">
             <button
@@ -385,7 +456,6 @@ const IdpSettings = () => {
                 <p className="font-medium mb-1">IDP parametrlərini dəyişdikdən sonra</p>
                 <ul className="list-disc list-inside space-y-0.5 text-amber-700 dark:text-amber-400">
                   <li>Token mübadiləsi URL-i dərhal yenilənir (yenidən qurma tələb olunmur)</li>
-                  <li>JWKS URI dəyişiklikləri JWT dekoderini yenidən yükləmək üçün <strong>konteynerin yenidən başladılmasını</strong> tələb edir</li>
                   <li>Saxlamadan əvvəl yeni Redirect URI-nin IDP-də ağ siyahıya əlavə edildiyinə əmin olun</li>
                 </ul>
               </div>

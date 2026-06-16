@@ -1,5 +1,29 @@
 # LocalYouTube / ModTube — Project Summary
 
+> ### 2026-06-16 — Meeting fixes sprint + production deploy (modtube.mndev.uk)
+> 8 items shipped & deployed. Backend compiles, frontend builds, live at
+> https://modtube.mndev.uk (Cloudflare proxy → origin 185.247.118.199, ports 80/443).
+> 1. **Participant snapshot** — `GET /api/meetings/{id}/participants` + `MeetingSignalingHandler.getParticipants`; `MeetingRoom` seeds peers on `ws.onopen` (not only join events).
+> 2. **Mic/cam graceful** — `enumerateDevices()` before getUserMedia; toggles disabled/labelled when absent; handles NotFound/NotAllowed/Overconstrained.
+> 3. **Screen-share to all peers** — `replaceVideoTrack` now `addTrack`+renegotiates peers with no video sender (helper `renegotiate`).
+> 4. **Notifications** — already per-recipient (`findTop50ByUserEmail`); added composite index; invite carries signed token in new `data` column.
+> 5. **4-digit room code** — `video_meetings.join_pin` (V10), generated on create, shown only to managers; `roomCode`/`joinPin` hidden from non-managers; `POST /api/meetings/{id}/join` validates PIN/invite-token server-side → returns roomCode. `MeetingRoom` shows PIN gate.
+> 6. **In-meeting invite** — `POST /api/meetings/{id}/invite` mints `JwtUtil.generateInviteToken` (24h), grants restricted access, sends notification w/ one-click `?invite=` link (bypasses PIN). Invite panel in `MeetingRoom` (managers).
+> 7. **Settings cleanup** — removed dead **JWKS URI** field (only `@Value` env-bound in `IdpJwtValidator`, never read from settings store) + its whitelist key.
+> 8. **Performance** — V10 indexes (notifications user+created, comments.video_id, video_likes.video_id, room_code, users lower(email)); `@BatchSize(100)` on Video EAGER collections (N+1); health groups + container healthcheck → `/actuator/health/liveness` (no DB hit); `RequestTimingFilter` logs >100ms; `perf.slow-request-ms`.
+> **Post-deploy meeting hotfixes (same day):**
+> - *Self shown twice* — the new `/participants` snapshot returned the caller's own
+>   WS session → client built a remote tile for itself. Fixed: `isSelfEmail()` filter
+>   in `peers` / `peer-joined` / snapshot handlers (skip own email).
+> - *Refresh kicked you out / re-asked PIN* — in-memory `roomCode` lost on reload.
+>   Fixed: cache roomCode in `sessionStorage` (`mt_room_<id>`) so refresh rejoins
+>   without the PIN; cleared on Leave/Finish.
+> - *Network blip dropped you for good* — `ws.onclose` now auto-reconnects (bumps
+>   retryKey, up to 6× / 2.5s) unless leaving/ended/room-full (`leavingRef`/`noReconnectRef`).
+> - *Leave vs Finish* — confirmed both exist: "Tərk et" (Leave, everyone) and
+>   "Görüşü bitir" (Finish, `isHost` only). Leave keeps the meeting running; only host ends it.
+> **Deploy gotchas:** server had a LIVE justmail mail server + stopped meridian — user confirmed wipe of both. `docker` only in WSL here; password SSH via `sshpass` (WSL) / `SSH_ASKPASS_REQUIRE=force setsid`. **MinIO**: `host.docker.internal:9000` was unreachable from the app container on this Linux host — fixed by setting `MINIO_ENDPOINT=http://minio:9000` (both containers share `modtube_default` since same compose project dir). TLS: Cloudflare proxy, origin self-signed works in CF **Full**; for **Full (strict)** install a CF Origin cert into `/etc/nginx/ssl` (`cert.pem`/`key.pem`). Admin seed user `admin@modtube.local` (password generated at deploy time into the server-side `.env`; rotate). `WEBRTC_MAX_PARTICIPANTS=30`, mem limit 8G.
+
 ## Stack
 
 | Layer     | Technology                                     |
@@ -982,3 +1006,77 @@ Additionally, two metric names in Metrics.jsx were wrong:
 - Local login still matched by username/email (unchanged); only IDP path uses idp_subject.
 - HLS proxied through app (2× internal bandwidth app↔MinIO) — fine for LAN; use presigned URLs if exposing MinIO later.
 - Mesh WebRTC still ~4–6 participants; no TURN by default.
+
+---
+
+### 2026-06-16 — Meeting management, capacity, MinIO env, runtime settings
+
+#### manage-meetings permission (so non-super-admin moderators can delete finished meetings)
+- `V9__manage_meetings_permission.sql` seeds `manage-meetings` (type VIDEO).
+- `VideoMeetingService.canManage(meeting, user)` (new static helper) = host OR
+  super-admin OR `manage-meetings`. `getOwned()` now uses it (edit/end/delete any
+  meeting); LIVE meetings still can't be deleted (409). `VideoMeetingController.toResponse`
+  `canManage`/`canDelete` use it too.
+- `SecurityConfiguration`: added `manage-meetings` authority to GET-list / start /
+  end / PUT / DELETE `/api/meetings`.
+- Frontend: `permissions.js` (PERMS.MANAGE_MEETINGS + FEATURE), `RoleManagement`
+  PERM_META, `Sidebar` + `App.jsx` `/meetings` perms now `['video-call','manage-meetings']`.
+
+#### Participant cap (mesh guardrail) — configurable
+- `MeetingSignalingHandler`: rejects join when room at capacity → sends
+  `{type:'room-full', max}` + closes WS (code 4001). Cap = `effectiveMax()` =
+  runtime setting `meeting.max-participants` if set, else `@Value`
+  `modtube.webrtc.max-participants` (env `WEBRTC_MAX_PARTICIPANTS`, default 12).
+- Frontend `MeetingRoom.jsx`: handles `room-full` → "Görüş doludur" page.
+
+#### Adaptive mesh quality (push usable headcount higher)
+- `MeetingRoom.jsx` `applyAdaptiveQuality(n)`: shrinks each outgoing **camera**
+  sender's `maxBitrate`/`scaleResolutionDownBy` as participants grow
+  (≤4: 1.2Mbps×1 → >16: 150kbps×⅓). Re-runs on participant-count change; skipped
+  while screen sharing (that path stays 5Mbps).
+- **True 30+ still needs an SFU** — wrote `MEETINGS_SFU_PLAN.md` (LiveKit migration:
+  keep all CRUD/perms/access rules, swap only media transport + room UI).
+
+#### MinIO env
+- Already had `MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET`. Added optional
+  `MINIO_REGION` (StorageService `.region()` only when non-blank) for real-S3
+  backends. All in application.yml + docker-compose.yml + .env.example.
+
+#### Meeting settings manageable from admin Settings page (user request)
+- `SystemSettingController` ALLOWED_KEYS += `meeting.max-participants`,
+  `meeting.ice-servers`, `meeting.turn-url`, `meeting.turn-username`,
+  `meeting.turn-credential`.
+- `VideoMeetingController.getIceConfig` and `MeetingSignalingHandler.effectiveMax`
+  read these via `SystemSettingService.get(key, envDefault)` — DB settings override
+  env/yaml at runtime, no restart.
+- `IdpSettings.jsx`: new "Görüş (Video Zəng) Parametrləri" section — max-participants
+  slider (2–50), ICE servers, TURN url/username/credential. Saved through existing
+  `adminUpdateSettings`.
+
+#### Verify
+- Frontend `npm run build` ✓ (IdpSettings/MeetingRoom/VideoMeetings chunks present).
+- `docker compose build` ✓ (backend compiles with new deps/injection — no Spring
+  bean cycle: MeetingSignalingHandler→SystemSettingService→repo).
+- Gotcha: `docker` only on PATH inside **WSL** here (not Git-Bash / PowerShell).
+  Build/run via `wsl -e bash -lc "cd /mnt/c/.../localyoutube && docker compose ..."`.
+
+#### Bundled TURN + cap 30 (offline LAN deploy) — follow-up
+- **coturn bundled INTO the modtube image** (user: "only turn, one image, not extra").
+  `Dockerfile` apt-installs `coturn`; `supervisord.conf` `[program:coturn]` runs
+  `turnserver -c /etc/coturn/turnserver.conf`; `docker-entrypoint.sh` writes that
+  conf at boot (realm modtube, lt-cred-mech, user from `WEBRTC_TURN_USERNAME/CREDENTIAL`,
+  `external-ip=APP_HOST` when APP_HOST is an IP, relay 49152-49200). Entrypoint also
+  auto-fills `WEBRTC_ICE_SERVERS`/`WEBRTC_TURN_URL` from `APP_HOST` when blank, so
+  meetings work with **no internet / no Google STUN**. `EXPOSE`/compose publish
+  3478 tcp+udp + 49152-49200/udp. **MinIO stays a separate container** (not bundled).
+- **Max participants default 30** everywhere (application.yml, `@Value`, docker-compose,
+  .env files, IdpSettings slider default + help text).
+- Deleted redundant `docker-compose.turn.yml`. New env: `WEBRTC_MAX_PARTICIPANTS=30`,
+  `WEBRTC_TURN_USERNAME=modtube`, `WEBRTC_TURN_CREDENTIAL=modtube-turn-secret`,
+  `MINIO_REGION=` (blank); `WEBRTC_ICE_SERVERS`/`WEBRTC_TURN_URL` now blank→auto.
+- New deploy files: `.env.offline.example`, `OFFLINE_LAN_DEPLOY.md`, `MEETINGS_SFU_PLAN.md`.
+- Deliverables copied to **`F:\tars`**: `modtube-latest.tar`, `minio-latest.tar`,
+  `docker-compose.yml`, `docker-compose.minio.yml`, `.env*.example`, the two .md guides,
+  and `NEW_ENV_VARS.txt`. (Downloads/tars also has older tars incl. coturn — no longer
+  needed since coturn is in the modtube image.)
+- Verified: `docker compose build` ✓ (coturn installs, image builds clean).

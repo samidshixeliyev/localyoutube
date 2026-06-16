@@ -41,13 +41,18 @@ public class StorageService {
             @Value("${modtube.storage.minio.endpoint}")   String endpoint,
             @Value("${modtube.storage.minio.access-key}") String accessKey,
             @Value("${modtube.storage.minio.secret-key}") String secretKey,
-            @Value("${modtube.storage.minio.bucket}")     String bucket) {
+            @Value("${modtube.storage.minio.bucket}")     String bucket,
+            @Value("${modtube.storage.minio.region:}")    String region) {
         this.bucket = bucket;
-        this.client = MinioClient.builder()
+        MinioClient.Builder builder = MinioClient.builder()
                 .endpoint(endpoint)
-                .credentials(accessKey, secretKey)
-                .build();
-        log.info("StorageService configured: endpoint={} bucket={}", endpoint, bucket);
+                .credentials(accessKey, secretKey);
+        if (region != null && !region.isBlank()) {
+            builder.region(region.trim());
+        }
+        this.client = builder.build();
+        log.info("StorageService configured: endpoint={} bucket={} region={}",
+                endpoint, bucket, region == null || region.isBlank() ? "(default)" : region);
     }
 
     @PostConstruct

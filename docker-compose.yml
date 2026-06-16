@@ -10,6 +10,10 @@ services:
       - "0.0.0.0:8080:80"
       - "0.0.0.0:8443:443"
       - "0.0.0.0:${APP_PORT:-4000}:4000"   # direct Spring Boot access (debug / internal)
+      # Bundled coturn STUN/TURN for video meetings:
+      - "0.0.0.0:3478:3478"
+      - "0.0.0.0:3478:3478/udp"
+      - "0.0.0.0:49152-49200:49152-49200/udp"   # TURN media relay range
     environment:
       # ── PostgreSQL (internal) ─────────────────────────────────────────
       PGDATA: /var/lib/postgresql/data
@@ -40,10 +44,16 @@ services:
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-100}
       RATE_LIMIT_UPLOAD_RPS: ${RATE_LIMIT_UPLOAD_RPS:-4}
       # ── WebRTC (video meetings) ────────────────────────────────────────
-      WEBRTC_ICE_SERVERS: ${WEBRTC_ICE_SERVERS:-stun:stun.l.google.com:19302}
+      # coturn is bundled inside this image. If these are left blank, the
+      # entrypoint auto-generates ICE/TURN URLs from APP_HOST (turn:APP_HOST:3478)
+      # so meetings work offline with no external STUN. Override only to point at
+      # an external TURN server.
+      WEBRTC_ICE_SERVERS: ${WEBRTC_ICE_SERVERS:-}
       WEBRTC_TURN_URL: ${WEBRTC_TURN_URL:-}
-      WEBRTC_TURN_USERNAME: ${WEBRTC_TURN_USERNAME:-}
-      WEBRTC_TURN_CREDENTIAL: ${WEBRTC_TURN_CREDENTIAL:-}
+      WEBRTC_TURN_USERNAME: ${WEBRTC_TURN_USERNAME:-modtube}
+      WEBRTC_TURN_CREDENTIAL: ${WEBRTC_TURN_CREDENTIAL:-modtube-turn-secret}
+      # Max participants per meeting room.
+      WEBRTC_MAX_PARTICIPANTS: ${WEBRTC_MAX_PARTICIPANTS:-30}
       # ── Object storage (MinIO) ─────────────────────────────────────────
       # In production, point MINIO_ENDPOINT at your existing MinIO and set
       # real credentials. Defaults below target the bundled test `minio` service.
@@ -51,6 +61,8 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-modtube}
+      # Optional — only for region-aware S3 backends (real AWS S3). Blank for MinIO.
+      MINIO_REGION: ${MINIO_REGION:-}
     deploy:
       resources:
         limits:
@@ -66,7 +78,7 @@ services:
       - ${DATA_ROOT:-/opt/modtube/data}/pgdata:/var/lib/postgresql/data
       - ${DATA_ROOT:-/opt/modtube/data}/prometheus:/var/lib/prometheus
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:4000/actuator/health/liveness"]
       interval: 30s
       timeout: 10s
       retries: 5

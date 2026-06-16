@@ -2,6 +2,7 @@ package ao.az.modtube.controller;
 
 import ao.az.modtube.config.security.ModTubePrincipal;
 import ao.az.modtube.domain.VideoMeeting;
+import ao.az.modtube.service.SystemSettingService;
 import ao.az.modtube.service.VideoMeetingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 public class VideoMeetingController {
 
     private final VideoMeetingService videoMeetingService;
+    private final SystemSettingService settingService;
 
     @Value("${modtube.webrtc.ice-servers:stun:stun.l.google.com:19302}")
     private String iceServersConfig;
@@ -135,20 +137,76 @@ public class VideoMeetingController {
         }
     }
 
+    @PostMapping("/{id}/join")
+    public ResponseEntity<Map<String, Object>> join(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body,
+            @AuthenticationPrincipal ModTubePrincipal user) {
+        if (user == null) return ResponseEntity.status(401).build();
+        String pin   = body != null ? body.get("pin")   : null;
+        String token = body != null ? body.get("token") : null;
+        try {
+            VideoMeeting m = videoMeetingService.joinMeeting(id, pin, token, user);
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("roomCode", m.getRoomCode());
+            resp.put("id", m.getId());
+            resp.put("title", m.getTitle());
+            resp.put("status", m.getStatus());
+            return ResponseEntity.ok(resp);
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Qoşulmaq alınmadı"));
+        }
+    }
+
+    @PostMapping("/{id}/invite")
+    public ResponseEntity<Map<String, Object>> invite(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal ModTubePrincipal user) {
+        if (user == null) return ResponseEntity.status(401).build();
+        try {
+            videoMeetingService.inviteUser(id, body.get("email"), user);
+            return ResponseEntity.ok(Map.of("status", "invited"));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Dəvət göndərilə bilmədi"));
+        }
+    }
+
+    @GetMapping("/{id}/participants")
+    public ResponseEntity<?> participants(
+            @PathVariable Long id,
+            @AuthenticationPrincipal ModTubePrincipal user) {
+        if (user == null) return ResponseEntity.status(401).build();
+        try {
+            return ResponseEntity.ok(videoMeetingService.getParticipants(id, user));
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Xəta"));
+        }
+    }
+
     @GetMapping("/ice-config")
     public ResponseEntity<Map<String, Object>> getIceConfig() {
+        // Runtime settings (admin Settings page) override the env/yaml defaults.
+        String ice   = settingService.get("meeting.ice-servers", iceServersConfig);
+        String tUrl  = settingService.get("meeting.turn-url", turnUrl);
+        String tUser = settingService.get("meeting.turn-username", turnUsername);
+        String tCred = settingService.get("meeting.turn-credential", turnCredential);
+
         List<Map<String, Object>> iceServers = new ArrayList<>();
-        for (String url : iceServersConfig.split(",")) {
+        for (String url : (ice == null ? "" : ice).split(",")) {
             String trimmed = url.trim();
             if (!trimmed.isEmpty()) {
                 iceServers.add(Map.of("urls", trimmed));
             }
         }
-        if (!turnUrl.isBlank()) {
+        if (tUrl != null && !tUrl.isBlank()) {
             Map<String, Object> turn = new HashMap<>();
-            turn.put("urls", turnUrl);
-            if (!turnUsername.isBlank()) turn.put("username", turnUsername);
-            if (!turnCredential.isBlank()) turn.put("credential", turnCredential);
+            turn.put("urls", tUrl);
+            if (tUser != null && !tUser.isBlank()) turn.put("username", tUser);
+            if (tCred != null && !tCred.isBlank()) turn.put("credential", tCred);
             iceServers.add(turn);
         }
         return ResponseEntity.ok(Map.of("iceServers", iceServers));
@@ -165,11 +223,16 @@ public class VideoMeetingController {
         resp.put("hostEmail", m.getHostEmail());
         resp.put("hostName", m.getHostName());
         boolean isHost = user != null && user.getEmail().equalsIgnoreCase(m.getHostEmail());
-        boolean canManage = isHost || (user != null && user.isSuperAdmin());
+        boolean canManage = VideoMeetingService.canManage(m, user);
         resp.put("isHost", isHost);
-        resp.put("canManage", canManage);          // host OR super-admin
+        resp.put("canManage", canManage);          // host OR super-admin OR manage-meetings
         resp.put("canDelete", canManage && !"LIVE".equals(m.getStatus()));
-        resp.put("roomCode", m.getRoomCode());
+        // roomCode (WS path) + joinPin are secrets: only managers see them directly.
+        // Other users obtain roomCode via POST /join after passing the PIN/invite.
+        if (canManage) {
+            resp.put("roomCode", m.getRoomCode());
+            resp.put("joinPin", m.getJoinPin());
+        }
         resp.put("createdAt", m.getCreatedAt());
         resp.put("startedAt", m.getStartedAt());
         resp.put("endedAt", m.getEndedAt());

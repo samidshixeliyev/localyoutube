@@ -89,6 +89,20 @@ public class NotificationService {
         push(userEmail, n);
     }
 
+    /** Meeting invite with a one-click join token carried in {@code data}. */
+    @Transactional
+    public void createMeetingInvite(String userEmail, String meetingTitle, Long meetingId, String inviteToken) {
+        Notification n = new Notification();
+        n.setUserEmail(userEmail);
+        n.setType("MEETING_INVITE");
+        n.setTitle("Görüşə dəvət");
+        n.setMessage("\"" + meetingTitle + "\" görüşünə dəvət olundunuz — qoşulmaq üçün klikləyin");
+        n.setMeetingId(meetingId);
+        n.setData(inviteToken);
+        n = notificationRepository.save(n);
+        push(userEmail, n);
+    }
+
     private void push(String email, Notification n) {
         Set<SseEmitter> userEmitters = emitters.get(email);
         if (userEmitters == null || userEmitters.isEmpty()) return;
@@ -130,6 +144,7 @@ public class NotificationService {
         m.put("title", n.getTitle());
         m.put("message", n.getMessage());
         m.put("meetingId", n.getMeetingId());
+        m.put("data", n.getData());
         m.put("read", n.isRead());
         m.put("createdAt", n.getCreatedAt());
         return m;

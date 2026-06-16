@@ -29,6 +29,10 @@ public class VideoMeeting {
     @Column(name = "room_code", nullable = false, unique = true)
     private String roomCode;
 
+    /** 4-digit numeric PIN shown only to the host; required to join PUBLIC meetings. */
+    @Column(name = "join_pin")
+    private String joinPin;
+
     @Column(name = "host_id")
     private Long hostId;
 
@@ -71,6 +75,7 @@ public class VideoMeeting {
     @PrePersist
     void onCreate() {
         if (roomCode == null) roomCode = UUID.randomUUID().toString();
+        if (joinPin == null) joinPin = String.format("%04d", new java.security.SecureRandom().nextInt(10000));
         createdAt = LocalDateTime.now();
     }
 }

@@ -108,7 +108,10 @@ export default function NotificationBell() {
     }
     setOpen(false);
     if (n.meetingId) {
-      navigate(`/meetings/${n.meetingId}/room`);
+      // Invites carry a signed token → one-click join (no room code needed).
+      const suffix = (n.type === 'MEETING_INVITE' && n.data)
+        ? `?invite=${encodeURIComponent(n.data)}` : '';
+      navigate(`/meetings/${n.meetingId}/room${suffix}`);
     }
   };
 

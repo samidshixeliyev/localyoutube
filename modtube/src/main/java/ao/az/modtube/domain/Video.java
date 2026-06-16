@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import org.springframework.data.domain.Persistable;
 
 import java.time.Instant;
@@ -79,6 +80,7 @@ public class Video implements Persistable<String> {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "video_qualities", joinColumns = @JoinColumn(name = "video_id"))
     @Column(name = "quality", length = 50)
+    @BatchSize(size = 100)   // batch-load across many videos to avoid N+1 on list endpoints
     @Builder.Default
     private List<String> availableQualities = new ArrayList<>();
 
@@ -117,6 +119,7 @@ public class Video implements Persistable<String> {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "video_tags", joinColumns = @JoinColumn(name = "video_id"))
     @Column(name = "tag", length = 255)
+    @BatchSize(size = 100)
     @Builder.Default
     private List<String> tags = new ArrayList<>();
 
@@ -129,6 +132,7 @@ public class Video implements Persistable<String> {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "video_allowed_emails", joinColumns = @JoinColumn(name = "video_id"))
     @Column(name = "email", length = 255)
+    @BatchSize(size = 100)
     @Builder.Default
     private List<String> allowedEmails = new ArrayList<>();
 

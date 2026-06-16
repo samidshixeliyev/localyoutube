@@ -75,7 +75,7 @@ public class SecurityConfiguration {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 
                         // Health + metrics - Public (Prometheus scrapes these without auth)
-                        .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/prometheus").permitAll()
                         .requestMatchers("/actuator/info").permitAll()
 
@@ -130,13 +130,18 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/playlists/**").authenticated()
 
                         // ── Meetings — split by operation ──────────────────────────────
-                        // Creating/managing meetings requires video-call permission
-                        .requestMatchers(HttpMethod.GET,    "/api/meetings").hasAnyAuthority("video-call", "super-admin")
+                        // Creating/managing meetings requires video-call; manage-meetings
+                        // lets moderators end/edit/delete ANY meeting.
+                        .requestMatchers(HttpMethod.GET,    "/api/meetings").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
                         .requestMatchers(HttpMethod.POST,   "/api/meetings").hasAnyAuthority("video-call", "super-admin")
-                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/start").hasAnyAuthority("video-call", "super-admin")
-                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/end").hasAnyAuthority("video-call", "super-admin")
-                        .requestMatchers(HttpMethod.PUT,    "/api/meetings/*").hasAnyAuthority("video-call", "super-admin")
-                        .requestMatchers(HttpMethod.DELETE, "/api/meetings/*").hasAnyAuthority("video-call", "super-admin")
+                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/start").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
+                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/end").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
+                        // Inviting requires host/moderator authority
+                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/invite").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
+                        // Joining (PIN/invite-token gated in the service) — any authenticated user
+                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/join").authenticated()
+                        .requestMatchers(HttpMethod.PUT,    "/api/meetings/*").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
+                        .requestMatchers(HttpMethod.DELETE, "/api/meetings/*").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
                         // GET single meeting or ice-config: any authenticated user (join by link)
                         .requestMatchers(HttpMethod.GET, "/api/meetings/**").authenticated()
 

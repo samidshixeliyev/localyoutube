@@ -88,6 +88,41 @@ public class JwtUtil {
     }
 
     /**
+     * Generate a short-lived signed invite token for a meeting. Lets an invited
+     * user join without entering the PIN. Valid for 24h.
+     */
+    public String generateInviteToken(Long meetingId, String email) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("purpose", "meeting-invite");
+        claims.put("meetingId", meetingId);
+        claims.put("email", email);
+        return Jwts.builder()
+                .claims(claims)
+                .subject(email)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24)) // 24h
+                .signWith(secretKey)
+                .compact();
+    }
+
+    /**
+     * Validate an invite token against a meeting id. Returns true only if the
+     * token is a valid, unexpired meeting-invite token for that meeting.
+     */
+    public boolean isValidInviteToken(String token, Long meetingId) {
+        try {
+            Claims claims = extractAllClaims(token);
+            if (!"meeting-invite".equals(claims.get("purpose", String.class))) return false;
+            Object mid = claims.get("meetingId");
+            long tokenMeetingId = (mid instanceof Integer i) ? i.longValue()
+                    : (mid instanceof Long l) ? l : Long.parseLong(String.valueOf(mid));
+            return tokenMeetingId == meetingId && !isTokenExpired(token);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Check if token is about to expire (within 5 minutes)
      */
     public boolean isTokenExpiringSoon(String token) {

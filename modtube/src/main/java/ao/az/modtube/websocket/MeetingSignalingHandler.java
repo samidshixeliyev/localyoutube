@@ -1,7 +1,10 @@
 package ao.az.modtube.websocket;
 
+import ao.az.modtube.service.SystemSettingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -16,9 +19,32 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class MeetingSignalingHandler extends TextWebSocketHandler {
 
+    private final SystemSettingService settingService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * Hard cap on participants per room (env/yaml default). Mesh WebRTC degrades
+     * fast beyond a handful of peers (each client encodes/decodes N-1 streams),
+     * so this guards against a large meeting silently melting down. The admin
+     * Settings page (meeting.max-participants) overrides this at runtime; tune the
+     * default via WEBRTC_MAX_PARTICIPANTS.
+     */
+    @Value("${modtube.webrtc.max-participants:30}")
+    private int maxParticipants;
+
+    /** Effective cap: runtime setting if valid, else the env/yaml default. */
+    private int effectiveMax() {
+        try {
+            return Integer.parseInt(settingService.get("meeting.max-participants",
+                    String.valueOf(maxParticipants)).trim());
+        } catch (NumberFormatException e) {
+            return maxParticipants;
+        }
+    }
 
     /** roomCode → { sessionId → session } */
     private final Map<String, Map<String, WebSocketSession>> rooms = new ConcurrentHashMap<>();
@@ -30,6 +56,15 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) {
         String roomCode = roomCode(session);
         Map<String, WebSocketSession> room = rooms.computeIfAbsent(roomCode, k -> new ConcurrentHashMap<>());
+
+        // Reject if the room is already at capacity (mesh topology limit).
+        int cap = effectiveMax();
+        if (cap > 0 && room.size() >= cap) {
+            send(session, Map.of("type", "room-full", "max", cap));
+            try { session.close(new CloseStatus(4001, "Room full")); } catch (Exception ignored) {}
+            if (room.isEmpty()) rooms.remove(roomCode);
+            return;
+        }
 
         // Send existing peers list to the new joiner
         List<Map<String, Object>> peers = new ArrayList<>();
@@ -147,6 +182,17 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
             rooms.remove(roomCode);
             screenSharers.remove(roomCode);
         }
+    }
+
+    /** Snapshot of currently-connected participants in a room (for REST/late joiners). */
+    public List<Map<String, Object>> getParticipants(String roomCode) {
+        Map<String, WebSocketSession> room = rooms.get(roomCode);
+        if (room == null) return new ArrayList<>();
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (WebSocketSession s : room.values()) {
+            if (s.isOpen()) list.add(peerInfo(s));
+        }
+        return list;
     }
 
     public void endRoom(String roomCode) {

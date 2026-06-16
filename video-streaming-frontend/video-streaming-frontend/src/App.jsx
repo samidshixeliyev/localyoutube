@@ -205,11 +205,11 @@ function AppContent() {
                   }
                 />
 
-                {/* video-call */}
+                {/* video-call OR manage-meetings (moderators) */}
                 <Route
                   path="/meetings"
                   element={
-                    <PrivateRoute requiredPermission={['video-call']}>
+                    <PrivateRoute requiredPermission={['video-call', 'manage-meetings']}>
                       <VideoMeetings />
                     </PrivateRoute>
                   }

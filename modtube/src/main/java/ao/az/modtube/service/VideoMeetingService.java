@@ -5,6 +5,7 @@ import ao.az.modtube.config.security.ModTubeUserDetails;
 import ao.az.modtube.config.security.OidcUserDetails;
 import ao.az.modtube.domain.VideoMeeting;
 import ao.az.modtube.repository.VideoMeetingRepository;
+import ao.az.modtube.util.JwtUtil;
 import ao.az.modtube.websocket.MeetingSignalingHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +24,7 @@ public class VideoMeetingService {
     private final VideoMeetingRepository videoMeetingRepository;
     private final MeetingSignalingHandler meetingSignalingHandler;
     private final NotificationService notificationService;
+    private final JwtUtil jwtUtil;
 
     public List<VideoMeeting> listMeetings(ModTubePrincipal viewer) {
         return videoMeetingRepository.findAllByOrderByCreatedAtDesc().stream()
@@ -75,6 +78,61 @@ public class VideoMeetingService {
         if (visibility != null) m.setVisibility(normalizeVisibility(visibility));
         m.setAllowedEmails(allowedEmails);
         return videoMeetingRepository.save(m);
+    }
+
+    /**
+     * Resolve a meeting for joining. Returns the meeting (with roomCode) only if
+     * the caller is authorized: host/super-admin/moderator, a valid invite token,
+     * a RESTRICTED allow-listed user, or a PUBLIC joiner with the correct PIN.
+     */
+    @Transactional(readOnly = true)
+    public VideoMeeting joinMeeting(Long id, String pin, String inviteToken, ModTubePrincipal user) {
+        VideoMeeting m = videoMeetingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Görüş tapılmadı"));
+
+        if (canManage(m, user)) return m;
+        if (inviteToken != null && !inviteToken.isBlank() && jwtUtil.isValidInviteToken(inviteToken, id)) return m;
+
+        if (!canAccessMeeting(m, user)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bu görüşə qoşulmaq icazəniz yoxdur");
+        }
+        String vis = m.getVisibility() != null ? m.getVisibility().toUpperCase() : "PUBLIC";
+        if ("PUBLIC".equals(vis)) {
+            if (pin == null || m.getJoinPin() == null || !pin.trim().equals(m.getJoinPin())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Otaq kodu yanlışdır");
+            }
+        }
+        return m;
+    }
+
+    /** Host/moderator invites a user: grants restricted access + sends a signed join link. */
+    @Transactional
+    public void inviteUser(Long id, String email, ModTubePrincipal user) {
+        VideoMeeting m = videoMeetingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Görüş tapılmadı"));
+        if (!canManage(m, user)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Dəvət göndərmək icazəniz yoxdur");
+        }
+        if (email == null || email.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "E-poçt tələb olunur");
+        }
+        String target = email.trim();
+        // For restricted meetings, also grant access so the WS handshake accepts them.
+        if ("RESTRICTED".equalsIgnoreCase(m.getVisibility())
+                && m.getAllowedEmailList().stream().noneMatch(e -> e.equalsIgnoreCase(target))) {
+            String existing = m.getAllowedEmails();
+            m.setAllowedEmails((existing == null || existing.isBlank()) ? target : existing + "," + target);
+            videoMeetingRepository.save(m);
+        }
+        String token = jwtUtil.generateInviteToken(id, target);
+        notificationService.createMeetingInvite(target, m.getTitle(), id, token);
+    }
+
+    /** Active connected participants for a meeting (caller must have access). */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getParticipants(Long id, ModTubePrincipal user) {
+        VideoMeeting m = getMeeting(id, user);   // throws 403 if no access
+        return meetingSignalingHandler.getParticipants(m.getRoomCode());
     }
 
     public VideoMeeting findByRoomCode(String roomCode) {
@@ -161,11 +219,19 @@ public class VideoMeetingService {
         };
     }
 
+    /** Host, super-admin, or any user holding the manage-meetings permission. */
+    public static boolean canManage(VideoMeeting m, ModTubePrincipal user) {
+        if (user == null) return false;
+        return user.getEmail().equalsIgnoreCase(m.getHostEmail())
+                || user.isSuperAdmin()
+                || user.hasPermission("manage-meetings");
+    }
+
     private VideoMeeting getOwned(Long id, ModTubePrincipal user) {
         VideoMeeting m = videoMeetingRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Görüş tapılmadı"));
-        if (!m.getHostEmail().equalsIgnoreCase(user.getEmail()) && !user.isSuperAdmin()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bu görüş sizin deyil");
+        if (!canManage(m, user)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bu görüşü idarə etmək icazəniz yoxdur");
         }
         return m;
     }
