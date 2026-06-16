@@ -322,4 +322,8 @@ export const markAllNotificationsRead = () =>
 export const markNotificationRead = (id) =>
     api.put(`/notifications/${id}/read`);
 
+// Admin broadcast: send an announcement/warning to all users.
+export const broadcastNotification = (title, message = '', type = 'ANNOUNCEMENT') =>
+    api.post('/notifications/broadcast', { title, message, type });
+
 export default api;

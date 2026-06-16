@@ -22,6 +22,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/modtube
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: ""
+      # DB connection pool — sized for ~4 cores (HikariCP ≈ cores × 2).
+      DB_POOL_MAX: ${DB_POOL_MAX:-12}
+      DB_POOL_MIN: ${DB_POOL_MIN:-4}
       # ── JWT ───────────────────────────────────────────────────────────
       JWT_SECRET: ${JWT_SECRET:-please-change-this-secret-min-32-chars}
       # ── Admin seed account ────────────────────────────────────────────

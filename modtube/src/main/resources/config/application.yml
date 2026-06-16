@@ -19,11 +19,23 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:modtube123}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
-      connection-timeout: 30000
+      # Right-sized for a ~4-core box (HikariCP guidance ≈ cores × 2). A bigger
+      # pool only adds contention. The real fix for "connection not available"
+      # is not holding connections during slow I/O (SSE push is now after-commit).
+      maximum-pool-size: ${DB_POOL_MAX:12}
+      minimum-idle: ${DB_POOL_MIN:4}
+      connection-timeout: 10000
+      # Warn early if any connection is held too long (future regression guard).
+      leak-detection-threshold: 15000
+      max-lifetime: 1800000
+      keepalive-time: 300000
 
   jpa:
+    # CRITICAL: with OSIV on (the default), every request — including each
+    # long-lived SSE notification stream — holds a DB connection for the whole
+    # request, exhausting the pool under light parallelism. Safe to disable here:
+    # no entity uses lazy associations (only EAGER @ElementCollection on Video).
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     show-sql: false

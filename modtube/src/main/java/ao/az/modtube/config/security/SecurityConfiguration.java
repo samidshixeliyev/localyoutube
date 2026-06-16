@@ -148,6 +148,8 @@ public class SecurityConfiguration {
                         // ── Notifications ──────────────────────────────────────────────
                         // /stream uses ?token= auth (EventSource can't set headers)
                         .requestMatchers("/api/notifications/stream").permitAll()
+                        // Broadcast/announcements — admins only
+                        .requestMatchers(HttpMethod.POST, "/api/notifications/broadcast").hasAnyAuthority("manage-notifications", "super-admin")
                         .requestMatchers("/api/notifications/**").authenticated()
 
                         // Actuator - admin-modtube OR super-admin

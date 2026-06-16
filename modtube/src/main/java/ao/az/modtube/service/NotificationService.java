@@ -5,10 +5,13 @@ import ao.az.modtube.config.security.ModTubePrincipal;
 import ao.az.modtube.config.security.ModTubeUserDetails;
 import ao.az.modtube.config.security.OidcUserDetails;
 import ao.az.modtube.domain.Notification;
+import ao.az.modtube.entity.User;
 import ao.az.modtube.repository.NotificationRepository;
+import ao.az.modtube.repository.UserRepository;
 import ao.az.modtube.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,6 +19,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -34,14 +39,19 @@ import java.util.concurrent.CopyOnWriteArraySet;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final UserDetailsService userDetailsService;
     private final IdpJwtValidator idpJwtValidator;
     private final IdpUserProvisioningService idpUserProvisioningService;
+    private final ApplicationEventPublisher events;
 
     // Active SSE connections: userEmail → set of emitters (one per open tab)
     private final ConcurrentHashMap<String, CopyOnWriteArraySet<SseEmitter>> emitters =
             new ConcurrentHashMap<>();
+
+    /** Internal event so the SSE push happens AFTER the DB transaction commits. */
+    public record NotificationEvent(String email, Notification notification) {}
 
     // ── SSE subscription ──────────────────────────────────────────────────────
 
@@ -86,7 +96,43 @@ public class NotificationService {
         n.setMessage(message);
         n.setMeetingId(meetingId);
         n = notificationRepository.save(n);
-        push(userEmail, n);
+        // Push is deferred to after commit so a slow SSE client never pins this
+        // request's DB connection (root cause of pool exhaustion).
+        events.publishEvent(new NotificationEvent(userEmail, n));
+    }
+
+    /**
+     * Broadcast an announcement/warning to every user (one notification row each).
+     * Returns the number of recipients. Pushes are deferred to after-commit.
+     */
+    @Transactional
+    public int broadcast(String title, String message, String type) {
+        String t = normalizeType(type);
+        java.util.List<String> emails = userRepository.findAll().stream()
+                .map(User::getEmail)
+                .filter(e -> e != null && !e.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+        for (String email : emails) {
+            Notification n = new Notification();
+            n.setUserEmail(email);
+            n.setType(t);
+            n.setTitle(title);
+            n.setMessage(message);
+            n = notificationRepository.save(n);
+            events.publishEvent(new NotificationEvent(email, n));
+        }
+        return emails.size();
+    }
+
+    private String normalizeType(String type) {
+        if (type == null) return "ANNOUNCEMENT";
+        return switch (type.toUpperCase()) {
+            case "WARNING"   -> "WARNING";
+            case "NEW_VIDEO" -> "NEW_VIDEO";
+            default          -> "ANNOUNCEMENT";
+        };
     }
 
     /** Meeting invite with a one-click join token carried in {@code data}. */
@@ -100,7 +146,18 @@ public class NotificationService {
         n.setMeetingId(meetingId);
         n.setData(inviteToken);
         n = notificationRepository.save(n);
-        push(userEmail, n);
+        events.publishEvent(new NotificationEvent(userEmail, n));
+    }
+
+    /**
+     * Delivers the SSE push only after the surrounding transaction has committed
+     * (and the DB connection has been returned to the pool). If there is no
+     * transaction, fallbackExecution runs it inline. This is what stops slow SSE
+     * clients from holding Hikari connections.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onNotificationCommitted(NotificationEvent e) {
+        push(e.email(), e.notification());
     }
 
     private void push(String email, Notification n) {

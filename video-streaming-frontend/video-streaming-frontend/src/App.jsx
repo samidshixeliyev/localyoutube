@@ -30,6 +30,7 @@ const RoleManagement = lazy(() => import('./pages/admin/RoleManagement'));
 const IdpSettings    = lazy(() => import('./pages/admin/IdpSettings'));
 const Metrics        = lazy(() => import('./pages/admin/Metrics'));
 const Analytics      = lazy(() => import('./pages/admin/Analytics'));
+const NotificationManagement = lazy(() => import('./pages/admin/NotificationManagement'));
 const Embed          = lazy(() => import('./pages/Embed'));
 const MyPlaylists    = lazy(() => import('./pages/MyPlaylists'));
 const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
@@ -201,6 +202,14 @@ function AppContent() {
                   element={
                     <PrivateRoute requiredPermission={['super-admin', 'view-metrics']}>
                       <Analytics />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/admin/notifications"
+                  element={
+                    <PrivateRoute requiredPermission={['super-admin', 'manage-notifications']}>
+                      <NotificationManagement />
                     </PrivateRoute>
                   }
                 />

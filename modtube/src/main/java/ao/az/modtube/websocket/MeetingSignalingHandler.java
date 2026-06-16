@@ -155,6 +155,19 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
                 msg.put("ts",    System.currentTimeMillis());
                 broadcastAll(room, msg);
             }
+            // Host moderation: remove a participant, or force-mute mic / force-off camera.
+            case "kick", "force-mute", "force-cam" -> {
+                if (!Boolean.TRUE.equals(session.getAttributes().get("isHost"))) return; // host only
+                Object targetId = payload.get("target");
+                WebSocketSession target = targetId != null ? room.get(targetId.toString()) : null;
+                if (target == null || !target.isOpen()) return;
+                if ("kick".equals(type)) {
+                    send(target, Map.of("type", "kicked"));
+                    try { target.close(new CloseStatus(4002, "Removed by host")); } catch (Exception ignored) {}
+                } else {
+                    send(target, Map.of("type", type)); // force-mute | force-cam → client disables its own track
+                }
+            }
             default -> log.debug("Unhandled signaling message type: {}", type);
         }
     }

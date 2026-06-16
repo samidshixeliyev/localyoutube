@@ -37,6 +37,7 @@ const PERM_META = {
   'manage-shorts':    { category: 'Video',      icon: '⚡', color: 'yellow',  desc: 'Shorts videoları idarə etmək' },
   'video-call':       { category: 'Video',      icon: '📹', color: 'primary', desc: 'Canlı video görüşləri yaratmaq və onlara qoşulmaq' },
   'manage-meetings':  { category: 'Video',      icon: '🛡️', color: 'red',     desc: 'İstənilən istifadəçinin görüşünü idarə etmək / silmək' },
+  'manage-notifications': { category: 'Sistem',  icon: '📢', color: 'orange',  desc: 'Bütün istifadəçilərə bildiriş / elan göndərmək' },
   'comment-moderate': { category: 'Kontent',    icon: '💬', color: 'teal',    desc: 'Şərhləri silmək' },
 };
 const DEFAULT_META = { category: 'Digər', icon: '🔑', color: 'gray', desc: '' };

@@ -306,10 +306,12 @@ public class TranscodingService {
         Process process = null;
         BufferedReader reader = null;
 
-        // Per-quality thread count: divide available cores by number of parallel jobs.
-        // At least 2 threads per quality; falls back to 0 (auto) if Runtime returns 1.
-        int availCores = Runtime.getRuntime().availableProcessors();
-        int threads    = Math.max(2, availCores / Math.max(1, allowedQualities.size()));
+        // Per-quality thread count. Quality jobs run in parallel, so total threads
+        // must not oversubscribe the box — leave one core free for the API/DB so
+        // transcoding doesn't tank request response times.
+        int availCores  = Runtime.getRuntime().availableProcessors();
+        int usableCores = Math.max(1, availCores - 1);
+        int threads     = Math.max(1, usableCores / Math.max(1, allowedQualities.size()));
 
         try {
             Path qualityDir = outputDir.resolve(profile.label);
@@ -344,6 +346,13 @@ public class TranscodingService {
                     "-hls_segment_filename", qualityDir.resolve("seg_%05d.ts").toString(),
                     qualityDir.resolve("playlist.m3u8").toString()
             );
+            // Run FFmpeg at the lowest CPU priority on Unix so request handling
+            // (API/DB) always wins the CPU — keeps response times low during uploads.
+            if (!System.getProperty("os.name", "").toLowerCase().contains("win")) {
+                List<String> niced = new ArrayList<>(pb.command());
+                niced.add(0, "19"); niced.add(0, "-n"); niced.add(0, "nice");
+                pb.command(niced);
+            }
             pb.environment().put("MALLOC_ARENA_MAX", "2");
             pb.redirectErrorStream(true);
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, Video, X } from 'lucide-react';
+import { Bell, Check, Video, X, Megaphone, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
   getNotifications,
@@ -9,8 +9,11 @@ import {
 } from '../services/api';
 
 const TYPE_ICON = {
-  MEETING_INVITE:   { icon: Video,  color: 'text-blue-500' },
-  MEETING_STARTED:  { icon: Video,  color: 'text-green-500' },
+  MEETING_INVITE:   { icon: Video,         color: 'text-blue-500' },
+  MEETING_STARTED:  { icon: Video,         color: 'text-green-500' },
+  ANNOUNCEMENT:     { icon: Megaphone,     color: 'text-blue-500' },
+  WARNING:          { icon: AlertTriangle, color: 'text-orange-500' },
+  NEW_VIDEO:        { icon: Video,         color: 'text-green-500' },
 };
 
 function timeAgo(iso) {
@@ -28,7 +31,6 @@ export default function NotificationBell() {
   const [open, setOpen]           = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unread, setUnread]       = useState(0);
-  const sseRef                    = useRef(null);
   const panelRef                  = useRef(null);
 
   const loadNotifications = useCallback(async () => {
@@ -42,39 +44,23 @@ export default function NotificationBell() {
     }
   }, []);
 
-  // ── SSE subscription ──────────────────────────────────────────────────────
+  // ── Polling ────────────────────────────────────────────────────────────────
+  // SSE (EventSource) is buffered by Cloudflare and leaves a request hanging
+  // "pending" forever. Short polling is reliable behind the proxy, holds no
+  // long-lived connection, and is cheap (indexed query, ~15s cadence).
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const token = localStorage.getItem('jwt_token');
-    if (!token) return;
-
     loadNotifications();
-
-    const es = new EventSource(
-      `/api/notifications/stream?token=${encodeURIComponent(token)}`
-    );
-    sseRef.current = es;
-
-    es.addEventListener('notification', (e) => {
-      try {
-        const n = JSON.parse(e.data);
-        setNotifications(prev => {
-          // deduplicate by id
-          if (prev.some(x => x.id === n.id)) return prev;
-          return [n, ...prev].slice(0, 50);
-        });
-        if (!n.read) setUnread(prev => prev + 1);
-      } catch { /* ignore malformed */ }
-    });
-
-    es.onerror = () => {
-      // Browser auto-reconnects; no user-visible error needed
+    const iv = setInterval(loadNotifications, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadNotifications();
     };
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
-      es.close();
-      sseRef.current = null;
+      clearInterval(iv);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [isAuthenticated, loadNotifications]);
 

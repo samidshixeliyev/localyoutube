@@ -39,6 +39,23 @@ public class NotificationController {
         return notificationService.subscribe(token);
     }
 
+    /** Broadcast an announcement to all users. Gated to manage-notifications/super-admin. */
+    @PostMapping("/broadcast")
+    public ResponseEntity<Map<String, Object>> broadcast(
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal ModTubePrincipal user) {
+        if (user == null) return ResponseEntity.status(401).build();
+        String title = body.get("title");
+        if (title == null || title.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Başlıq tələb olunur"));
+        }
+        int sent = notificationService.broadcast(
+                title.trim(),
+                body.getOrDefault("message", ""),
+                body.get("type"));
+        return ResponseEntity.ok(Map.of("status", "sent", "recipients", sent));
+    }
+
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getNotifications(
             @AuthenticationPrincipal ModTubePrincipal user) {

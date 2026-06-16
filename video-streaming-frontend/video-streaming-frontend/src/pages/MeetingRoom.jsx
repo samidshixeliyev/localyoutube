@@ -4,7 +4,7 @@ import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, LogOut,
   Users, Lock, Monitor, MonitorOff, RefreshCw,
   MessageSquare, Send, X, Minimize2, Maximize2,
-  KeyRound, UserPlus,
+  KeyRound, UserPlus, UserX,
 } from 'lucide-react';
 import {
   getMeeting, startMeeting, endMeeting, getIceConfig,
@@ -66,16 +66,27 @@ function LocalTile({ camStream, screenStream, micOn, camOn, screenOn, name, full
 }
 
 /* ─── RemoteTile ─────────────────────────────────────────────── */
-function RemoteTile({ peer, full = false, contain = false }) {
+function RemoteTile({ peer, full = false, contain = false, host = false, onKick, onMute, onCamOff }) {
   const hasVideo = peer.stream?.getVideoTracks().some(t => t.enabled && t.readyState === 'live');
   return (
-    <div className={`relative bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center ${full ? 'w-full h-full' : 'aspect-video'}`}>
+    <div className={`group relative bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center ${full ? 'w-full h-full' : 'aspect-video'}`}>
       {peer.stream && <VideoStream stream={peer.stream} contain={contain} />}
       {!hasVideo && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-16 h-16 rounded-full bg-army-600 flex items-center justify-center text-white text-2xl font-bold">
             {initial(peer.name || peer.email)}
           </div>
+        </div>
+      )}
+      {/* Host moderation controls (appear on hover) */}
+      {host && (
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => onMute?.(peer.id)} title="Mikrofonu söndür"
+            className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"><MicOff className="w-3.5 h-3.5" /></button>
+          <button onClick={() => onCamOff?.(peer.id)} title="Kameranı söndür"
+            className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"><VideoOff className="w-3.5 h-3.5" /></button>
+          <button onClick={() => onKick?.(peer.id)} title="Görüşdən çıxar"
+            className="p-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white"><UserX className="w-3.5 h-3.5" /></button>
         </div>
       )}
       <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur-sm max-w-[140px] truncate">
@@ -166,6 +177,7 @@ export default function MeetingRoom() {
   const [forbidden, setForbidden] = useState(false);
   const [ended,     setEnded]     = useState(false);
   const [roomFull,  setRoomFull]  = useState(0);   // 0 = not full, else the cap
+  const [kicked,    setKicked]    = useState(false);
 
   /* ── join gate (room code) ── */
   const [roomCode,  setRoomCode]  = useState(null);   // null until access granted
@@ -368,15 +380,22 @@ export default function MeetingRoom() {
         : [...prev, { id: peerId, ...(peerInfoRef.current.get(peerId) || {}), stream: null }]
     );
 
-    if (camStreamRef.current) {
-      const audioTrack  = camStreamRef.current.getAudioTracks()[0];
+    {
+      const audioTrack  = camStreamRef.current?.getAudioTracks()[0];
       const screenVideo = screenStreamRef.current?.getVideoTracks()[0];
-      const cameraVideo = camStreamRef.current.getVideoTracks()[0];
+      const cameraVideo = camStreamRef.current?.getVideoTracks()[0];
       const videoTrack  = screenVideo || cameraVideo;
+
+      // Audio: send if we have a mic, otherwise still negotiate a recvonly m-line
+      // so we can HEAR others.
       if (audioTrack) pc.addTrack(audioTrack, camStreamRef.current);
+      else pc.addTransceiver('audio', { direction: 'recvonly' });
+
+      // Video: send if we have a camera/screen. If not (camera-less / viewer),
+      // add a recvonly video transceiver so we can still SEE others' faces —
+      // without this there is no video m-line and remote video is never received.
       if (videoTrack) {
         const sender = pc.addTrack(videoTrack, screenStreamRef.current || camStreamRef.current);
-        // If we join/connect while screen sharing, raise this sender's bitrate too.
         if (screenVideo) {
           try {
             const params = sender.getParameters();
@@ -386,6 +405,8 @@ export default function MeetingRoom() {
             sender.setParameters(params).catch(() => {});
           } catch { /* ignore */ }
         }
+      } else {
+        pc.addTransceiver('video', { direction: 'recvonly' });
       }
     }
 
@@ -458,12 +479,19 @@ export default function MeetingRoom() {
   /* ════════════════════════════════════════════════════════════
      Cleanup
   ════════════════════════════════════════════════════════════ */
-  const cleanup = useCallback(() => {
+  // Close the socket + peer connections ONLY. Used on WS reconnect so it does
+  // NOT touch local media — your camera/screen capture survives a reconnect.
+  const teardownConnections = useCallback(() => {
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
     pcsRef.current.forEach(pc => pc.close());
     pcsRef.current.clear();
     peerInfoRef.current.clear();
     pendingIceRef.current.clear();
+    setRemotePeers([]);
+  }, []);
+
+  // Stop local camera/screen capture. Only on real exit (leave/end/unmount).
+  const stopMedia = useCallback(() => {
     camStreamRef.current?.getTracks().forEach(t => t.stop());
     camStreamRef.current = null;
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -471,11 +499,16 @@ export default function MeetingRoom() {
     setCamStream(null);
     setScreenStream(null);
     setScreenOn(false);
-    setRemotePeers([]);
     setScreenSharingEmail(null);
     setScreenSharingPeerId(null);
     setScreenSharingName(null);
   }, []);
+
+  // Full cleanup for leaving/ending the meeting.
+  const cleanup = useCallback(() => { teardownConnections(); stopMedia(); }, [teardownConnections, stopMedia]);
+
+  // Stop camera/screen only when the component actually unmounts (not on reconnect).
+  useEffect(() => () => stopMedia(), [stopMedia]);
 
   /* ════════════════════════════════════════════════════════════
      Media + WebSocket
@@ -492,7 +525,11 @@ export default function MeetingRoom() {
         if (res.data?.iceServers?.length) iceConfigRef.current = { iceServers: res.data.iceServers };
       } catch { /* keep default */ }
 
-      if (!window.isSecureContext) {
+      // On a WS reconnect we already hold the camera/screen — don't re-acquire
+      // (re-acquiring would interrupt an active screen share).
+      if (camStreamRef.current) {
+        // media already acquired; skip straight to (re)connecting the socket
+      } else if (!window.isSecureContext) {
         setMediaError('Kamera/mikrofon üçün HTTPS tələb olunur. Brauzerinizdə sertifikatı qəbul edin (Advanced → Proceed).');
       } else if (!navigator.mediaDevices?.getUserMedia) {
         setMediaError('Brauzeriniz kamera API-ni dəstəkləmir (Chrome/Firefox/Edge istifadə edin).');
@@ -578,6 +615,15 @@ export default function MeetingRoom() {
           case 'peer-left':      removePeer(msg.id); break;
           case 'meeting-ended':  noReconnectRef.current = true; sessionStorage.removeItem(SS_KEY); setEnded(true); cleanup(); break;
           case 'room-full':      noReconnectRef.current = true; setRoomFull(msg.max || 1); cleanup(); break;
+          case 'kicked':         noReconnectRef.current = true; sessionStorage.removeItem(SS_KEY); setKicked(true); cleanup(); break;
+          case 'force-mute':
+            camStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
+            setMicOn(false);
+            break;
+          case 'force-cam':
+            camStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = false; });
+            setCamOn(false);
+            break;
           case 'screen-start':
             setScreenSharingEmail(msg.email);
             setScreenSharingPeerId(msg.from);
@@ -631,7 +677,9 @@ export default function MeetingRoom() {
       };
     })();
 
-    return () => { cancelled = true; cleanup(); };
+    // On reconnect/dep-change tear down only the socket + peer connections;
+    // local camera/screen capture is preserved (stopped on real unmount).
+    return () => { cancelled = true; teardownConnections(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meeting, roomCode, retryKey]);
 
@@ -776,6 +824,11 @@ export default function MeetingRoom() {
 
   const sendChat = useCallback((text) => sendSignal({ type: 'chat', text }), [sendSignal]);
 
+  /* Host moderation (server enforces host-only). */
+  const kickPeer    = useCallback((peerId) => sendSignal({ type: 'kick',       target: peerId }), [sendSignal]);
+  const mutePeer    = useCallback((peerId) => sendSignal({ type: 'force-mute', target: peerId }), [sendSignal]);
+  const camOffPeer  = useCallback((peerId) => sendSignal({ type: 'force-cam',  target: peerId }), [sendSignal]);
+
   // Leave: I exit the meeting; it keeps running for everyone else.
   const handleLeave = () => {
     leavingRef.current = true;
@@ -831,6 +884,17 @@ export default function MeetingRoom() {
         <p className="text-gray-400 mb-6">
           Bu görüşdə maksimum iştirakçı sayına ({roomFull} nəfər) çatılıb. Bir az sonra yenidən cəhd edin.
         </p>
+        <button onClick={() => navigate('/meetings')} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700">Görüşlərə qayıt</button>
+      </div>
+    </div>
+  );
+
+  if (kicked) return (
+    <div className="min-h-screen bg-army-950 flex items-center justify-center">
+      <div className="text-center px-4 max-w-sm">
+        <LogOut className="w-16 h-16 text-army-600 mx-auto mb-4" />
+        <h2 className="text-xl font-bold text-gray-100 mb-2">Görüşdən çıxarıldınız</h2>
+        <p className="text-gray-400 mb-6">Aparıcı sizi görüşdən çıxardı.</p>
         <button onClick={() => navigate('/meetings')} className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700">Görüşlərə qayıt</button>
       </div>
     </div>
@@ -1052,7 +1116,10 @@ export default function MeetingRoom() {
                   micOn={micOn} camOn={camOn} screenOn={screenOn}
                   name={displayName}
                 />
-                {remotePeers.map(p => <RemoteTile key={p.id} peer={p} />)}
+                {remotePeers.map(p => (
+                  <RemoteTile key={p.id} peer={p}
+                    host={isHost} onKick={kickPeer} onMute={mutePeer} onCamOff={camOffPeer} />
+                ))}
               </div>
 
               {/* PiP overlay — click to go back to full view */}

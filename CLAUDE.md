@@ -22,6 +22,41 @@
 >   retryKey, up to 6× / 2.5s) unless leaving/ended/room-full (`leavingRef`/`noReconnectRef`).
 > - *Leave vs Finish* — confirmed both exist: "Tərk et" (Leave, everyone) and
 >   "Görüşü bitir" (Finish, `isHost` only). Leave keeps the meeting running; only host ends it.
+> **DB connection-pool + response-time fixes (later same day):**
+> - *Root cause of "Connection is not available" crashes:* `createAndPush`/`createMeetingInvite`
+>   were `@Transactional` and called `emitter.send()` (SSE) **inside** the tx — a slow/Cloudflare-buffered
+>   client pinned the Hikari connection → pool drained. Fixed: push now fires via
+>   `@TransactionalEventListener(AFTER_COMMIT, fallbackExecution=true)` so the DB
+>   connection is released before the SSE write. ([[notifications-sse-after-commit]])
+> - **THE real killer — Open-Session-In-View.** `spring.jpa.open-in-view` defaulted to
+>   TRUE, so every request (incl. each long-lived **SSE notification stream**) held a DB
+>   connection for the whole request → ~10 open streams/parallel reqs exhausted the pool
+>   ("after 10 parallel it is down"). Fixed: `spring.jpa.open-in-view: false`. Safe — all
+>   entity associations are EAGER (`User`@ManyToOne, `Role`@ManyToMany, `Video`@ElementCollection),
+>   no lazy access. **Load-tested:** 15 SSE streams + 40 parallel API → DB conns stayed 7–9
+>   (pool 12), all 200, healthy. (Before: 15 streams ≈ 15 pinned conns → exhaustion.)
+> - *Pool right-sized for 4-core prod* (HikariCP ≈ cores×2): `DB_POOL_MAX=12`, min-idle 4,
+>   connection-timeout 10s, leak-detection 15s. (40 was wrong — see [[prod-server-specs]].)
+> - *Transcoding no longer starves the API:* FFmpeg runs `nice -n 19` (Unix) and threads
+>   no longer oversubscribe (uses cores−1) → response times stay low during uploads.
+> - *Camera-less users couldn't see faces:* `createPeerConnection` now adds `recvonly`
+>   audio/video transceivers when local mic/cam is absent, so a viewer/no-camera peer
+>   still negotiates m-lines to RECEIVE others' media.
+> **Screen-share auto-close + moderation + broadcast + notif polling (later same day):**
+> - *Screen share died ~1s in:* WS auto-reconnect re-ran the media effect whose
+>   `cleanup()` stopped the screen track → `onended` → stopScreen. Fixed: split
+>   `teardownConnections()` (ws+pcs only, used on reconnect) from `stopMedia()`
+>   (only on leave/end/unmount); reconnect reuses existing camera/screen.
+> - *Notifications "pending" via Cloudflare:* replaced SSE EventSource with 15s
+>   polling (`NotificationBell`) — CF-friendly, no hanging request, no held conn.
+> - *Broadcast/announcements:* `POST /api/notifications/broadcast` (perm
+>   `manage-notifications`, V11) → one row per user, pushed after-commit. New admin
+>   page `NotificationManagement.jsx` (/admin/notifications), Sidebar "Bildirişlər",
+>   bell icons for ANNOUNCEMENT/WARNING/NEW_VIDEO.
+> - *Host moderation in meetings:* host can remove a participant (`kick` → server
+>   closes their WS → "Görüşdən çıxarıldınız"), force-mute (`force-mute`), and
+>   force-camera-off (`force-cam`). Server gates on session `isHost`; RemoteTile
+>   hover buttons (host only). No new env vars for any of this.
 > **Deploy gotchas:** server had a LIVE justmail mail server + stopped meridian — user confirmed wipe of both. `docker` only in WSL here; password SSH via `sshpass` (WSL) / `SSH_ASKPASS_REQUIRE=force setsid`. **MinIO**: `host.docker.internal:9000` was unreachable from the app container on this Linux host — fixed by setting `MINIO_ENDPOINT=http://minio:9000` (both containers share `modtube_default` since same compose project dir). TLS: Cloudflare proxy, origin self-signed works in CF **Full**; for **Full (strict)** install a CF Origin cert into `/etc/nginx/ssl` (`cert.pem`/`key.pem`). Admin seed user `admin@modtube.local` (password generated at deploy time into the server-side `.env`; rotate). `WEBRTC_MAX_PARTICIPANTS=30`, mem limit 8G.
 
 ## Stack
