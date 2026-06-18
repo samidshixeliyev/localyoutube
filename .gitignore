@@ -29,3 +29,6 @@ Thumbs.db
 
 # ── Docker build artefacts ────────────────────────────────────────────────────
 *.zip
+
+# Docker image exports (built locally, never commit — too large for GitHub)
+*.tar
