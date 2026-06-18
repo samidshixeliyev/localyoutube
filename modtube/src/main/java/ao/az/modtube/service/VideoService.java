@@ -220,6 +220,25 @@ public class VideoService {
         });
     }
 
+    /** Records the MinIO download URL for the retained original upload. */
+    @Transactional
+    public void updateOriginalUrl(String id, String url) {
+        videoRepository.findById(id).ifPresent(video -> {
+            video.setOriginalUrl(url);
+            videoRepository.save(video);
+        });
+    }
+
+    /** Persists a human-readable failure reason so the UI shows WHY, not a generic error. */
+    @Transactional
+    public void updateProcessingError(String id, String reason) {
+        videoRepository.findById(id).ifPresent(video -> {
+            video.setProcessingError(reason != null && reason.length() > 1000
+                    ? reason.substring(0, 1000) : reason);
+            videoRepository.save(video);
+        });
+    }
+
     @Transactional
     public void updateProcessingProgress(String id, int progress) {
         videoRepository.findById(id).ifPresent(video -> {
@@ -302,6 +321,7 @@ public class VideoService {
             // Remove media from MinIO (primary store).
             storageService.deletePrefix("hls/" + id);
             storageService.deletePrefix("thumbnails/" + id);
+            storageService.deletePrefix("originals/" + id);
 
             // Defensively clean any local scratch left behind (e.g. failed transcode).
             if (video.getUploadPath() != null) {

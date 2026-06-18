@@ -1,7 +1,6 @@
 package ao.az.modtube.controller;
 
 import ao.az.modtube.service.StorageService;
-import io.minio.StatObjectResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,27 +43,47 @@ public class MediaController {
         return serve(key, 3600);
     }
 
+    /**
+     * Chat attachments for live meetings. URL /meeting-files/{roomCode}/{file} maps to
+     * MinIO key meeting-attachments/{roomCode}/{file}. Served inline so images/PDFs
+     * preview in the browser. These objects are deleted when the meeting ends.
+     */
+    @GetMapping("/meeting-files/**")
+    public ResponseEntity<?> meetingFiles(HttpServletRequest request) {
+        String rel = request.getRequestURI().substring("/meeting-files/".length());
+        return serve("meeting-attachments/" + rel, 3600);
+    }
+
+    /** Original uploaded file download (kept in MinIO under originals/{id}/). */
+    @GetMapping("/originals/**")
+    public ResponseEntity<?> originals(HttpServletRequest request) {
+        String key = request.getRequestURI().substring(1);
+        StorageService.StoredObject obj = storage.open(key);
+        if (obj == null) return ResponseEntity.notFound().build();
+        String filename = key.substring(key.lastIndexOf('/') + 1);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, obj.contentType())
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentLength(obj.size())
+                .cacheControl(CacheControl.noStore())
+                .body(new InputStreamResource(obj.stream()));
+    }
+
     private ResponseEntity<?> serve(String key, int cacheSeconds) {
-        StatObjectResponse stat = storage.stat(key);
-        if (stat == null) {
+        StorageService.StoredObject obj = storage.open(key);   // MinIO, then local-disk fallback
+        if (obj == null) {
             return ResponseEntity.notFound().build();
         }
         try {
-            InputStream in = storage.getObject(key);
-            String contentType = stat.contentType();
-            if (contentType == null || contentType.isBlank() || "application/octet-stream".equals(contentType)) {
-                contentType = StorageService.contentTypeFor(key);
-            }
-
             CacheControl cache = cacheSeconds > 0
                     ? CacheControl.maxAge(cacheSeconds, TimeUnit.SECONDS).cachePublic()
                     : CacheControl.noStore();
 
             return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_TYPE, contentType)
-                    .contentLength(stat.size())
+                    .header(HttpHeaders.CONTENT_TYPE, obj.contentType())
+                    .contentLength(obj.size())
                     .cacheControl(cache)
-                    .body(new InputStreamResource(in));
+                    .body(new InputStreamResource(obj.stream()));
         } catch (Exception e) {
             log.warn("Failed to serve object {}: {}", key, e.getMessage());
             return ResponseEntity.status(502).build();

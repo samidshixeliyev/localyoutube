@@ -87,6 +87,8 @@ public class MeetingHandshakeInterceptor implements HandshakeInterceptor {
         attributes.put("meetingId", meeting.getId());
         attributes.put("roomCode", roomCode);
         attributes.put("isHost", principal.getEmail().equalsIgnoreCase(meeting.getHostEmail()));
+        // Moderators (super-admin / manage-meetings) get the same in-room controls as the host.
+        attributes.put("canManage", VideoMeetingService.canManage(meeting, principal));
         return true;
     }
 

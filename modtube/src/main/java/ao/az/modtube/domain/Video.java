@@ -65,6 +65,10 @@ public class Video implements Persistable<String> {
     @Column(name = "thumbnail_url", columnDefinition = "TEXT")
     private String thumbnailUrl;
 
+    /** Download URL for the original uploaded file (stored in MinIO under originals/{id}/). */
+    @Column(name = "original_url", columnDefinition = "TEXT")
+    private String originalUrl;
+
     // Status
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50)

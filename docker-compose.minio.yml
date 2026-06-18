@@ -1,10 +1,12 @@
 # Standalone MinIO stack for local / testing.
 #
-# Run separately from the main app:
+# Run separately from the main app (start this FIRST or the app will retry):
 #   docker compose -f docker-compose.minio.yml up -d
+#   docker compose up -d
 #
-# The main app (docker-compose.yml) reaches it via the host gateway
-# (MINIO_ENDPOINT defaults to http://host.docker.internal:9000).
+# Both stacks join the shared `modtube-net` network, so the app reaches MinIO at
+# http://minio:9000 (the default MINIO_ENDPOINT) by service name — they no longer
+# need to be in the same compose project or rely on host.docker.internal.
 #
 # In PRODUCTION you don't need this file at all — point MINIO_ENDPOINT in your
 # .env at your existing MinIO and set real credentials.
@@ -23,3 +25,11 @@ services:
       - "0.0.0.0:9001:9001"   # web console
     volumes:
       - ${DATA_ROOT:-/opt/modtube/data}/minio:/data
+    networks:
+      - modtube-net
+
+# Same fixed-name network as docker-compose.yml so the two stacks share it
+# regardless of compose project name.
+networks:
+  modtube-net:
+    name: modtube-net

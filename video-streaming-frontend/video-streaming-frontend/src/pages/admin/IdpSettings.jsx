@@ -317,21 +317,59 @@ const IdpSettings = () => {
               </p>
             </div>
 
-            {/* Max transcoding quality */}
+            {/* Custom transcoding qualities (multi-select) */}
             <div className="px-6 py-5">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                Maksimum transkodlama keyfiyyəti
+                Transkodlama keyfiyyətləri (çoxlu seçim)
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {['480p', '720p', '1080p', '1440p', '2160p'].map(q => {
+                  const list = (values['upload.qualities'] || '')
+                    .split(',').map(s => s.trim()).filter(Boolean);
+                  const on = list.includes(q);
+                  const toggle = () => {
+                    const next = on ? list.filter(x => x !== q) : [...list, q];
+                    // keep canonical order
+                    const order = ['480p', '720p', '1080p', '1440p', '2160p'];
+                    next.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+                    handleChange('upload.qualities', next.join(','));
+                  };
+                  return (
+                    <button key={q} type="button" onClick={toggle}
+                      className={`px-4 py-2 rounded-lg border text-sm font-semibold transition-all ${
+                        on
+                          ? 'bg-primary-600 border-primary-600 text-white shadow-sm'
+                          : 'border-gray-300 dark:border-army-600 text-gray-600 dark:text-gray-300 hover:border-primary-400 dark:hover:border-primary-500'
+                      }`}>
+                      {q === '2160p' ? '4K (2160p)' : q}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                Yalnız seçdiyiniz keyfiyyətlər yaradılır (məs. yalnız 720p + 1080p). Mənbə videodan yüksək
+                keyfiyyətlər avtomatik buraxılır (upscale yoxdur). Heç biri seçilməyibsə, aşağıdakı
+                "maksimum keyfiyyət" tətbiq olunur. Yalnız yeni yüklənənlərə təsir edir.
+              </p>
+            </div>
+
+            {/* Max transcoding quality (fallback cap when no custom selection) */}
+            <div className="px-6 py-5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                Maksimum keyfiyyət (yalnız yuxarıda seçim yoxdursa)
               </label>
               <div className="flex flex-wrap gap-2">
                 {['480p', '720p', '1080p', '1440p', '2160p'].map(q => {
                   const selected = (values['upload.max-quality'] || '2160p') === q;
+                  const disabled = !!(values['upload.qualities'] || '').trim();
                   return (
                     <button
                       key={q}
                       type="button"
+                      disabled={disabled}
                       onClick={() => handleChange('upload.max-quality', q)}
-                      className={`px-4 py-2 rounded-lg border text-sm font-semibold transition-all ${
-                        selected
+                      className={`px-4 py-2 rounded-lg border text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                        selected && !disabled
                           ? 'bg-primary-600 border-primary-600 text-white shadow-sm'
                           : 'border-gray-300 dark:border-army-600 text-gray-600 dark:text-gray-300 hover:border-primary-400 dark:hover:border-primary-500'
                       }`}
@@ -342,8 +380,7 @@ const IdpSettings = () => {
                 })}
               </div>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-                Bu seçimdən yuxarı keyfiyyətlər transkodlama zamanı yaradılmayacaq. Yalnız yeni yüklənən videolara
-                tətbiq olunur — mövcud videolar dəyişmir. Standart: 4K (2160p).
+                Standart: 4K (2160p). Yuxarıda xüsusi keyfiyyət seçilibsə, bu parametr istifadə olunmur.
               </p>
             </div>
           </div>

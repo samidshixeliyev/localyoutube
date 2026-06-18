@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
@@ -56,6 +58,9 @@ public class TranscodingService {
     /** Per-quality progress (0-100) per video, for detailed UI feedback */
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, Integer>> qualityProgressMap =
             new ConcurrentHashMap<>();
+
+    /** Last FFmpeg failure reason keyed by "{videoId}_{label}", for diagnostics. */
+    private final ConcurrentHashMap<String, String> failureReasons = new ConcurrentHashMap<>();
 
     public String getProcessingStage(String videoId) {
         return processingStages.getOrDefault(videoId, "");
@@ -164,33 +169,45 @@ public class TranscodingService {
             processingStages.put(videoId, "Transcoding " + profiles.stream()
                 .map(p -> p.label).reduce((a, b) -> a + "+" + b).orElse(""));
 
-            // Run each quality in its own thread; report progress atomically
-            List<CompletableFuture<Map.Entry<Integer, Boolean>>> futures = new ArrayList<>();
-            for (int i = 0; i < profiles.size(); i++) {
-                final QualityProfile profile = profiles.get(i);
-                final int idx = i;
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    boolean ok = transcodeQuality(videoId, inputFile, outputDir, profile,
-                            sharedProgress, qp);
-                    return Map.entry(idx, ok);
-                }));
-            }
-
-            // Collect results in profile order
+            // Cap concurrent FFmpeg jobs so decoding a 4K source N times in parallel
+            // doesn't blow the container memory limit (OOM → killed renditions /
+            // restart). At most 2 run at once; the rest queue. Each gets a fair
+            // thread share of the box.
+            final int maxParallel = Math.max(1, Math.min(2, profiles.size()));
+            ExecutorService pool = Executors.newFixedThreadPool(maxParallel);
             boolean[] results = new boolean[profiles.size()];
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-            for (CompletableFuture<Map.Entry<Integer, Boolean>> f : futures) {
-                Map.Entry<Integer, Boolean> r = f.join();
-                results[r.getKey()] = r.getValue();
+            try {
+                List<CompletableFuture<Map.Entry<Integer, Boolean>>> futures = new ArrayList<>();
+                for (int i = 0; i < profiles.size(); i++) {
+                    final QualityProfile profile = profiles.get(i);
+                    final int idx = i;
+                    futures.add(CompletableFuture.supplyAsync(() -> {
+                        boolean ok = transcodeQuality(videoId, inputFile, outputDir, profile,
+                                sharedProgress, qp, maxParallel);
+                        return Map.entry(idx, ok);
+                    }, pool));
+                }
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+                for (CompletableFuture<Map.Entry<Integer, Boolean>> f : futures) {
+                    Map.Entry<Integer, Boolean> r = f.join();
+                    results[r.getKey()] = r.getValue();
+                }
+            } finally {
+                pool.shutdown();
             }
             qualityProgressMap.remove(videoId);
 
             StringBuilder masterPlaylist = new StringBuilder();
             masterPlaylist.append("#EXTM3U\n#EXT-X-VERSION:3\n");
 
+            int okCount = 0;
+            List<String> failedLabels = new ArrayList<>();
             for (int i = 0; i < profiles.size(); i++) {
                 if (!results[i]) {
-                    log.error("[Transcoding] ✗ quality={} video={}", profiles.get(i).label, videoId);
+                    String reason = failureReasons.remove(videoId + "_" + profiles.get(i).label);
+                    log.error("[Transcoding] ✗ quality={} video={} reason={}",
+                            profiles.get(i).label, videoId, reason != null ? reason : "unknown");
+                    failedLabels.add(profiles.get(i).label);
                     continue;
                 }
                 QualityProfile profile = profiles.get(i);
@@ -200,6 +217,18 @@ public class TranscodingService {
                         .append(profile.width).append("x").append(profile.height)
                         .append("\n").append(profile.label).append("/playlist.m3u8\n");
                 videoService.addQualityToVideo(videoId, profile.label);
+                okCount++;
+            }
+
+            // If EVERY rendition failed there's nothing to serve → fail with the reason.
+            if (okCount == 0) {
+                throw new IllegalStateException("All renditions failed ("
+                        + String.join(", ", failedLabels) + "). Often RAM/OOM under parallel "
+                        + "transcoding — raise MEM_LIMIT or reduce qualities.");
+            }
+            if (!failedLabels.isEmpty()) {
+                log.warn("[Transcoding] video={} completed with {} ok, failed: {}",
+                        videoId, okCount, failedLabels);
             }
 
             // Stage 4: finalise (95 → 100%)
@@ -207,14 +236,26 @@ public class TranscodingService {
             videoService.updateProcessingProgress(videoId, 95);
             Files.writeString(outputDir.resolve("master.m3u8"), masterPlaylist.toString());
 
-            // Stage 5: push HLS output to MinIO, then free local scratch space.
+            // Stage 5: store HLS output to MinIO, then free scratch.
             processingStages.put(videoId, "Uploading to storage");
             storageService.uploadDirectory(outputDir, "hls/" + videoId);
-            log.info("[Transcoding] Uploaded HLS to MinIO for video={}", videoId);
+            log.info("[Transcoding] Uploaded HLS for video={} ({} renditions) to MinIO", videoId, okCount);
 
+            // Keep the ORIGINAL upload in MinIO (originals/{id}/<filename>) so it can be downloaded.
+            try {
+                String origName = inputFile.getFileName().toString();
+                String origKey = "originals/" + videoId + "/" + origName;
+                storageService.putObject(origKey, inputFile, StorageService.contentTypeFor(origName));
+                videoService.updateOriginalUrl(videoId, "/originals/" + videoId + "/" + origName);
+                log.info("[Transcoding] Stored original upload for video={} as {}", videoId, origKey);
+            } catch (Exception e) {
+                // Non-fatal: HLS already stored. Log but don't fail the video.
+                log.warn("[Transcoding] Could not store original for video={}: {}", videoId, e.getMessage());
+            }
+
+            // Remove ALL local scratch — nothing is persisted on disk; everything lives in MinIO.
             try { Files.deleteIfExists(inputFile); }
-            catch (IOException e) { log.warn("[Transcoding] Could not delete original: {}", e.getMessage()); }
-            // Remove local HLS + thumbnail scratch — everything now lives in MinIO.
+            catch (IOException e) { log.warn("[Transcoding] Could not delete original scratch: {}", e.getMessage()); }
             deleteDirectoryRecursive(outputDir);
             deleteDirectoryRecursive(thumbnailDir.resolve(videoId));
 
@@ -227,11 +268,13 @@ public class TranscodingService {
             System.gc();
 
         } catch (Exception e) {
-            log.error("[Transcoding] ✗ ERROR video={}: {}", videoId, e.getMessage(), e);
-            processingStages.put(videoId, "Failed: " + e.getMessage());
+            String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            log.error("[Transcoding] ✗ ERROR video={}: {}", videoId, reason, e);
+            processingStages.put(videoId, "Failed: " + reason);
             metrics.recordTranscodingFailure();
             metrics.recordTranscodingDuration(System.currentTimeMillis() - startMs);
             try {
+                videoService.updateProcessingError(videoId, reason);   // surface WHY to the UI
                 videoService.updateVideoStatus(videoId, VideoStatus.FAILED);
                 Files.deleteIfExists(inputFile);
             } catch (IOException ignored) {}
@@ -302,16 +345,17 @@ public class TranscodingService {
     private boolean transcodeQuality(String videoId, Path input, Path outputDir,
                                      QualityProfile profile,
                                      AtomicInteger sharedProgress,
-                                     ConcurrentHashMap<String, Integer> qualityProgress) {
+                                     ConcurrentHashMap<String, Integer> qualityProgress,
+                                     int maxParallel) {
         Process process = null;
         BufferedReader reader = null;
 
-        // Per-quality thread count. Quality jobs run in parallel, so total threads
-        // must not oversubscribe the box — leave one core free for the API/DB so
-        // transcoding doesn't tank request response times.
+        // Per-quality thread count. At most `maxParallel` jobs run at once, so divide
+        // usable cores by that (not the total quality count) — leaves a core for the
+        // API/DB and avoids both CPU oversubscription and 1-thread-slow 4K encodes.
         int availCores  = Runtime.getRuntime().availableProcessors();
         int usableCores = Math.max(1, availCores - 1);
-        int threads     = Math.max(1, usableCores / Math.max(1, allowedQualities.size()));
+        int threads     = Math.max(1, usableCores / Math.max(1, maxParallel));
 
         try {
             Path qualityDir = outputDir.resolve(profile.label);
@@ -362,8 +406,12 @@ public class TranscodingService {
             reader = new BufferedReader(new InputStreamReader(process.getInputStream()), 16384);
             double totalDuration = 0;
 
+            // Keep the last few FFmpeg lines so a failure reports WHY (not a generic error).
+            java.util.ArrayDeque<String> tail = new java.util.ArrayDeque<>();
             String line;
             while ((line = reader.readLine()) != null) {
+                if (tail.size() >= 12) tail.pollFirst();
+                tail.addLast(line);
                 if (totalDuration == 0 && line.contains("Duration:")) {
                     totalDuration = parseFfmpegTime(DURATION_PATTERN, line);
                 }
@@ -391,15 +439,20 @@ public class TranscodingService {
             boolean completed = process.waitFor(PROCESS_TIMEOUT_MINUTES, TimeUnit.MINUTES);
             activeProcesses.remove(videoId + "_" + profile.label);
 
+            String ffTail = String.join(" | ", tail);
             if (!completed) {
-                log.error("[Transcoding] ✗ timeout quality={} video={}", profile.label, videoId);
+                String reason = "timeout after " + PROCESS_TIMEOUT_MINUTES + "m";
+                failureReasons.put(videoId + "_" + profile.label, reason);
+                log.error("[Transcoding] ✗ {} quality={} video={} :: {}", reason, profile.label, videoId, ffTail);
                 process.destroyForcibly();
                 deleteDirectoryRecursive(qualityDir);
                 return false;
             }
             if (process.exitValue() != 0) {
-                log.error("[Transcoding] ✗ FFmpeg exit={} quality={} video={}",
-                        process.exitValue(), profile.label, videoId);
+                String reason = "FFmpeg exit=" + process.exitValue() + " :: " + ffTail;
+                failureReasons.put(videoId + "_" + profile.label, reason);
+                log.error("[Transcoding] ✗ FFmpeg exit={} quality={} video={} :: {}",
+                        process.exitValue(), profile.label, videoId, ffTail);
                 deleteDirectoryRecursive(qualityDir);
                 return false;
             }
@@ -409,7 +462,9 @@ public class TranscodingService {
             return true;
 
         } catch (Exception e) {
-            log.error("[Transcoding] ✗ error quality={} video={}: {}", profile.label, videoId, e.getMessage());
+            String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            failureReasons.put(videoId + "_" + profile.label, reason);
+            log.error("[Transcoding] ✗ error quality={} video={}: {}", profile.label, videoId, reason);
             if (process != null && process.isAlive()) process.destroyForcibly();
             return false;
         } finally {
@@ -512,34 +567,55 @@ public class TranscodingService {
     }
 
     private List<QualityProfile> buildQualityProfiles(VideoInfo info) {
-        // Admin-configurable cap: "upload.max-quality" → 480p/720p/1080p/1440p/2160p
-        int maxHeight = switch (settingService.get("upload.max-quality", "2160p")) {
-            case "480p"  -> 480;
-            case "720p"  -> 720;
-            case "1080p" -> 1080;
-            case "1440p" -> 1440;
-            default      -> 2160;
-        };
+        // Two admin controls (runtime settings, override yaml):
+        //  1. "upload.qualities" — explicit comma list e.g. "480p,1080p" (custom selection).
+        //     When set, ONLY those renditions are produced.
+        //  2. "upload.max-quality" — a simple ceiling (used when no explicit list).
+        String selected = settingService.get("upload.qualities", "").trim();
+        java.util.Set<String> chosen;
+        if (!selected.isEmpty()) {
+            chosen = new java.util.HashSet<>();
+            for (String s : selected.split(",")) {
+                String q = s.trim().toLowerCase();
+                if (!q.isEmpty()) chosen.add(q);
+            }
+        } else {
+            int maxHeight = switch (settingService.get("upload.max-quality", "2160p")) {
+                case "480p"  -> 480;
+                case "720p"  -> 720;
+                case "1080p" -> 1080;
+                case "1440p" -> 1440;
+                default      -> 2160;
+            };
+            chosen = new java.util.HashSet<>();
+            if (maxHeight >= 480)  chosen.add("480p");
+            if (maxHeight >= 720)  chosen.add("720p");
+            if (maxHeight >= 1080) chosen.add("1080p");
+            if (maxHeight >= 1440) chosen.add("1440p");
+            if (maxHeight >= 2160) chosen.add("2160p");
+        }
 
+        // A rendition is built only if: chosen by admin, enabled in yaml, and the
+        // source is at least that tall (never upscale).
         List<QualityProfile> profiles = new ArrayList<>();
+        if (want(chosen, "480p",  info, 0))    profiles.add(new QualityProfile("480p", 854, 480, 1_500_000));
+        if (want(chosen, "720p",  info, 720))  profiles.add(new QualityProfile("720p", 1280, 720, 3_000_000));
+        if (want(chosen, "1080p", info, 1080)) profiles.add(new QualityProfile("1080p", 1920, 1080, 6_000_000));
+        if (want(chosen, "1440p", info, 1440)) profiles.add(new QualityProfile("1440p", 2560, 1440, 12_000_000));
+        if (want(chosen, "2160p", info, 2160)) profiles.add(new QualityProfile("2160p", 3840, 2160, 25_000_000));
 
-        if (allowedQualities.contains("480p") && maxHeight >= 480) {
+        // Safety net: if nothing matched (e.g. tiny source vs high-only selection),
+        // always produce at least 480p so the video is playable.
+        if (profiles.isEmpty()) {
             profiles.add(new QualityProfile("480p", 854, 480, 1_500_000));
         }
-        if (info.height >= 720 && allowedQualities.contains("720p") && maxHeight >= 720) {
-            profiles.add(new QualityProfile("720p", 1280, 720, 3_000_000));
-        }
-        if (info.height >= 1080 && allowedQualities.contains("1080p") && maxHeight >= 1080) {
-            profiles.add(new QualityProfile("1080p", 1920, 1080, 6_000_000));
-        }
-        if (info.height >= 1440 && allowedQualities.contains("1440p") && maxHeight >= 1440) {
-            profiles.add(new QualityProfile("1440p", 2560, 1440, 12_000_000));
-        }
-        if (info.height >= 2160 && allowedQualities.contains("2160p") && maxHeight >= 2160) {
-            profiles.add(new QualityProfile("2160p", 3840, 2160, 25_000_000));
-        }
-
+        log.info("[Transcoding] qualities selected={} for source {}x{}",
+                profiles.stream().map(QualityProfile::label).toList(), info.width, info.height);
         return profiles;
+    }
+
+    private boolean want(java.util.Set<String> chosen, String label, VideoInfo info, int minHeight) {
+        return chosen.contains(label) && allowedQualities.contains(label) && info.height >= minHeight;
     }
 
     private void deleteDirectoryRecursive(Path dir) {

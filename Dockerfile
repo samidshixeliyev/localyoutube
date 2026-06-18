@@ -49,11 +49,12 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends grafana && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ── Nginx + OpenSSL (HTTPS reverse proxy) + coturn (bundled STUN/TURN) ─────────
-# coturn is bundled so live video meetings work fully offline with no extra
-# container. The entrypoint writes /etc/coturn/turnserver.conf at runtime.
+# ── coturn (bundled STUN/TURN) ─────────────────────────────────────────────────
+# No nginx here: the React frontend is built into Spring's static resources, so the
+# app serves everything on :4000. TLS / reverse-proxy is handled by the host's own
+# nginx. coturn is bundled so live video meetings work offline with no extra container.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends nginx openssl coturn && \
+    apt-get install -y --no-install-recommends coturn && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ── Java 21 JRE (Eclipse Temurin) ────────────────────────────────────────────
@@ -121,19 +122,16 @@ COPY prometheus.yml              /etc/prometheus/prometheus.yml
 COPY grafana-datasources.yml     /etc/grafana/provisioning/datasources/datasources.yml
 COPY grafana-dashboards.yml      /etc/grafana/provisioning/dashboards/dashboards.yml
 COPY supervisord.conf            /etc/supervisor/conf.d/supervisord.conf
-COPY nginx.conf                  /etc/nginx/nginx.conf
 COPY docker-entrypoint.sh        /docker-entrypoint.sh
 COPY start-spring.sh             /start-spring.sh
 
 RUN chmod +x /docker-entrypoint.sh /start-spring.sh
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
-# 80   — nginx HTTP (redirects to HTTPS)
-# 443  — nginx HTTPS (reverse proxy to Spring Boot)
-# 4000 — Spring Boot direct (internal / debug only)
+# 4000 — Spring Boot (serves API + the built React SPA). Put your own nginx in front.
 # 3478 — coturn STUN/TURN (TCP+UDP) for video meetings
 # 49152-49200/udp — coturn media relay range
-EXPOSE 80 443 4000 3478 3478/udp 49152-49200/udp
+EXPOSE 4000 3478 3478/udp 49152-49200/udp
 
 VOLUME ["/data", "/var/lib/postgresql/data", "/var/lib/prometheus"]
 

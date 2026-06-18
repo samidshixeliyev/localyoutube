@@ -1,5 +1,6 @@
 package ao.az.modtube.websocket;
 
+import ao.az.modtube.service.StorageService;
 import ao.az.modtube.service.SystemSettingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -12,9 +13,11 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -23,8 +26,14 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MeetingSignalingHandler extends TextWebSocketHandler {
 
     private final SystemSettingService settingService;
+    private final StorageService storage;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** Object-key prefix under which chat attachments live (deleted when a room ends). */
+    private static final String ATTACH_PREFIX = "meeting-attachments/";
+    /** Keep only the most recent N messages per room so memory stays bounded. */
+    private static final int CHAT_HISTORY_LIMIT = 300;
 
     /**
      * Hard cap on participants per room (env/yaml default). Mesh WebRTC degrades
@@ -51,6 +60,13 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
 
     /** roomCode → sessionId of the current screen sharer (null = nobody sharing) */
     private final Map<String, String> screenSharers = new ConcurrentHashMap<>();
+
+    /**
+     * roomCode → ordered chat history (ephemeral). Lets late joiners / reconnecting
+     * clients see what was said while the meeting is live; wiped when the room ends
+     * (or empties), so nothing persists after the meeting finishes.
+     */
+    private final Map<String, List<Map<String, Object>>> chatHistory = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -91,9 +107,33 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
 
         room.put(session.getId(), session);
 
+        // Replay the (ephemeral) chat history so a late joiner / reconnecting client
+        // sees prior messages. Private messages are only replayed to the two parties.
+        List<Map<String, Object>> history = chatHistory.get(roomCode);
+        if (history != null && !history.isEmpty()) {
+            String myEmail = (String) session.getAttributes().get("email");
+            List<Map<String, Object>> visible = new ArrayList<>();
+            synchronized (history) {
+                for (Map<String, Object> m : history) {
+                    if (isVisibleTo(m, myEmail)) visible.add(m);
+                }
+            }
+            if (!visible.isEmpty()) {
+                send(session, Map.of("type", "chat-history", "messages", visible));
+            }
+        }
+
         Map<String, Object> joined = new HashMap<>(peerInfo(session));
         joined.put("type", "peer-joined");
         broadcast(room, session.getId(), joined);
+    }
+
+    /** A history entry is visible to a user if it's public, or they sent/received it. */
+    private boolean isVisibleTo(Map<String, Object> msg, String email) {
+        if (!Boolean.TRUE.equals(msg.get("private"))) return true;
+        if (email == null) return false;
+        return email.equalsIgnoreCase((String) msg.get("email"))
+                || email.equalsIgnoreCase((String) msg.get("toEmail"));
     }
 
     @Override
@@ -146,18 +186,41 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
                 broadcastAll(room, msg);
             }
             case "chat" -> {
+                Object text = payload.get("text");
+                Object attachment = payload.get("attachment");   // {url,name,size,contentType} or null
+                // Ignore empty messages (no text and no attachment).
+                if ((text == null || text.toString().isBlank()) && attachment == null) return;
+
                 Map<String, Object> msg = new HashMap<>();
                 msg.put("type",  "chat");
                 msg.put("from",  session.getId());
                 msg.put("email", session.getAttributes().get("email"));
                 msg.put("name",  session.getAttributes().get("name"));
-                msg.put("text",  payload.get("text"));
+                msg.put("text",  text);
+                if (attachment != null) msg.put("attachment", attachment);
                 msg.put("ts",    System.currentTimeMillis());
-                broadcastAll(room, msg);
+
+                Object to = payload.get("to");   // target sessionId for a 1:1 private message
+                WebSocketSession target = (to != null && !to.toString().isBlank())
+                        ? room.get(to.toString()) : null;
+                if (to != null && !to.toString().isBlank()) {
+                    // Private message: deliver only to the recipient + echo back to the sender.
+                    msg.put("private", true);
+                    msg.put("toId", to.toString());
+                    if (target != null) {
+                        msg.put("toEmail", target.getAttributes().get("email"));
+                        msg.put("toName",  target.getAttributes().get("name"));
+                    }
+                    if (target != null && target.isOpen()) send(target, msg);
+                    send(session, msg);            // sender always sees their own message
+                } else {
+                    broadcastAll(room, msg);
+                }
+                recordHistory(roomCode, msg);
             }
-            // Host moderation: remove a participant, or force-mute mic / force-off camera.
+            // Host/moderator moderation: remove a participant, or force-mute mic / force-off camera.
             case "kick", "force-mute", "force-cam" -> {
-                if (!Boolean.TRUE.equals(session.getAttributes().get("isHost"))) return; // host only
+                if (!canModerate(session)) return; // host / super-admin / manage-meetings only
                 Object targetId = payload.get("target");
                 WebSocketSession target = targetId != null ? room.get(targetId.toString()) : null;
                 if (target == null || !target.isOpen()) return;
@@ -194,6 +257,8 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
         if (room.isEmpty()) {
             rooms.remove(roomCode);
             screenSharers.remove(roomCode);
+            // Last person left → meeting effectively over: drop ephemeral chat + attachments.
+            purgeRoom(roomCode);
         }
     }
 
@@ -211,11 +276,40 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
     public void endRoom(String roomCode) {
         Map<String, WebSocketSession> room = rooms.remove(roomCode);
         screenSharers.remove(roomCode);
-        if (room == null) return;
-        for (WebSocketSession s : room.values()) {
-            send(s, Map.of("type", "meeting-ended"));
-            try { s.close(CloseStatus.NORMAL); } catch (Exception ignored) {}
+        if (room != null) {
+            for (WebSocketSession s : room.values()) {
+                send(s, Map.of("type", "meeting-ended"));
+                try { s.close(CloseStatus.NORMAL); } catch (Exception ignored) {}
+            }
         }
+        purgeRoom(roomCode);
+    }
+
+    /** Wipe ephemeral chat history and delete uploaded attachments for a finished room. */
+    private void purgeRoom(String roomCode) {
+        chatHistory.remove(roomCode);
+        // Delete attachments off the EVENT thread — MinIO I/O must not block the caller
+        // (endMeeting runs in a DB transaction; we don't want to pin its connection).
+        CompletableFuture.runAsync(() -> {
+            try { storage.deletePrefix(ATTACH_PREFIX + roomCode); }
+            catch (Exception e) { log.debug("Attachment cleanup failed for {}: {}", roomCode, e.getMessage()); }
+        });
+    }
+
+    /** Append a chat message to the room's ephemeral history (bounded). */
+    private void recordHistory(String roomCode, Map<String, Object> msg) {
+        List<Map<String, Object>> history =
+                chatHistory.computeIfAbsent(roomCode, k -> Collections.synchronizedList(new ArrayList<>()));
+        synchronized (history) {
+            history.add(msg);
+            while (history.size() > CHAT_HISTORY_LIMIT) history.remove(0);
+        }
+    }
+
+    /** Moderation allowed for the meeting host, super-admins, or manage-meetings holders. */
+    private boolean canModerate(WebSocketSession session) {
+        return Boolean.TRUE.equals(session.getAttributes().get("isHost"))
+                || Boolean.TRUE.equals(session.getAttributes().get("canManage"));
     }
 
     private Map<String, Object> peerInfo(WebSocketSession session) {

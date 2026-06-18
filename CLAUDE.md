@@ -57,6 +57,96 @@
 >   closes their WS → "Görüşdən çıxarıldınız"), force-mute (`force-mute`), and
 >   force-camera-off (`force-cam`). Server gates on session `isHost`; RemoteTile
 >   hover buttons (host only). No new env vars for any of this.
+> **4K / transcoding "error after 100%" + caps at 1080p (2026-06-17):**
+> - Evidence: in-container test showed the exact ffprobe returns `3840,2160` and the
+>   exact 2160p FFmpeg command exits 0; disk had 62G free. So probe + 4K encode are
+>   fine in isolation → failure only under **parallel 4K load**.
+> - Root cause: all quality renditions launched on the common ForkJoinPool
+>   (≈cores−1 concurrent). On a 4-core box, 3+ FFmpeg each **decoding 4K** → peak RAM
+>   exceeds `MEM_LIMIT` (default 3G) → kernel OOM-kills the heavy renditions
+>   (1440p/2160p fail → max 1080p) and/or the JVM (container restarts →
+>   `recoverStuckTranscodings` marks the ~done video FAILED → "error after 100%").
+> - Fix: cap concurrent FFmpeg jobs at **2** via a dedicated `newFixedThreadPool`
+>   (was unbounded common pool); thread count now divides cores by `maxParallel`
+>   (2), not by quality count (5) → no 1-thread-slow 4K. Recommend `MEM_LIMIT≥6G`
+>   for prod 4K transcoding. (Secondary possibility for odd files: cover-art as v:0 —
+>   not hit by standard 4K, left as-is.)
+> **MinIO chunk-upload "emal zamanı xəta" + storage resilience + custom qualities + detailed errors (2026-06-17):**
+> - *Root cause on local machine:* MinIO is a SEPARATE container; if it isn't running
+>   (or `host.docker.internal:9000` doesn't resolve on Linux), the transcode finishes
+>   but `storageService.uploadDirectory` → `putObject` throws → video FAILED with a
+>   generic "emal zamanı xəta". (On the VPS with MinIO up, 720p AND 4K both transcode
+>   + upload fine — proven by in-container end-to-end test.)
+> - **Fix — storage now resilient:** `StorageService` tries MinIO (putObject retries 3×)
+>   and **falls back to local disk** (`media-dir`, default `/data/media`) when MinIO is
+>   unreachable; `open(key)` reads MinIO→local; `deletePrefix` clears both;
+>   `MediaController` serves via `open()` so it works from either backend. `ensureBucket`
+>   no longer blocks startup (6×2s) and sets `minioReady`; if down, logs "using LOCAL
+>   DISK fallback" instead of failing. → uploads never fail just because MinIO is absent.
+> - **Detailed errors/logs:** real failure reason persisted to `video.processingError`
+>   (shown by `/api/upload/status`); per-quality FFmpeg **tail (last 12 lines)** logged +
+>   stored in `failureReasons`; if ALL renditions fail → explicit "All renditions failed
+>   (… ) — often RAM/OOM, raise MEM_LIMIT" message; partial failures logged, video still
+>   READY with the renditions that succeeded.
+> - **Custom quality selection (NEW):** runtime setting `upload.qualities` (comma list e.g.
+>   `480p,1080p`) → only those renditions built (never upscale; ≥1 always produced).
+>   Falls back to `upload.max-quality` cap when the list is empty. Whitelisted in
+>   `SystemSettingController`; `IdpSettings.jsx` has a multi-select chip group (and the
+>   max-quality picker is disabled while a custom set is chosen).
+> - New env: `MEDIA_DIR` (default `/data/media`, persists under the `/data` volume). No
+>   other new env. Recommend prod `MEM_LIMIT=6G` for 4K.
+> **Same-network fix + MinIO-only (no disk) + keep original (2026-06-17 cont.):**
+> - *Real root cause of upload failures:* app and MinIO were on DIFFERENT Docker
+>   networks → `minio:9000` didn't resolve. Fix: both `docker-compose.yml` and
+>   `docker-compose.minio.yml` now declare a shared fixed-name network `modtube-net`
+>   (`networks: {modtube-net: {name: modtube-net}}`); default `MINIO_ENDPOINT` →
+>   `http://minio:9000`. Start minio stack first (or app retries). On VPS, deploy
+>   recreates BOTH stacks so they share the net.
+> - *No data on disk (user req):* reverted the local-disk fallback — `StorageService`
+>   is MinIO-only again, with retry(3×) + `requireMinio()`/`pingMinio()` that throws a
+>   CLEAR error ("MinIO unreachable at <endpoint> — share a Docker network…") instead of
+>   writing to disk. Removed `media-dir`/`MEDIA_DIR`. Scratch dirs still used transiently
+>   during transcode, deleted after.
+> - *Keep original upload (user req):* after transcode, original is stored in MinIO at
+>   `originals/{id}/<filename>`; `video.original_url` (V12) set to `/originals/{id}/<file>`;
+>   `MediaController` serves `/originals/**` (Content-Disposition attachment); permitAll;
+>   deleted with the video. Exposed `originalUrl` in upload API.
+> - User fronts the app with their OWN native nginx → bundled `nginx.conf` left as-is
+>   (catch-all `location /` proxies `/originals` & `/thumbnails`; only `/hls` is special).
+>   Ensure native nginx proxies `/originals/` to the app.
+> **Removed bundled nginx (user has native nginx) (2026-06-17 cont.):**
+> - Frontend is built into Spring static resources → app serves API + SPA on **:4000**.
+>   Bundled nginx was redundant. Removed: nginx+openssl from Dockerfile, `COPY nginx.conf`,
+>   `[program:nginx]` from supervisord, the self-signed TLS cert gen from entrypoint.
+>   EXPOSE/compose now publish only `4000` (+ coturn 3478 + relay). Put your OWN nginx
+>   in front for TLS and proxy `/`, `/api`, `/ws`, `/hls`, `/thumbnails`, `/originals`,
+>   `/api/notifications/stream` → `:4000`. coturn stays bundled.
+> - **Transcoding-failed-despite-same-network diagnosis:** VPS end-to-end test PASSES
+>   (upload→transcode→HLS+original to MinIO, `/originals/..`=200) on the shared
+>   `modtube-net` with MinIO-only. So a still-failing local run is config: almost always
+>   **MinIO credential mismatch** (MinIO root user/pass ≠ app `MINIO_ACCESS_KEY/SECRET_KEY`)
+>   or wrong bucket/endpoint scheme. The new clear error (persisted to `processingError`,
+>   shown by `/api/upload/status`) names the exact cause — check the failed video's error.
+> **Logging — show ALL logs via `docker logs` (2026-06-17 cont.):**
+> - *Root cause:* supervisord wrote each service's output to separate files in
+>   `/var/log/supervisor/*.log`, so `docker logs modtube` only showed supervisord's own
+>   "system" lines, not spring/postgres/etc. Fix: every `[program:*]` now uses
+>   `stdout_logfile=/dev/fd/1` + `stdout_logfile_maxbytes=0` + `redirect_stderr=true`,
+>   and `[supervisord] logfile=/dev/null` → all service logs stream to container stdout.
+> - *Levels env-tunable:* `LOG_LEVEL_ROOT` (def INFO), `LOG_LEVEL_APP` (def DEBUG),
+>   `LOG_LEVEL_WEB/SECURITY/SQL` (def INFO) in application.yml + docker-compose. Set
+>   `LOG_LEVEL_ROOT=DEBUG` for everything; clear console pattern + UTF-8. No rebuild
+>   needed to change verbosity (env only).
+> **MinIO over HTTPS with custom cert (2026-06-17 cont.):**
+> - *Issue:* user's MinIO is served via HTTPS with a self-signed/custom cert → MinIO
+>   SDK (OkHttp) failed the TLS handshake → uploads failed.
+> - Fix: `StorageService.buildHttpClient()` builds an `OkHttpClient` (okhttp3 is bundled
+>   with io.minio) that trusts a custom CA/server PEM from `MINIO_CA_CERT`
+>   (`modtube.storage.minio.ca-cert`), or trusts everything when `MINIO_INSECURE=true`
+>   (`modtube.storage.minio.insecure`), passed via `MinioClient.builder().httpClient(...)`.
+>   Mount the PEM into the container (commented volume hint in docker-compose) and set
+>   `MINIO_CA_CERT=/certs/minio-ca.pem`. Logs show `tls=custom CA: ...` / `INSECURE`.
+> - New env: `MINIO_CA_CERT`, `MINIO_INSECURE`.
 > **Deploy gotchas:** server had a LIVE justmail mail server + stopped meridian — user confirmed wipe of both. `docker` only in WSL here; password SSH via `sshpass` (WSL) / `SSH_ASKPASS_REQUIRE=force setsid`. **MinIO**: `host.docker.internal:9000` was unreachable from the app container on this Linux host — fixed by setting `MINIO_ENDPOINT=http://minio:9000` (both containers share `modtube_default` since same compose project dir). TLS: Cloudflare proxy, origin self-signed works in CF **Full**; for **Full (strict)** install a CF Origin cert into `/etc/nginx/ssl` (`cert.pem`/`key.pem`). Admin seed user `admin@modtube.local` (password generated at deploy time into the server-side `.env`; rotate). `WEBRTC_MAX_PARTICIPANTS=30`, mem limit 8G.
 
 ## Stack
@@ -1115,3 +1205,49 @@ Additionally, two metric names in Metrics.jsx were wrong:
   and `NEW_ENV_VARS.txt`. (Downloads/tars also has older tars incl. coturn — no longer
   needed since coturn is in the modtube image.)
 - Verified: `docker compose build` ✓ (coturn installs, image builds clean).
+
+---
+
+### 2026-06-18 — Meeting features: private chat, attachments, pinning, ephemeral history
+
+Six meeting-room features (all in `MeetingRoom.jsx` + signaling/REST backend):
+
+1. **1:1 private chat.** Chat panel now has a recipient `<select>` ("🌐 Hamıya" or a
+   participant → "🔒 ...") and every remote tile has a DM button (`onDm`). A private
+   message carries `to: <sessionId>`; `MeetingSignalingHandler` delivers it only to that
+   target **and echoes to the sender** (`private:true`, `toEmail/toName`). Rendered with a
+   lock badge ("Şəxsi → name"). History replay filters private msgs to the two parties
+   (`isVisibleTo`).
+2. **Pin / spotlight + small-screen scaling.** New `pinnedPeerId` ('self'|peerId). The old
+   screen-share "full layout" is generalized to a spotlight: `screenSpotlight` (share, wins)
+   or `pinSpotlight` (manual pin). `spotlightId` = focused tile; strip = everyone else
+   (`remotePeers.filter(id!==spotlightId)` + self). Layout is `flex-col sm:flex-row` and the
+   strip is `flex-row sm:flex-col` w/ horizontal scroll on mobile, so screen-share/spotlight
+   scales on small screens. `StripTile`/`LocalTile`/`RemoteTile` got a `PinButton`.
+3. **Better moderation.** Force-mute / force-cam / kick now allowed for **host OR
+   super-admin OR manage-meetings** (server: `canModerate(session)` reads a new `canManage`
+   handshake attribute set via `VideoMeetingService.canManage`). Tile controls gated on
+   `canManage` (not just host), visible on hover + `focus-within` (touch). Kick now goes
+   through a confirmation modal (`kickTarget`/`doKick`).
+4. **Chat attachments + preview.** New `POST /api/meetings/{id}/attachments` (multipart,
+   25 MB cap, access-checked via `getMeeting`) → MinIO key
+   `meeting-attachments/{roomCode}/{uuid}-{name}`, returns `{url,name,size,contentType}`.
+   Served **inline** by `MediaController` `GET /meeting-files/**` (permitAll; unguessable
+   UUID). Client uploads via `uploadMeetingAttachment`, then sends a `chat` msg with
+   `attachment`. `AttachmentView` shows images inline, other files as a download chip.
+5. **Attachments cleared when meeting ends.** `MeetingSignalingHandler.purgeRoom()` (called
+   from `endRoom` AND when the room empties) deletes the `meeting-attachments/{roomCode}`
+   prefix — run via `CompletableFuture.runAsync` so MinIO I/O never pins the `endMeeting`
+   DB transaction ([[notifications-sse-after-commit]] same principle).
+6. **Ephemeral chat history.** Per-room in-memory `chatHistory` (bounded 300). New joiners /
+   reconnects get a `chat-history` message (private-filtered); wiped on `purgeRoom`. So
+   late joiners see the conversation while live, and nothing persists after the meeting.
+
+Plumbing: `MeetingSignalingHandler` now injects `StorageService`; `VideoMeetingController`
+injects `StorageService`. `MeetingHandshakeInterceptor` sets `canManage` attribute.
+`WebSocketConfig` adds `ServletServerContainerFactoryBean` (max text msg 512 KB) so
+`chat-history`/large SDP don't exceed the 8 KB default. `SecurityConfiguration` permits
+`/meeting-files/**` and `POST /api/meetings/*/attachments` (authenticated).
+
+Verified: frontend `npm run build` ✓ (MeetingRoom chunk 46 KB), backend `compileJava` ✓
+(temurin 21 container; only pre-existing Lombok warning). No new env vars.

@@ -2,6 +2,7 @@ package ao.az.modtube.controller;
 
 import ao.az.modtube.config.security.ModTubePrincipal;
 import ao.az.modtube.domain.VideoMeeting;
+import ao.az.modtube.service.StorageService;
 import ao.az.modtube.service.SystemSettingService;
 import ao.az.modtube.service.VideoMeetingService;
 import lombok.RequiredArgsConstructor;
@@ -11,12 +12,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -27,6 +30,10 @@ public class VideoMeetingController {
 
     private final VideoMeetingService videoMeetingService;
     private final SystemSettingService settingService;
+    private final StorageService storage;
+
+    /** Max chat attachment size (25 MB). Keeps a single file off-heap-friendly + quick to relay. */
+    private static final long MAX_ATTACHMENT_BYTES = 25L * 1024 * 1024;
 
     @Value("${modtube.webrtc.ice-servers:stun:stun.l.google.com:19302}")
     private String iceServersConfig;
@@ -185,6 +192,58 @@ public class VideoMeetingController {
             return ResponseEntity.status(e.getStatusCode())
                     .body(Map.of("error", e.getReason() != null ? e.getReason() : "Xəta"));
         }
+    }
+
+    /**
+     * Upload a chat attachment. Stored in MinIO under meeting-attachments/{roomCode}/...
+     * and served back via /meeting-files/**. All such files are deleted when the meeting
+     * ends (or the room empties), so attachments are temporary like the chat itself.
+     */
+    @PostMapping("/{id}/attachments")
+    public ResponseEntity<?> uploadAttachment(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal ModTubePrincipal user) {
+        if (user == null) return ResponseEntity.status(401).build();
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Fayl boşdur"));
+        }
+        if (file.getSize() > MAX_ATTACHMENT_BYTES) {
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                    .body(Map.of("error", "Fayl çox böyükdür (maksimum 25 MB)"));
+        }
+        try {
+            // Access check: getMeeting throws 403 if the caller can't access this meeting.
+            VideoMeeting m = videoMeetingService.getMeeting(id, user);
+            String safeName = sanitize(file.getOriginalFilename());
+            String key = "meeting-attachments/" + m.getRoomCode() + "/" + UUID.randomUUID() + "-" + safeName;
+            String ct = file.getContentType() != null ? file.getContentType()
+                    : StorageService.contentTypeFor(safeName);
+            storage.putStream(key, file.getInputStream(), file.getSize(), ct);
+
+            Map<String, Object> meta = new HashMap<>();
+            // URL the client broadcasts in the chat message; served by MediaController.
+            meta.put("url", "/meeting-files/" + m.getRoomCode() + "/" + key.substring(key.lastIndexOf('/') + 1));
+            meta.put("name", file.getOriginalFilename() != null ? file.getOriginalFilename() : safeName);
+            meta.put("size", file.getSize());
+            meta.put("contentType", ct);
+            return ResponseEntity.ok(meta);
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("error", e.getReason() != null ? e.getReason() : "Xəta"));
+        } catch (Exception e) {
+            log.warn("Meeting attachment upload failed: {}", e.getMessage());
+            return ResponseEntity.status(502).body(Map.of("error", "Fayl yüklənə bilmədi"));
+        }
+    }
+
+    /** Strip path separators / unsafe chars so the object key stays well-formed. */
+    private String sanitize(String name) {
+        if (name == null || name.isBlank()) return "file";
+        String base = name.replace('\\', '/');
+        base = base.substring(base.lastIndexOf('/') + 1);
+        base = base.replaceAll("[^A-Za-z0-9._-]", "_");
+        return base.isBlank() ? "file" : base;
     }
 
     @GetMapping("/ice-config")

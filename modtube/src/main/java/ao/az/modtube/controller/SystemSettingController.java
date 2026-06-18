@@ -37,6 +37,7 @@ public class SystemSettingController {
             "upload.max-parallel",
             "upload.max-concurrent",
             "upload.max-quality",
+            "upload.qualities",
             // Video meetings (override env defaults at runtime)
             "meeting.max-participants",
             "meeting.ice-servers",

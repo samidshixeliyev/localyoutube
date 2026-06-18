@@ -306,6 +306,17 @@ export const inviteToMeeting = (id, email) =>
 export const getMeetingParticipants = (id) =>
     api.get(`/meetings/${id}/participants`);
 
+// Upload a chat attachment → { url, name, size, contentType }. The file is stored
+// temporarily and deleted when the meeting ends.
+export const uploadMeetingAttachment = (id, file, onProgress) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post(`/meetings/${id}/attachments`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: onProgress,
+    });
+};
+
 // ═══════════════════════════════════════════════════════════════
 // NOTIFICATIONS
 // ═══════════════════════════════════════════════════════════════

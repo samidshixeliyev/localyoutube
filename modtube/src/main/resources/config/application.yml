@@ -76,6 +76,11 @@ modtube:
       bucket:     ${MINIO_BUCKET:modtube}
       # Optional — only for region-aware S3 backends (real AWS S3 etc.). Blank for MinIO.
       region:     ${MINIO_REGION:}
+      # HTTPS MinIO with a custom/self-signed cert: path to the CA/server PEM the app
+      # should trust. Mount the PEM into the container and point here. Blank = JVM default.
+      ca-cert:    ${MINIO_CA_CERT:}
+      # Skip TLS verification entirely (use only if you can't provide a CA cert).
+      insecure:   ${MINIO_INSECURE:false}
 
   transcoding:
     segment-duration: 6
@@ -106,8 +111,17 @@ modtube:
 
 logging:
   level:
-    root: INFO
-    ao.az.modtube: DEBUG
+    # All levels env-tunable. Set LOG_LEVEL_ROOT=DEBUG to see EVERYTHING (very verbose);
+    # default keeps framework noise at INFO but our own code + web/security at DEBUG.
+    root: ${LOG_LEVEL_ROOT:INFO}
+    ao.az.modtube: ${LOG_LEVEL_APP:DEBUG}
+    org.springframework.web: ${LOG_LEVEL_WEB:INFO}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:INFO}
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{40} : %msg%n"
+  charset:
+    console: UTF-8
 
 management:
   endpoints:

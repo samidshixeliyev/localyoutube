@@ -303,6 +303,7 @@ public class UploadController {
             if (video.getStatus() == VideoStatus.READY) {
                 status.put("hlsUrl", video.getMasterPlaylistUrl());
                 status.put("thumbnailUrl", video.getThumbnailUrl());
+                status.put("originalUrl", video.getOriginalUrl());
             }
 
             if (video.getProcessingError() != null) {
@@ -328,6 +329,7 @@ public class UploadController {
         map.put("visibility", video.getVisibility() != null ? video.getVisibility().name() : "PUBLIC");
         map.put("thumbnailUrl", video.getThumbnailUrl());
         map.put("hlsUrl", video.getMasterPlaylistUrl());
+        map.put("originalUrl", video.getOriginalUrl());
         map.put("qualities", video.getAvailableQualities());
         map.put("fileSize", video.getFileSize());
         map.put("duration", video.getDurationSeconds());

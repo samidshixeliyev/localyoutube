@@ -82,6 +82,9 @@ public class SecurityConfiguration {
                         // Video streaming - Public
                         .requestMatchers("/hls/**").permitAll()
                         .requestMatchers("/thumbnails/**").permitAll()
+                        .requestMatchers("/originals/**").permitAll()
+                        // Meeting chat attachments (unguessable UUID keys; deleted when meeting ends)
+                        .requestMatchers("/meeting-files/**").permitAll()
 
                         // Video viewing - PUBLIC
                         .requestMatchers(HttpMethod.GET, "/api/videos").permitAll()
@@ -140,6 +143,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST,   "/api/meetings/*/invite").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
                         // Joining (PIN/invite-token gated in the service) — any authenticated user
                         .requestMatchers(HttpMethod.POST,   "/api/meetings/*/join").authenticated()
+                        // Chat attachment upload — any authenticated user (access checked in service)
+                        .requestMatchers(HttpMethod.POST,   "/api/meetings/*/attachments").authenticated()
                         .requestMatchers(HttpMethod.PUT,    "/api/meetings/*").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
                         .requestMatchers(HttpMethod.DELETE, "/api/meetings/*").hasAnyAuthority("video-call", "manage-meetings", "super-admin")
                         // GET single meeting or ice-config: any authenticated user (join by link)

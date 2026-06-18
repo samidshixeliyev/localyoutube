@@ -4,11 +4,12 @@ import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, LogOut,
   Users, Lock, Monitor, MonitorOff, RefreshCw,
   MessageSquare, Send, X, Minimize2, Maximize2,
-  KeyRound, UserPlus, UserX,
+  KeyRound, UserPlus, UserX, Pin, PinOff, Paperclip, FileText, Download,
 } from 'lucide-react';
 import {
   getMeeting, startMeeting, endMeeting, getIceConfig,
   joinMeeting, inviteToMeeting, getMeetingParticipants,
+  uploadMeetingAttachment,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -23,6 +24,13 @@ const gridClass = (n) => {
 
 const initial = (s) => (s || '?').trim().charAt(0).toUpperCase();
 const fmtTime  = (ts) => new Date(ts).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
+const isImage  = (ct) => !!ct && ct.startsWith('image/');
+const fmtSize  = (b) => {
+  if (b == null) return '';
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+};
 
 /* ─── VideoStream: attaches a MediaStream to a <video> ─────────── */
 function VideoStream({ stream, muted = false, mirror = false, contain = false }) {
@@ -42,18 +50,35 @@ function VideoStream({ stream, muted = false, mirror = false, contain = false })
   );
 }
 
+/* ─── PinButton: toggles spotlight for a tile ────────────────── */
+function PinButton({ pinned, onToggle }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle?.(); }}
+      title={pinned ? 'Sancağı çıxar' : 'Sancaqla (böyüt)'}
+      className={`p-1.5 rounded-lg text-white transition-colors ${pinned ? 'bg-primary-600 hover:bg-primary-700' : 'bg-black/60 hover:bg-black/80'}`}>
+      {pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
 /* ─── LocalTile ──────────────────────────────────────────────── */
-function LocalTile({ camStream, screenStream, micOn, camOn, screenOn, name, full = false }) {
+function LocalTile({ camStream, screenStream, micOn, camOn, screenOn, name, full = false, pinned, onPin }) {
   const activeStream = screenOn && screenStream ? screenStream : camStream;
   const showVideo    = screenOn ? !!screenStream : (camOn && !!camStream);
   return (
-    <div className={`relative bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center ${full ? 'w-full h-full' : 'aspect-video'}`}>
+    <div className={`group relative bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center ${full ? 'w-full h-full' : 'aspect-video'}`}>
       {activeStream && <VideoStream stream={activeStream} muted mirror={!screenOn} contain={screenOn} />}
       {!showVideo && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="w-16 h-16 rounded-full bg-primary-600 flex items-center justify-center text-white text-2xl font-bold">
             {initial(name)}
           </div>
+        </div>
+      )}
+      {onPin && (
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <PinButton pinned={pinned} onToggle={onPin} />
         </div>
       )}
       <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur-sm">
@@ -66,7 +91,8 @@ function LocalTile({ camStream, screenStream, micOn, camOn, screenOn, name, full
 }
 
 /* ─── RemoteTile ─────────────────────────────────────────────── */
-function RemoteTile({ peer, full = false, contain = false, host = false, onKick, onMute, onCamOff }) {
+function RemoteTile({ peer, full = false, contain = false, canManage = false,
+                      onKick, onMute, onCamOff, pinned, onPin, onDm }) {
   const hasVideo = peer.stream?.getVideoTracks().some(t => t.enabled && t.readyState === 'live');
   return (
     <div className={`group relative bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center ${full ? 'w-full h-full' : 'aspect-video'}`}>
@@ -78,17 +104,25 @@ function RemoteTile({ peer, full = false, contain = false, host = false, onKick,
           </div>
         </div>
       )}
-      {/* Host moderation controls (appear on hover) */}
-      {host && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => onMute?.(peer.id)} title="Mikrofonu söndür"
-            className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"><MicOff className="w-3.5 h-3.5" /></button>
-          <button onClick={() => onCamOff?.(peer.id)} title="Kameranı söndür"
-            className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"><VideoOff className="w-3.5 h-3.5" /></button>
-          <button onClick={() => onKick?.(peer.id)} title="Görüşdən çıxar"
-            className="p-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white"><UserX className="w-3.5 h-3.5" /></button>
-        </div>
-      )}
+      {/* Tile controls — pin (everyone), DM + moderation (managers). Shown on hover;
+          always visible on touch devices via the focus-within fallback. */}
+      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        {onPin && <PinButton pinned={pinned} onToggle={onPin} />}
+        {onDm && (
+          <button onClick={() => onDm(peer)} title="Şəxsi mesaj"
+            className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"><MessageSquare className="w-3.5 h-3.5" /></button>
+        )}
+        {canManage && (
+          <>
+            <button onClick={() => onMute?.(peer.id)} title="Mikrofonu söndür"
+              className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"><MicOff className="w-3.5 h-3.5" /></button>
+            <button onClick={() => onCamOff?.(peer.id)} title="Kameranı söndür"
+              className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white"><VideoOff className="w-3.5 h-3.5" /></button>
+            <button onClick={() => onKick?.(peer)} title="Görüşdən çıxar"
+              className="p-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white"><UserX className="w-3.5 h-3.5" /></button>
+          </>
+        )}
+      </div>
       <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur-sm max-w-[140px] truncate">
         {peer.name || peer.email || 'Qonaq'}
       </div>
@@ -96,10 +130,12 @@ function RemoteTile({ peer, full = false, contain = false, host = false, onKick,
   );
 }
 
-/* ─── StripTile: small thumbnail in side strip ───────────────── */
-function StripTile({ stream, muted = false, name }) {
+/* ─── StripTile: small thumbnail in side/bottom strip ────────── */
+function StripTile({ stream, muted = false, name, onPin }) {
   return (
-    <div className="relative bg-gray-900 rounded-lg overflow-hidden flex-shrink-0" style={{ height: '90px' }}>
+    <div
+      className="group relative bg-gray-900 rounded-lg overflow-hidden flex-shrink-0 w-32 sm:w-full aspect-video sm:aspect-auto"
+      style={{ minHeight: '72px' }}>
       {stream && <VideoStream stream={stream} muted={muted} />}
       {!stream && (
         <div className="absolute inset-0 flex items-center justify-center">
@@ -108,6 +144,12 @@ function StripTile({ stream, muted = false, name }) {
           </div>
         </div>
       )}
+      {onPin && (
+        <button onClick={onPin} title="Sancaqla"
+          className="absolute top-1 right-1 p-1 rounded bg-black/60 hover:bg-black/80 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+          <Pin className="w-3 h-3" />
+        </button>
+      )}
       <div className="absolute bottom-1 left-1 right-1 bg-black/60 text-white text-[10px] px-1 py-0.5 rounded truncate">
         {name}
       </div>
@@ -115,14 +157,73 @@ function StripTile({ stream, muted = false, name }) {
   );
 }
 
+/* ─── AttachmentView: image preview or file chip ─────────────── */
+function AttachmentView({ att, self }) {
+  if (!att?.url) return null;
+  if (isImage(att.contentType)) {
+    return (
+      <a href={att.url} target="_blank" rel="noopener noreferrer" className="block mt-1">
+        <img src={att.url} alt={att.name}
+          className="rounded-lg max-h-44 w-auto object-cover border border-white/10" />
+      </a>
+    );
+  }
+  return (
+    <a href={att.url} download={att.name} target="_blank" rel="noopener noreferrer"
+      className={`mt-1 flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-colors ${
+        self ? 'bg-primary-700/60 border-primary-400/40 hover:bg-primary-700'
+             : 'bg-army-700/60 border-army-600 hover:bg-army-700'}`}>
+      <FileText className="w-5 h-5 flex-shrink-0 text-gray-200" />
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-gray-100 truncate">{att.name}</div>
+        <div className="text-[10px] text-gray-400">{fmtSize(att.size)}</div>
+      </div>
+      <Download className="w-4 h-4 flex-shrink-0 text-gray-300" />
+    </a>
+  );
+}
+
 /* ─── ChatPanel ──────────────────────────────────────────────── */
-function ChatPanel({ messages, onSend, onClose, messagesEndRef }) {
-  const [text, setText] = useState('');
-  const submit = () => { const t = text.trim(); if (!t) return; onSend(t); setText(''); };
-  const onKey  = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } };
+function ChatPanel({ messages, onSend, onUpload, onClose, messagesEndRef,
+                     participants, recipient, onRecipientChange }) {
+  const [text, setText]         = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState('');
+  const fileRef = useRef(null);
+
+  const recipientName = recipient
+    ? (participants.find(p => p.id === recipient)?.name
+       || participants.find(p => p.id === recipient)?.email || 'İştirakçı')
+    : '';
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t) return;
+    onSend(t, null);
+    setText('');
+  };
+  const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } };
+
+  const pickFile = () => fileRef.current?.click();
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';   // allow re-selecting the same file
+    if (!file) return;
+    setUploadErr('');
+    setUploading(true);
+    try {
+      const att = await onUpload(file);
+      onSend('', att);
+    } catch (err) {
+      setUploadErr(err?.response?.data?.error || 'Fayl göndərilə bilmədi');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
-    <div className="flex flex-col w-72 xl:w-80 border-l border-army-800 bg-army-950 flex-shrink-0">
+    <div className="flex flex-col bg-army-950 border-l border-army-800 flex-shrink-0 h-full
+                    fixed inset-0 z-40 w-full sm:static sm:inset-auto sm:z-auto sm:w-72 xl:w-80">
       <div className="flex items-center justify-between px-4 py-3 border-b border-army-800 flex-shrink-0">
         <span className="text-gray-200 font-semibold text-sm">Söhbət</span>
         <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-gray-200"><X className="w-4 h-4" /></button>
@@ -135,20 +236,58 @@ function ChatPanel({ messages, onSend, onClose, messagesEndRef }) {
         {messages.map(m => (
           <div key={m.id} className={`flex flex-col ${m.isSelf ? 'items-end' : 'items-start'}`}>
             {!m.isSelf && <span className="text-[11px] text-gray-500 mb-0.5 px-1">{m.name || m.email}</span>}
+            {m.private && (
+              <span className="text-[10px] text-primary-300 mb-0.5 px-1 flex items-center gap-1">
+                <Lock className="w-2.5 h-2.5" />
+                {m.isSelf ? `Şəxsi → ${m.toName || m.toEmail || 'İştirakçı'}` : 'Şəxsi mesaj'}
+              </span>
+            )}
             <div className={`max-w-[90%] px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
-              m.isSelf ? 'bg-primary-600 text-white rounded-br-sm' : 'bg-army-800 text-gray-100 rounded-bl-sm'
-            }`}>{m.text}</div>
+              m.private
+                ? (m.isSelf ? 'bg-primary-700 text-white rounded-br-sm ring-1 ring-primary-400/40'
+                            : 'bg-army-700 text-gray-100 rounded-bl-sm ring-1 ring-primary-400/30')
+                : (m.isSelf ? 'bg-primary-600 text-white rounded-br-sm'
+                            : 'bg-army-800 text-gray-100 rounded-bl-sm')
+            }`}>
+              {m.text}
+              {m.attachment && <AttachmentView att={m.attachment} self={m.isSelf} />}
+            </div>
             <span className="text-[10px] text-gray-600 mt-0.5 px-1">{fmtTime(m.ts)}</span>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="px-3 py-3 border-t border-army-800 flex-shrink-0">
+      <div className="px-3 py-3 border-t border-army-800 flex-shrink-0 space-y-2">
+        {/* Recipient selector — "Hamı" (everyone) or a single participant (private) */}
+        <div className="flex items-center gap-2">
+          <select
+            value={recipient}
+            onChange={e => onRecipientChange(e.target.value)}
+            className="flex-1 bg-army-800 border border-army-700 rounded-lg px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500">
+            <option value="">🌐 Hamıya</option>
+            {participants.map(p => (
+              <option key={p.id} value={p.id}>🔒 {p.name || p.email}</option>
+            ))}
+          </select>
+          {recipient && (
+            <span className="text-[10px] text-primary-300 whitespace-nowrap">Şəxsi: {recipientName}</span>
+          )}
+        </div>
+
+        {uploadErr && <p className="text-[11px] text-red-400">{uploadErr}</p>}
+
         <div className="flex items-end gap-2">
+          <input ref={fileRef} type="file" className="hidden" onChange={onFile} />
+          <button onClick={pickFile} disabled={uploading} title="Fayl əlavə et"
+            className="p-2 rounded-xl bg-army-800 hover:bg-army-700 text-gray-300 disabled:opacity-40 transition-colors flex-shrink-0">
+            {uploading
+              ? <span className="w-4 h-4 border-2 border-gray-500 border-t-gray-200 rounded-full animate-spin block" />
+              : <Paperclip className="w-4 h-4" />}
+          </button>
           <textarea
             value={text} onChange={e => setText(e.target.value)} onKeyDown={onKey}
-            placeholder="Mesaj yazın… (Enter göndər)" rows={1}
+            placeholder={recipient ? `${recipientName}-ə şəxsi mesaj…` : 'Mesaj yazın… (Enter göndər)'} rows={1}
             className="flex-1 resize-none bg-army-800 border border-army-700 rounded-xl px-3 py-2 text-sm text-gray-100
                        placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-500 max-h-24 overflow-y-auto"
             style={{ minHeight: '36px' }}
@@ -225,8 +364,13 @@ export default function MeetingRoom() {
   const [chatOpen,  setChatOpen]  = useState(false);
   const [messages,  setMessages]  = useState([]);
   const [unread,    setUnread]    = useState(0);
+  const [chatRecipient, setChatRecipient] = useState('');   // '' = everyone, else peer session id
   const messagesEndRef = useRef(null);
   const chatOpenRef    = useRef(false);
+
+  /* ── spotlight (pin a participant) + kick confirmation ── */
+  const [pinnedPeerId, setPinnedPeerId] = useState(null);   // null | 'self' | peerId
+  const [kickTarget,   setKickTarget]   = useState(null);   // peer pending removal confirmation
 
   /* ── refs ── */
   const camStreamRef    = useRef(null);
@@ -254,7 +398,13 @@ export default function MeetingRoom() {
   const isSomeoneSharing = !!screenSharingEmail;
   const amISharing       = screenSharingEmail === user?.email;
   const sharerPeer       = remotePeers.find(p => p.id === screenSharingPeerId);
-  const otherPeers       = remotePeers.filter(p => p.id !== screenSharingPeerId);
+
+  // Spotlight: a screen share always wins; otherwise a manually pinned tile.
+  const screenSpotlight = isSomeoneSharing && !screenPip;
+  const pinnedPeer      = (!screenSpotlight && pinnedPeerId && pinnedPeerId !== 'self')
+    ? remotePeers.find(p => p.id === pinnedPeerId) : null;
+  const pinSelf         = !screenSpotlight && pinnedPeerId === 'self';
+  const pinSpotlight    = pinSelf || !!pinnedPeer;
 
   /* ── sync refs ── */
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
@@ -474,6 +624,8 @@ export default function MeetingRoom() {
     pendingIceRef.current.delete(peerId);
     setRemotePeers(prev => prev.filter(p => p.id !== peerId));
     clearScreenShare(peerId);
+    setPinnedPeerId(prev => (prev === peerId ? null : prev));
+    setChatRecipient(prev => (prev === peerId ? '' : prev));
   }, [clearScreenShare]);
 
   /* ════════════════════════════════════════════════════════════
@@ -638,14 +790,29 @@ export default function MeetingRoom() {
           case 'screen-rejected':
             setShareRejected(msg.reason || 'Ekran paylaşımı rədd edildi');
             break;
+          case 'chat-history': {
+            // Replayed ephemeral history on (re)connect — replace local list.
+            const list = (msg.messages || []).map(m => ({
+              id: `${m.from}-${m.ts}`, from: m.from,
+              email: m.email, name: m.name || m.email || 'Qonaq',
+              text: m.text, ts: m.ts, attachment: m.attachment || null,
+              private: !!m.private, toEmail: m.toEmail, toName: m.toName,
+              isSelf: isSelfEmail(m.email),
+            }));
+            setMessages(list);
+            break;
+          }
           case 'chat': {
-            const isSelf = msg.email === user?.email;
+            const isSelf = isSelfEmail(msg.email);
             setMessages(prev => [...prev, {
               id: `${msg.from}-${msg.ts}`, from: msg.from,
               email: msg.email, name: msg.name || msg.email || 'Qonaq',
-              text: msg.text, ts: msg.ts, isSelf,
+              text: msg.text, ts: msg.ts, attachment: msg.attachment || null,
+              private: !!msg.private, toEmail: msg.toEmail, toName: msg.toName,
+              isSelf,
             }]);
-            if (!chatOpenRef.current) setUnread(n => n + 1);
+            // Don't badge our own echoed messages as unread.
+            if (!chatOpenRef.current && !isSelf) setUnread(n => n + 1);
             break;
           }
           default: break;
@@ -822,12 +989,36 @@ export default function MeetingRoom() {
 
   const toggleScreen = () => { if (screenOn) stopScreen(); else startScreen(); };
 
-  const sendChat = useCallback((text) => sendSignal({ type: 'chat', text }), [sendSignal]);
+  // Send a chat message (optionally with an attachment) to everyone or, when a
+  // recipient is selected, privately to that one participant.
+  const sendChat = useCallback((text, attachment = null) =>
+    sendSignal({ type: 'chat', text, attachment, to: chatRecipient || undefined }),
+    [sendSignal, chatRecipient]);
 
-  /* Host moderation (server enforces host-only). */
-  const kickPeer    = useCallback((peerId) => sendSignal({ type: 'kick',       target: peerId }), [sendSignal]);
+  // Upload a file to the meeting, returning the attachment metadata to broadcast.
+  const uploadAttachment = useCallback(async (file) => {
+    const res = await uploadMeetingAttachment(id, file);
+    return res.data;
+  }, [id]);
+
+  // Open the chat focused on a private conversation with a specific participant.
+  const openDm = useCallback((peer) => {
+    setChatRecipient(peer.id);
+    setChatOpen(true);
+  }, []);
+
+  // Toggle the spotlight (pin) for a tile ('self' or a peer id).
+  const togglePin = useCallback((target) =>
+    setPinnedPeerId(prev => (prev === target ? null : target)), []);
+
+  /* Moderation — host / super-admin / manage-meetings (server re-checks). */
   const mutePeer    = useCallback((peerId) => sendSignal({ type: 'force-mute', target: peerId }), [sendSignal]);
   const camOffPeer  = useCallback((peerId) => sendSignal({ type: 'force-cam',  target: peerId }), [sendSignal]);
+  const confirmKick = useCallback((peer)   => setKickTarget(peer), []);
+  const doKick      = useCallback(() => {
+    if (kickTarget) sendSignal({ type: 'kick', target: kickTarget.id });
+    setKickTarget(null);
+  }, [kickTarget, sendSignal]);
 
   // Leave: I exit the meeting; it keeps running for everyone else.
   const handleLeave = () => {
@@ -949,6 +1140,14 @@ export default function MeetingRoom() {
   const tileCount = remotePeers.length + 1;
   const canManage = meeting.canManage;
 
+  // The single tile currently in the spotlight ('self' or a peer id), if any.
+  const spotlightId = screenSpotlight
+    ? (amISharing ? 'self' : screenSharingPeerId)
+    : (pinSelf ? 'self' : pinnedPeer?.id);
+
+  // Participants (excluding self) for the chat recipient selector.
+  const chatParticipants = remotePeers.map(p => ({ id: p.id, name: p.name, email: p.email }));
+
   return (
     <div className="min-h-screen bg-army-950 flex flex-col">
 
@@ -1054,71 +1253,97 @@ export default function MeetingRoom() {
           </div>
 
           {/* ── VIDEO AREA ─────────────────────────────────────── */}
-          {isSomeoneSharing && !screenPip ? (
-            /* ── Full screen-share layout ─────────────────────
-               Left: large shared screen
-               Right: side strip of other participants           */
-            <div className="flex flex-1 min-h-0 gap-2 p-3 overflow-hidden">
-              {/* Large tile */}
-              <div className="flex-1 min-w-0 relative">
-                {amISharing ? (
+          {(screenSpotlight || pinSpotlight) ? (
+            /* ── Spotlight layout (shared screen OR pinned participant) ──
+               Large focus tile + a strip of the other participants. Stacks
+               vertically on small screens; the strip then scrolls sideways. */
+            <div className="flex flex-col sm:flex-row flex-1 min-h-0 gap-2 p-3 overflow-hidden">
+              {/* Large focus tile */}
+              <div className="flex-1 min-w-0 min-h-0 relative">
+                {screenSpotlight ? (
+                  amISharing ? (
+                    <LocalTile
+                      camStream={camStream} screenStream={screenStream}
+                      micOn={micOn} camOn={camOn} screenOn={screenOn}
+                      name={displayName} full
+                    />
+                  ) : sharerPeer ? (
+                    <RemoteTile peer={sharerPeer} full contain />
+                  ) : (
+                    <div className="w-full h-full bg-gray-950 rounded-xl flex items-center justify-center">
+                      <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )
+                ) : pinSelf ? (
                   <LocalTile
                     camStream={camStream} screenStream={screenStream}
                     micOn={micOn} camOn={camOn} screenOn={screenOn}
-                    name={displayName} full
+                    name={displayName} full pinned onPin={() => togglePin('self')}
                   />
-                ) : sharerPeer ? (
-                  <RemoteTile peer={sharerPeer} full contain />
                 ) : (
-                  <div className="w-full h-full bg-gray-950 rounded-xl flex items-center justify-center">
-                    <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
-                  </div>
+                  <RemoteTile peer={pinnedPeer} full
+                    canManage={canManage} onKick={confirmKick} onMute={mutePeer} onCamOff={camOffPeer}
+                    pinned onPin={() => togglePin(pinnedPeer.id)} onDm={openDm} />
                 )}
-                {/* Sharer label */}
-                {!amISharing && sharerPeer && (
+
+                {/* Focus label */}
+                {screenSpotlight && !amISharing && sharerPeer && (
                   <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-primary-600/80 backdrop-blur-sm text-white text-xs px-2.5 py-1.5 rounded-lg">
                     <Monitor className="w-3.5 h-3.5" />
                     {screenSharingName} ekranı paylaşır
                   </div>
                 )}
-                {/* Minimize button */}
-                <button onClick={() => setScreenPip(true)}
-                  className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white text-xs px-2.5 py-1.5 rounded-lg transition-colors"
-                  title="Kiçilt (ESC)">
-                  <Minimize2 className="w-3.5 h-3.5" /> Kiçilt
-                </button>
+                {pinSpotlight && (
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-primary-600/80 backdrop-blur-sm text-white text-xs px-2.5 py-1.5 rounded-lg">
+                    <Pin className="w-3.5 h-3.5" /> Sancaqlanıb
+                  </div>
+                )}
+
+                {/* Top-right action: minimize (screen) or unpin (pinned) */}
+                {screenSpotlight ? (
+                  <button onClick={() => setScreenPip(true)}
+                    className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white text-xs px-2.5 py-1.5 rounded-lg transition-colors"
+                    title="Kiçilt (ESC)">
+                    <Minimize2 className="w-3.5 h-3.5" /> Kiçilt
+                  </button>
+                ) : (
+                  <button onClick={() => setPinnedPeerId(null)}
+                    className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white text-xs px-2.5 py-1.5 rounded-lg transition-colors"
+                    title="Sancağı çıxar">
+                    <PinOff className="w-3.5 h-3.5" /> Sancağı çıxar
+                  </button>
+                )}
               </div>
 
-              {/* Side strip */}
-              <div className="flex flex-col gap-2 overflow-y-auto flex-shrink-0" style={{ width: '160px' }}>
-                {/* My tile in strip when I'm watching someone else's screen */}
-                {!amISharing && (
+              {/* Strip of the other participants (everyone except the focus tile) */}
+              <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0 w-full sm:w-40
+                              overflow-x-auto sm:overflow-x-hidden sm:overflow-y-auto">
+                {spotlightId !== 'self' && (
                   <StripTile
                     stream={screenOn ? screenStream : camStream}
-                    muted name={`${displayName} (Siz)`}
+                    muted name={`${displayName} (Siz)`} onPin={() => togglePin('self')}
                   />
                 )}
-                {otherPeers.map(p => (
-                  <StripTile key={p.id} stream={p.stream} name={p.name || p.email || 'Qonaq'} />
-                ))}
-                {/* If I am sharing, show all remote peers in strip */}
-                {amISharing && remotePeers.map(p => (
-                  <StripTile key={p.id} stream={p.stream} name={p.name || p.email || 'Qonaq'} />
+                {remotePeers.filter(p => p.id !== spotlightId).map(p => (
+                  <StripTile key={p.id} stream={p.stream}
+                    name={p.name || p.email || 'Qonaq'} onPin={() => togglePin(p.id)} />
                 ))}
               </div>
             </div>
           ) : (
-            /* ── Normal / PiP layout ─────────────────────────── */
+            /* ── Normal / PiP grid layout ─────────────────────── */
             <div className="flex-1 p-4 overflow-y-auto relative">
               <div className={`grid ${gridClass(tileCount)} gap-3 mx-auto`}>
                 <LocalTile
                   camStream={camStream} screenStream={screenStream}
                   micOn={micOn} camOn={camOn} screenOn={screenOn}
                   name={displayName}
+                  pinned={pinnedPeerId === 'self'} onPin={() => togglePin('self')}
                 />
                 {remotePeers.map(p => (
                   <RemoteTile key={p.id} peer={p}
-                    host={isHost} onKick={kickPeer} onMute={mutePeer} onCamOff={camOffPeer} />
+                    canManage={canManage} onKick={confirmKick} onMute={mutePeer} onCamOff={camOffPeer}
+                    pinned={pinnedPeerId === p.id} onPin={() => togglePin(p.id)} onDm={openDm} />
                 ))}
               </div>
 
@@ -1230,9 +1455,44 @@ export default function MeetingRoom() {
 
         {/* Chat panel */}
         {chatOpen && (
-          <ChatPanel messages={messages} onSend={sendChat} onClose={() => setChatOpen(false)} messagesEndRef={messagesEndRef} />
+          <ChatPanel
+            messages={messages}
+            onSend={sendChat}
+            onUpload={uploadAttachment}
+            onClose={() => setChatOpen(false)}
+            messagesEndRef={messagesEndRef}
+            participants={chatParticipants}
+            recipient={chatRecipient}
+            onRecipientChange={setChatRecipient}
+          />
         )}
       </div>
+
+      {/* Kick confirmation */}
+      {kickTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => setKickTarget(null)}>
+          <div className="bg-army-900 border border-army-700 rounded-2xl p-5 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-2">
+              <UserX className="w-5 h-5 text-red-400" />
+              <h3 className="text-gray-100 font-semibold">İştirakçını çıxar</h3>
+            </div>
+            <p className="text-gray-400 text-sm mb-5">
+              <span className="text-gray-200 font-medium">{kickTarget.name || kickTarget.email || 'İştirakçı'}</span> görüşdən çıxarılsın?
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setKickTarget(null)}
+                className="flex-1 px-4 py-2.5 bg-army-700 hover:bg-army-600 text-gray-200 rounded-xl text-sm font-medium transition-colors">
+                Ləğv et
+              </button>
+              <button onClick={doKick}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition-colors">
+                Çıxar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

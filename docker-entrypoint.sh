@@ -48,29 +48,6 @@ export SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-jdbc:postgresql://localho
 export SPRING_DATASOURCE_USERNAME="${SPRING_DATASOURCE_USERNAME:-$PGUSER}"
 export SPRING_DATASOURCE_PASSWORD="${SPRING_DATASOURCE_PASSWORD:-}"
 
-# ── Self-signed TLS certificate for nginx ────────────────────────────────────
-# Browsers require HTTPS for camera/mic (getUserMedia). The cert is generated
-# once per fresh container with a SAN matching APP_HOST so browsers accept it
-# after you click "Proceed anyway" on the self-signed warning.
-_gen_ssl_cert() {
-    local host="${APP_HOST:-localhost}"
-    local san
-    if echo "$host" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
-        san="IP:${host},DNS:localhost,IP:127.0.0.1"
-    else
-        san="DNS:${host},DNS:localhost,IP:127.0.0.1"
-    fi
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-        -keyout /etc/nginx/ssl/key.pem \
-        -out    /etc/nginx/ssl/cert.pem \
-        -subj   "/CN=${host}" \
-        -addext "subjectAltName=${san}" \
-        2>/dev/null
-    echo "[entrypoint] TLS cert generated — CN=${host} SAN=${san}"
-}
-mkdir -p /etc/nginx/ssl
-[ -f /etc/nginx/ssl/cert.pem ] || _gen_ssl_cert
-
 # ── coturn (bundled STUN/TURN for video meetings) ─────────────────────────────
 # Clients reach this server at APP_HOST, so the ICE config we hand to browsers
 # must use APP_HOST (not localhost). On a flat LAN, calls also work via host
