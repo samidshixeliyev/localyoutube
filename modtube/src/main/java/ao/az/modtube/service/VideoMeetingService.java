@@ -180,6 +180,8 @@ public class VideoMeetingService {
         if ("LIVE".equals(m.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Canlı görüşü silmək olmaz");
         }
+        // Drop any lingering chat attachments for this room from the bucket.
+        meetingSignalingHandler.purgeRoom(m.getRoomCode());
         videoMeetingRepository.delete(m);
     }
 

@@ -1251,3 +1251,22 @@ injects `StorageService`. `MeetingHandshakeInterceptor` sets `canManage` attribu
 
 Verified: frontend `npm run build` ✓ (MeetingRoom chunk 46 KB), backend `compileJava` ✓
 (temurin 21 container; only pre-existing Lombok warning). No new env vars.
+
+#### Follow-up — chat UX, link/preview, pin & layout fixes (same day)
+- **Root cause of "half chat screen" / broken layout:** room used `min-h-screen`
+  (unbounded) so flex children never got a definite height → internal scroll
+  collapsed. Fixed: root is now `h-screen overflow-hidden`; ChatPanel widened
+  (`sm:w-80 xl:w-96`), proper `flex-1 min-h-0` message list.
+- **Chat redesign:** styled recipient `<select>` (appearance-none + globe/chevron
+  icons), private-mode banner with one-click "back to public", empty state, polished
+  bubbles.
+- **Links:** `Linkify` makes http(s)/www URLs in messages clickable.
+- **File preview (was force-download):** images render inline and open in a
+  fullscreen **Lightbox** (with download); non-images get a chip with **Bax**
+  (open/preview in new tab — served inline) + **Yüklə** (download). `isImageAtt`
+  also detects by extension when contentType is generic.
+- **Pin/spotlight scaling:** large tile fills via the `h-screen` fix; strip tiles
+  consistent `aspect-video` (w-28 mobile row / w-full desktop column).
+- **Bucket cleanup on delete too:** `purgeRoom` is now public and also called from
+  `VideoMeetingService.deleteMeeting` (in addition to end/empty) so the
+  `meeting-attachments/{roomCode}` folder is removed from the bucket.

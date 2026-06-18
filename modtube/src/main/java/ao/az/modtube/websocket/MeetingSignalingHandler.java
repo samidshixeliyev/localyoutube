@@ -286,7 +286,7 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
     }
 
     /** Wipe ephemeral chat history and delete uploaded attachments for a finished room. */
-    private void purgeRoom(String roomCode) {
+    public void purgeRoom(String roomCode) {
         chatHistory.remove(roomCode);
         // Delete attachments off the EVENT thread — MinIO I/O must not block the caller
         // (endMeeting runs in a DB transaction; we don't want to pin its connection).

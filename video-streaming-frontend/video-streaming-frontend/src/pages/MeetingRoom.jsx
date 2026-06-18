@@ -5,6 +5,7 @@ import {
   Users, Lock, Monitor, MonitorOff, RefreshCw,
   MessageSquare, Send, X, Minimize2, Maximize2,
   KeyRound, UserPlus, UserX, Pin, PinOff, Paperclip, FileText, Download,
+  ExternalLink, ChevronDown, Globe,
 } from 'lucide-react';
 import {
   getMeeting, startMeeting, endMeeting, getIceConfig,
@@ -24,13 +25,35 @@ const gridClass = (n) => {
 
 const initial = (s) => (s || '?').trim().charAt(0).toUpperCase();
 const fmtTime  = (ts) => new Date(ts).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
-const isImage  = (ct) => !!ct && ct.startsWith('image/');
+const isImageAtt = (att) =>
+  (!!att?.contentType && att.contentType.startsWith('image/')) ||
+  /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(att?.name || '');
 const fmtSize  = (b) => {
   if (b == null) return '';
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
 };
+
+/* Render message text with clickable links (http/https + bare www.). */
+const URL_RE = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+function Linkify({ text, self }) {
+  if (!text) return null;
+  const parts = String(text).split(URL_RE);
+  return parts.map((part, i) => {
+    if (!part) return null;
+    if (/^(https?:\/\/|www\.)/i.test(part)) {
+      const href = part.startsWith('http') ? part : `https://${part}`;
+      return (
+        <a key={i} href={href} target="_blank" rel="noopener noreferrer"
+          className={`underline break-all hover:opacity-80 ${self ? 'text-white' : 'text-primary-300'}`}>
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
 
 /* ─── VideoStream: attaches a MediaStream to a <video> ─────────── */
 function VideoStream({ stream, muted = false, mirror = false, contain = false }) {
@@ -133,9 +156,7 @@ function RemoteTile({ peer, full = false, contain = false, canManage = false,
 /* ─── StripTile: small thumbnail in side/bottom strip ────────── */
 function StripTile({ stream, muted = false, name, onPin }) {
   return (
-    <div
-      className="group relative bg-gray-900 rounded-lg overflow-hidden flex-shrink-0 w-32 sm:w-full aspect-video sm:aspect-auto"
-      style={{ minHeight: '72px' }}>
+    <div className="group relative bg-gray-900 rounded-lg overflow-hidden flex-shrink-0 w-28 sm:w-full aspect-video">
       {stream && <VideoStream stream={stream} muted={muted} />}
       {!stream && (
         <div className="absolute inset-0 flex items-center justify-center">
@@ -157,29 +178,52 @@ function StripTile({ stream, muted = false, name, onPin }) {
   );
 }
 
-/* ─── AttachmentView: image preview or file chip ─────────────── */
-function AttachmentView({ att, self }) {
+/* ─── AttachmentView: inline image preview or file chip ──────── */
+function AttachmentView({ att, self, onPreview }) {
   if (!att?.url) return null;
-  if (isImage(att.contentType)) {
+  if (isImageAtt(att)) {
     return (
-      <a href={att.url} target="_blank" rel="noopener noreferrer" className="block mt-1">
+      <button type="button" onClick={() => onPreview?.(att)}
+        className="block mt-1.5 w-full overflow-hidden rounded-lg border border-white/10 group/att">
         <img src={att.url} alt={att.name}
-          className="rounded-lg max-h-44 w-auto object-cover border border-white/10" />
-      </a>
+          className="max-h-52 w-full object-cover group-hover/att:opacity-90 transition-opacity" />
+      </button>
     );
   }
   return (
-    <a href={att.url} download={att.name} target="_blank" rel="noopener noreferrer"
-      className={`mt-1 flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-colors ${
-        self ? 'bg-primary-700/60 border-primary-400/40 hover:bg-primary-700'
-             : 'bg-army-700/60 border-army-600 hover:bg-army-700'}`}>
+    <div className={`mt-1.5 flex items-center gap-2 px-2.5 py-2 rounded-lg border ${
+      self ? 'bg-primary-700/50 border-primary-400/30' : 'bg-army-700/50 border-army-600'}`}>
       <FileText className="w-5 h-5 flex-shrink-0 text-gray-200" />
       <div className="min-w-0 flex-1">
-        <div className="text-xs text-gray-100 truncate">{att.name}</div>
+        <div className="text-xs text-gray-100 truncate" title={att.name}>{att.name}</div>
         <div className="text-[10px] text-gray-400">{fmtSize(att.size)}</div>
       </div>
-      <Download className="w-4 h-4 flex-shrink-0 text-gray-300" />
-    </a>
+      <a href={att.url} target="_blank" rel="noopener noreferrer" title="Bax (yeni vərəq)"
+        className="p-1.5 rounded-lg hover:bg-white/10 text-gray-200 flex-shrink-0"><ExternalLink className="w-4 h-4" /></a>
+      <a href={att.url} download={att.name} title="Yüklə"
+        className="p-1.5 rounded-lg hover:bg-white/10 text-gray-200 flex-shrink-0"><Download className="w-4 h-4" /></a>
+    </div>
+  );
+}
+
+/* ─── Lightbox: fullscreen image preview ─────────────────────── */
+function Lightbox({ att, onClose }) {
+  if (!att) return null;
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute top-4 right-4 flex items-center gap-2">
+        <a href={att.url} download={att.name} onClick={e => e.stopPropagation()} title="Yüklə"
+          className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"><Download className="w-5 h-5" /></a>
+        <button onClick={onClose} title="Bağla"
+          className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"><X className="w-5 h-5" /></button>
+      </div>
+      <img src={att.url} alt={att.name}
+        onClick={e => e.stopPropagation()}
+        className="max-h-[88vh] max-w-[92vw] object-contain rounded-lg shadow-2xl" />
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/80 text-xs bg-black/50 px-3 py-1 rounded-full max-w-[80vw] truncate">
+        {att.name}
+      </div>
+    </div>
   );
 }
 
@@ -189,6 +233,7 @@ function ChatPanel({ messages, onSend, onUpload, onClose, messagesEndRef,
   const [text, setText]         = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
+  const [lightbox, setLightbox] = useState(null);
   const fileRef = useRef(null);
 
   const recipientName = recipient
@@ -222,35 +267,45 @@ function ChatPanel({ messages, onSend, onUpload, onClose, messagesEndRef,
   };
 
   return (
-    <div className="flex flex-col bg-army-950 border-l border-army-800 flex-shrink-0 h-full
-                    fixed inset-0 z-40 w-full sm:static sm:inset-auto sm:z-auto sm:w-72 xl:w-80">
+    <div className="flex flex-col bg-army-950 border-l border-army-800 flex-shrink-0 min-h-0
+                    fixed inset-0 z-40 w-full h-full sm:static sm:inset-auto sm:z-auto sm:h-auto sm:w-80 xl:w-96">
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-army-800 flex-shrink-0">
-        <span className="text-gray-200 font-semibold text-sm">Söhbət</span>
-        <button onClick={onClose} className="p-1 rounded text-gray-400 hover:text-gray-200"><X className="w-4 h-4" /></button>
+        <div className="flex items-center gap-2 min-w-0">
+          <MessageSquare className="w-4 h-4 text-primary-400 flex-shrink-0" />
+          <span className="text-gray-100 font-semibold text-sm">Söhbət</span>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-army-800">
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 min-h-0">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5 min-h-0">
         {messages.length === 0 && (
-          <p className="text-center text-gray-500 text-xs mt-8">Hələ mesaj yoxdur. İlk mesajı siz yazın.</p>
+          <div className="flex flex-col items-center justify-center h-full text-center px-4">
+            <MessageSquare className="w-10 h-10 text-army-700 mb-3" />
+            <p className="text-gray-500 text-xs">Hələ mesaj yoxdur.<br />İlk mesajı siz yazın.</p>
+          </div>
         )}
         {messages.map(m => (
           <div key={m.id} className={`flex flex-col ${m.isSelf ? 'items-end' : 'items-start'}`}>
-            {!m.isSelf && <span className="text-[11px] text-gray-500 mb-0.5 px-1">{m.name || m.email}</span>}
+            {!m.isSelf && <span className="text-[11px] text-gray-400 mb-0.5 px-1 font-medium">{m.name || m.email}</span>}
             {m.private && (
               <span className="text-[10px] text-primary-300 mb-0.5 px-1 flex items-center gap-1">
                 <Lock className="w-2.5 h-2.5" />
                 {m.isSelf ? `Şəxsi → ${m.toName || m.toEmail || 'İştirakçı'}` : 'Şəxsi mesaj'}
               </span>
             )}
-            <div className={`max-w-[90%] px-3 py-2 rounded-2xl text-sm leading-snug break-words ${
+            <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-snug whitespace-pre-wrap break-words ${
               m.private
-                ? (m.isSelf ? 'bg-primary-700 text-white rounded-br-sm ring-1 ring-primary-400/40'
-                            : 'bg-army-700 text-gray-100 rounded-bl-sm ring-1 ring-primary-400/30')
-                : (m.isSelf ? 'bg-primary-600 text-white rounded-br-sm'
-                            : 'bg-army-800 text-gray-100 rounded-bl-sm')
+                ? (m.isSelf ? 'bg-primary-700 text-white rounded-br-md ring-1 ring-primary-400/40'
+                            : 'bg-army-700 text-gray-100 rounded-bl-md ring-1 ring-primary-400/30')
+                : (m.isSelf ? 'bg-primary-600 text-white rounded-br-md'
+                            : 'bg-army-800 text-gray-100 rounded-bl-md')
             }`}>
-              {m.text}
-              {m.attachment && <AttachmentView att={m.attachment} self={m.isSelf} />}
+              {m.text && <Linkify text={m.text} self={m.isSelf} />}
+              {m.attachment && <AttachmentView att={m.attachment} self={m.isSelf} onPreview={setLightbox} />}
             </div>
             <span className="text-[10px] text-gray-600 mt-0.5 px-1">{fmtTime(m.ts)}</span>
           </div>
@@ -258,29 +313,42 @@ function ChatPanel({ messages, onSend, onUpload, onClose, messagesEndRef,
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Composer */}
       <div className="px-3 py-3 border-t border-army-800 flex-shrink-0 space-y-2">
-        {/* Recipient selector — "Hamı" (everyone) or a single participant (private) */}
-        <div className="flex items-center gap-2">
+        {/* Recipient selector */}
+        <div className="relative">
+          <Globe className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <select
             value={recipient}
             onChange={e => onRecipientChange(e.target.value)}
-            className="flex-1 bg-army-800 border border-army-700 rounded-lg px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500">
-            <option value="">🌐 Hamıya</option>
+            className="w-full appearance-none bg-army-800 border border-army-700 rounded-lg pl-8 pr-8 py-2 text-xs text-gray-200
+                       focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer">
+            <option value="">Hamıya (ümumi)</option>
             {participants.map(p => (
-              <option key={p.id} value={p.id}>🔒 {p.name || p.email}</option>
+              <option key={p.id} value={p.id}>Şəxsi → {p.name || p.email}</option>
             ))}
           </select>
-          {recipient && (
-            <span className="text-[10px] text-primary-300 whitespace-nowrap">Şəxsi: {recipientName}</span>
-          )}
+          <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
+
+        {/* Private-mode banner */}
+        {recipient && (
+          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-primary-600/15 border border-primary-500/30">
+            <span className="flex items-center gap-1.5 text-[11px] text-primary-200 min-w-0">
+              <Lock className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">Yalnız <b>{recipientName}</b> görəcək</span>
+            </span>
+            <button onClick={() => onRecipientChange('')} title="Ümumi söhbətə qayıt"
+              className="text-primary-300 hover:text-white flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+          </div>
+        )}
 
         {uploadErr && <p className="text-[11px] text-red-400">{uploadErr}</p>}
 
         <div className="flex items-end gap-2">
           <input ref={fileRef} type="file" className="hidden" onChange={onFile} />
           <button onClick={pickFile} disabled={uploading} title="Fayl əlavə et"
-            className="p-2 rounded-xl bg-army-800 hover:bg-army-700 text-gray-300 disabled:opacity-40 transition-colors flex-shrink-0">
+            className="p-2.5 rounded-xl bg-army-800 hover:bg-army-700 text-gray-300 disabled:opacity-40 transition-colors flex-shrink-0">
             {uploading
               ? <span className="w-4 h-4 border-2 border-gray-500 border-t-gray-200 rounded-full animate-spin block" />
               : <Paperclip className="w-4 h-4" />}
@@ -288,16 +356,18 @@ function ChatPanel({ messages, onSend, onUpload, onClose, messagesEndRef,
           <textarea
             value={text} onChange={e => setText(e.target.value)} onKeyDown={onKey}
             placeholder={recipient ? `${recipientName}-ə şəxsi mesaj…` : 'Mesaj yazın… (Enter göndər)'} rows={1}
-            className="flex-1 resize-none bg-army-800 border border-army-700 rounded-xl px-3 py-2 text-sm text-gray-100
-                       placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-500 max-h-24 overflow-y-auto"
-            style={{ minHeight: '36px' }}
+            className="flex-1 resize-none bg-army-800 border border-army-700 rounded-xl px-3 py-2.5 text-sm text-gray-100
+                       placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-primary-500 max-h-28 overflow-y-auto"
+            style={{ minHeight: '42px' }}
           />
           <button onClick={submit} disabled={!text.trim()}
-            className="p-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-40 transition-colors flex-shrink-0">
+            className="p-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white disabled:opacity-40 transition-colors flex-shrink-0">
             <Send className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      <Lightbox att={lightbox} onClose={() => setLightbox(null)} />
     </div>
   );
 }
@@ -1149,7 +1219,7 @@ export default function MeetingRoom() {
   const chatParticipants = remotePeers.map(p => ({ id: p.id, name: p.name, email: p.email }));
 
   return (
-    <div className="min-h-screen bg-army-950 flex flex-col">
+    <div className="h-screen overflow-hidden bg-army-950 flex flex-col">
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-army-800 flex-shrink-0">
