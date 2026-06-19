@@ -1340,3 +1340,62 @@ pre-existing DaoAuthenticationProvider deprecation note).
 - Old `meeting.ice-servers/turn-*` runtime settings + `VideoMeetingController` @Value
   TURN fields are now dead (left in place, harmless). Could be cleaned later.
 - LiveKit image must be pulled+saved for offline installs (separate from modtube tar).
+
+---
+
+### 2026-06-19 — Meetings → in-backend WebCodecs relay (LiveKit removed) + public playlists
+
+**Context:** the prod network only allows 443/80/22 to the server (no media ports), all
+clients are wired-LAN Chrome/Edge, offline. After exploring LiveKit+TURN, the user chose
+to drop the separate meeting servers and route ALL media through the backend over 443.
+
+**Meetings — new architecture (no WebRTC, no SFU, no media ports):**
+- **Backend relay** `websocket/MeetingMediaHandler` (`BinaryWebSocketHandler`) at
+  `/ws/meetings/media/{roomCode}` (registered in `WebSocketConfig`, binary buffer 4 MB,
+  `ConcurrentWebSocketSessionDecorator` for safe fan-out). Wire format
+  `[1 kind][1 flags][8 ts f64][4 sampleRate u32][1 ch][1 rsv][payload]`; server prepends
+  `[1 senderEmailLen][email]`. **Selective forwarding:** a control frame (kind=255, JSON
+  email list) tells the relay which senders' CAMERA a client wants; camera video only
+  goes to subscribers, audio + screen-share go to everyone. This is what makes 10-30
+  feasible (each client decodes only visible tiles + audio, not all N cameras).
+- **Frontend engine** `src/lib/meetingMedia.js` (`MeetingMedia`): WebCodecs VP8 video +
+  Opus audio, `latencyMode:'realtime'`, drop frames when `encodeQueueSize>2`, keyframe
+  every ~60 frames, per-sender decode → `<canvas>`, audio via WebAudio scheduler (~60 ms
+  jitter buffer). `setWanted(emails)` drives selective forwarding (cap `MAX_VIDEO_TILES=20`).
+  Capture via `MediaStreamTrackProcessor` (Chromium only).
+- **`MeetingRoom.jsx`** rewritten: local preview via MediaStream, remote tiles host the
+  engine's canvases (`RemoteVideo`), roster comes from the text chat WS
+  (`peers`/`peer-joined`/`peer-left`, keyed by email), chat/attachments/history/pin/
+  spotlight/moderation all preserved. Moderation + private chat route by EMAIL.
+- **Removed LiveKit feature entirely:** `LiveKitTokenService`, `MeetingRunner` entity/
+  repo/service/controller, `GET /api/meetings/{id}/token`, `runner_id` field +
+  `countByRunnerIdAndStatus`, admin "Görüş Serverləri" page/panel/tab, `livekit-client`
+  npm dep, `/api/admin/meeting-runners` security rule. (V13 migration left applied;
+  `meeting_runners` table + `runner_id` column are now orphaned — harmless under
+  `ddl-auto: validate`.) `docker-compose.livekit.yml`/`livekit.yaml` remain in-repo but
+  unused.
+
+**Playlists:** public browse section. `GET /api/playlists/public`
+(`PlaylistRepository.findByVisibilityIgnoreCaseOrderByCreatedAtDesc("PUBLIC")`) returns
+ONLY `PUBLIC` playlists — private/restricted/unlisted excluded at the query, and opening
+any playlist still re-checks `canViewPlaylist` (403 on private, allow-list on restricted).
+New `pages/PublicPlaylists.jsx`, route `/playlists`, sidebar "Pleylistlər" (MAIN_NAV, all
+users).
+
+**Env vars:** NONE added. Meetings need only the existing `WEBRTC_MAX_PARTICIPANTS`
+(per-room cap, default 50). The coturn/TURN/ICE vars (`WEBRTC_ICE_SERVERS`,
+`WEBRTC_TURN_URL`, `WEBRTC_TURN_USERNAME`, `WEBRTC_TURN_CREDENTIAL`) were removed in the
+earlier coturn cleanup and are not needed.
+
+**Verify:** frontend `npm run build` ✓ (MeetingRoom 50 KB, no livekit-client);
+backend `compileJava` ✓ (temurin 21; only pre-existing DaoAuthenticationProvider
+deprecation note). Pushed `master` da57259. Image tar:
+`C:\Users\samid.sixaliyev\Downloads\tars\modtube-latest.tar` (853 MB).
+
+**Gotchas / follow-ups:**
+- WebCodecs ⇒ **Chrome/Edge only**. getUserMedia needs a secure context (https — fine).
+- TCP relay: great on clean wired LAN; no WebRTC loss-resilience. Tuning knobs:
+  `MAX_VIDEO_TILES`, bitrates + `KEYFRAME_EVERY` in `meetingMedia.js`.
+- **Not load-tested** with many clients here — needs a real multi-machine test + likely a
+  tuning pass.
+- Audio forced mono (`channelCount:1`) so the per-sender Opus decoder config always matches.
