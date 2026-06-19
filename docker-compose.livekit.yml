@@ -1,0 +1,35 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# LiveKit SFU — the "meeting runner" for video meetings.
+# ───────────────────────────────────────────────────────────────────────────────
+# This is a SEPARATE stack from the modtube app (the app image no longer bundles
+# any media server). Run one or more of these; register each in the app under
+# Admin → Görüş Serverləri (URL = ws://<this-host>:7880, plus the API key/secret
+# from livekit.yaml).
+#
+#   docker compose -f docker-compose.livekit.yml up -d
+#
+# Offline LAN: pull + export the image once on a machine with internet, then load
+# the tar on the target:
+#   docker pull livekit/livekit-server:latest
+#   docker save livekit/livekit-server:latest -o livekit-latest.tar
+#   docker load -i livekit-latest.tar
+# ═══════════════════════════════════════════════════════════════════════════════
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: modtube-livekit
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    # Host networking is the recommended LiveKit deployment: media uses a wide range
+    # of UDP ports and host mode avoids per-port NAT. Works great on a Linux LAN box.
+    network_mode: host
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+
+  # ── Alternative (no host networking, e.g. Docker Desktop) ─────────────────────
+  # Comment out `network_mode: host` above and uncomment the ports below. You must
+  # also set `rtc.node_ip: <this-host-LAN-IP>` in livekit.yaml.
+  #   ports:
+  #     - "7880:7880"                       # signaling (ws)
+  #     - "7881:7881"                       # rtc over tcp (fallback)
+  #     - "50000-50200:50000-50200/udp"     # rtc media

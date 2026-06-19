@@ -245,6 +245,10 @@ export const adminWeekdayViews = (days = 30) =>
 export const getMyPlaylists = () =>
     api.get('/playlists/mine');
 
+// Public playlists from all users (browsable section).
+export const getPublicPlaylists = () =>
+    api.get('/playlists/public');
+
 export const createPlaylist = (name, description = '', visibility = 'PUBLIC', allowedEmails = '') =>
     api.post('/playlists', { name, description, visibility, allowedEmails });
 
@@ -291,8 +295,6 @@ export const endMeeting = (id) =>
 export const deleteMeeting = (id) =>
     api.delete(`/meetings/${id}`);
 
-export const getIceConfig = () =>
-    api.get('/meetings/ice-config');
 
 // Join a meeting: pass a PIN (public meetings) or an invite token. Returns { roomCode }.
 export const joinMeeting = (id, { pin = '', token = '' } = {}) =>

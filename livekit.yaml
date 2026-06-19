@@ -1,0 +1,73 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# LiveKit SFU configuration (one "meeting runner").
+# ───────────────────────────────────────────────────────────────────────────────
+# After editing, register this server in the modtube app:
+#   Admin → Tənzimləmələr → Görüş Serverləri → Yeni:
+#     URL        = ws://<this-host-LAN-IP>:7880      (or wss://… behind TLS)
+#     API key    = the key below (left of the colon under `keys:`)
+#     API secret = the secret below (right of the colon)  — must be >= 32 chars
+#
+# ─── RUNNING 2 OR MORE LIVEKIT SERVERS ─────────────────────────────────────────
+# The modtube app already load-balances: each meeting (room) is pinned to ONE
+# runner (the least-loaded enabled one), so you do NOT need LiveKit clustering.
+# Just run several INDEPENDENT LiveKit instances and register each in the app.
+#
+#   • Different machines (recommended): copy this file to each box, give each a
+#     UNIQUE keys: pair, keep `network_mode: host`. Register both URLs
+#     (ws://host-a:7880 and ws://host-b:7880) in the app. Done.
+#
+#   • Same machine, 2 instances: they CANNOT both use host networking (port clash).
+#     For the 2nd instance: in docker-compose.livekit.yml remove `network_mode: host`,
+#     publish DIFFERENT ports, and here set a different `port:` (e.g. 7882),
+#     `rtc.tcp_port` (e.g. 7883), a non-overlapping `rtc.port_range_*`, and
+#     `rtc.node_ip: <host-LAN-IP>`. Register ws://host:7882 in the app.
+#
+#   • TRUE clustering (one room spread across nodes, LiveKit's own routing) is
+#     OPTIONAL and needs a shared Redis — see the commented `redis:` block at the
+#     bottom. Not required for this app; only useful for a single huge room that
+#     exceeds one node.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Signaling port the browser connects to (ws://host:7880). Change per-instance if
+# you run more than one LiveKit on the SAME host.
+port: 7880
+
+rtc:
+  # TCP fallback when UDP is blocked.
+  tcp_port: 7881
+  # UDP media port range (keep in sync with the ports block in the compose file if
+  # you are NOT using host networking). Use a DISTINCT range per same-host instance.
+  port_range_start: 50000
+  port_range_end: 50200
+  # LAN / host-networking: discover the host's own IP. Set to false and uncomment
+  # node_ip below if you are publishing ports instead of using host networking
+  # (always set node_ip when running a 2nd instance on the same host).
+  use_external_ip: false
+  # node_ip: 10.0.0.5
+
+# API key/secret pairs used to mint and verify join tokens. CHANGE THESE, and use
+# a UNIQUE pair per server. The secret MUST be at least 32 characters. Generate:
+#   openssl rand -hex 16   # key
+#   openssl rand -hex 32   # secret
+keys:
+  APImodtube01: change-this-livekit-secret-min-32-characters-long
+
+# Logging
+logging:
+  level: info
+
+# Built-in TURN (optional). Usually NOT needed on a flat LAN. Enable for clients
+# behind strict NAT/firewalls that block UDP. Requires TLS for turns://.
+# turn:
+#   enabled: true
+#   udp_port: 3478
+
+# ─── OPTIONAL: true multi-node cluster (NOT needed for this app) ────────────────
+# Point every node at the SAME Redis and LiveKit will route rooms across nodes
+# itself. Then put a load balancer in front and register that single URL in the
+# app. Leave commented unless a single room must exceed one server's capacity.
+# redis:
+#   address: 10.0.0.9:6379
+#   # username: ""
+#   # password: ""
+#   # db: 0

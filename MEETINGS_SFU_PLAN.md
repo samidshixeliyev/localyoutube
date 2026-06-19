@@ -1,110 +1,71 @@
-# Video Meetings — Scaling to 30+ Participants (SFU Migration Plan)
+# Video Meetings — SFU (LiveKit) "Meeting Runners"  ✅ IMPLEMENTED
 
-## Why the current mesh can't do 30
+> Status: **shipped 2026-06-18.** Video meetings moved off full-mesh WebRTC onto a
+> LiveKit SFU. Each registered "runner" is a LiveKit server; meetings are balanced
+> across the enabled runners. This fixes the 8+ participant latency / lag wall —
+> every client now uploads **one** stream instead of N−1.
 
-The meeting feature uses a **full mesh**: every participant opens a direct
-`RTCPeerConnection` to every other participant. For `N` people, each browser:
+## Why the old mesh choked
 
-- maintains `N − 1` peer connections,
-- **encodes and uploads its camera `N − 1` times**,
-- decodes `N − 1` incoming streams.
+Full mesh: each of N participants opened a direct `RTCPeerConnection` to every
+other one, **encoding + uploading its camera N−1 times** and decoding N−1 streams.
+Browsers melt around 4–6; adaptive bitrate pushed it to ~8–12 but no further.
+An SFU forwards selectively, so the client uploads once and the server fans out
+(with simulcast). 30–50 participants is routine.
 
-| Participants | Conns/client | Uplink streams/client | Total room conns |
-|---|---|---|---|
-| 6  | 5  | 5  | 15  |
-| 12 | 11 | 11 | 66  |
-| 30 | 29 | 29 | **435** |
+## Architecture (the "GitLab runner" model)
 
-At 30, each browser is running ~29 encoders + ~29 decoders and pushing tens of
-Mbps upstream. Browsers choke around **4–6 participants**; 30 is far beyond the
-ceiling regardless of network. The **signaling server scales fine** — it's a
-stateless JSON relay — the wall is the per-client media load in the mesh.
+- **Runners are registered in the DB**, managed in the app: **Admin → Görüş
+  Serverləri** (`/admin/meeting-runners`). Each = `{name, wsUrl, apiKey, apiSecret,
+  enabled}`. (Table `meeting_runners`, migration `V13`.)
+- On the first token request for a LIVE meeting, the backend **picks the enabled
+  runner with the fewest live meetings** and binds the meeting to it
+  (`video_meetings.runner_id`) so every participant lands on the same server.
+- **Tokens** are minted in `LiveKitTokenService` as plain JWTs signed with the
+  runner's API secret (`iss` = API key, `video` grant claim) — no LiveKit Java SDK
+  needed. Endpoint: `GET /api/meetings/{id}/token` → `{url, token, identity}`.
+- **Media** (audio/video/screen) → LiveKit (`livekit-client` in `MeetingRoom.jsx`,
+  `Room.connect(url, token)`, simulcast + dynacast).
+- **Chat / attachments / history / moderation** stay on the existing lightweight
+  WebSocket (`MeetingSignalingHandler`) — now routed by **email** (LiveKit identity)
+  instead of WS session id. Capacity (`room-full`), `meeting-ended`, `kicked`,
+  `force-mute`, `force-cam` still travel over this channel.
+- The modtube image **no longer bundles coturn**; it's just frontend + backend +
+  PostgreSQL. The SFU is a separate stack.
 
-### What we already did to push the mesh as far as it goes
-- **Adaptive per-peer quality** (`MeetingRoom.jsx` → `applyAdaptiveQuality`):
-  camera bitrate/resolution shrinks as the room grows (1.2 Mbps @ ≤4 →
-  150 kbps + ⅓ resolution @ >16). This roughly doubles the usable headcount.
-- **Configurable hard cap** (`WEBRTC_MAX_PARTICIPANTS`, default 12) enforced in
-  `MeetingSignalingHandler` so a room can't silently melt down.
+## Deploy
 
-These make ~8–12 usable, but **true 30+ needs an SFU** (Selective Forwarding
-Unit): each client uploads **one** stream to a server that forwards it
-selectively. With simulcast, 30–50 participants is routine.
-
----
-
-## Recommended: LiveKit (self-hosted)
-
-LiveKit is the lowest-effort path: a single Go binary / Docker image, a mature
-JS client SDK, a Java server SDK for token minting, and built-in simulcast +
-active-speaker detection.
-
-### 1. Infrastructure
-Add a LiveKit service (its own compose file, mirroring `docker-compose.minio.yml`):
-
-```yaml
-# docker-compose.livekit.yml
-services:
-  livekit:
-    image: livekit/livekit-server:latest
-    container_name: modtube-livekit
-    restart: unless-stopped
-    command: --config /etc/livekit.yaml
-    ports:
-      - "7880:7880"      # WS/HTTP signaling
-      - "7881:7881"      # TCP fallback
-      - "50000-50100:50000-50100/udp"   # RTP media
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
+### 1. Start the SFU (separate stack)
+Edit `livekit.yaml` — set a strong `keys:` pair (API key + secret ≥ 32 chars) and,
+if NOT using host networking, `rtc.node_ip`. Then:
+```bash
+docker compose -f docker-compose.livekit.yml up -d
+```
+Offline LAN: pull + save the image once where there's internet, load on the target:
+```bash
+docker pull livekit/livekit-server:latest
+docker save livekit/livekit-server:latest -o livekit-latest.tar   # copy + docker load -i
 ```
 
-`livekit.yaml` holds an API key/secret pair and a TURN section. **A TURN/UDP
-path is mandatory for real cross-network meetings** — the current STUN-only
-setup only works same-LAN.
-
-New env vars (extend `.env.example` + `docker-compose.yml`):
-```
-LIVEKIT_URL=ws://host.docker.internal:7880
-LIVEKIT_API_KEY=...
-LIVEKIT_API_SECRET=...
+### 2. Start the app (no coturn anymore)
+```bash
+docker compose -f docker-compose.minio.yml up -d   # storage
+docker compose up -d                                # app
 ```
 
-### 2. Backend
-- Add `io.livekit:livekit-server:<ver>` (Java SDK) to `build.gradle`.
-- New `LiveKitTokenService`: mint a join token (room = `roomCode`, identity =
-  user email, name = display name, grants from `canAccessMeeting`).
-- New endpoint `GET /api/meetings/{id}/token` → `{ url, token }`. Reuse the
-  existing `canAccessMeeting` / `manage-meetings` access rules verbatim.
-- **Keep** `VideoMeeting` entity, the meetings CRUD, permissions, and access
-  control — only the *media transport* changes.
-- The raw-WebSocket signaling (`MeetingSignalingHandler`,
-  `MeetingHandshakeInterceptor`, `WebSocketConfig`) can be **removed** once the
-  room UI is on LiveKit, *unless* you keep the in-meeting chat there (LiveKit
-  has its own data channels, so chat can move too).
-- Enforce capacity with LiveKit's `maxParticipants` room option instead of the
-  manual cap.
+### 3. Register the runner in the UI
+Admin → **Görüş Serverləri** → **Yeni server**:
+- **URL**  `ws://<sfu-host-LAN-IP>:7880`  (use `wss://…` if the app is served over HTTPS — schemes must match or the browser blocks mixed content)
+- **API key / secret** — exactly the values from `livekit.yaml`
 
-### 3. Frontend
-- Add `livekit-client` (and optionally `@livekit/components-react`).
-- Rewrite `MeetingRoom.jsx` to: fetch `{url, token}`, `room.connect(url, token)`,
-  publish camera/mic, and render `room.remoteParticipants`. Enable **simulcast**
-  on publish so the SFU can drop to low layers for big rooms.
-- Mic/camera/screen-share toggles, host "end meeting", and chat all map to
-  LiveKit APIs (`setMicrophoneEnabled`, `setScreenShareEnabled`,
-  `room.disconnect`, data messages).
-- `VideoMeetings.jsx` list/create/manage page is **unchanged**.
+Add several runners to scale horizontally; meetings auto-distribute to the least
+loaded. The page shows live health (reachable?) and active-meeting load per runner.
 
-### 4. Effort & risk
-- ~2–3 days. The room UI is a full rewrite; everything else (CRUD, perms,
-  notifications, access rules) is reused.
-- Needs real testing with many clients — cannot be validated in this dev
-  environment. Stage it behind the existing meetings feature flag and roll out.
-
-### Alternatives
-- **mediasoup** — most powerful/flexible, but you write the SFU orchestration
-  yourself (Node). Highest effort.
-- **Janus / ion-sfu** — capable, heavier ops, smaller JS ergonomics than LiveKit.
-
-**Bottom line:** keep the mesh for small calls (now capped + adaptive), and add
-LiveKit when meetings genuinely need >~10 participants. The data model and
-permission system already in place carry straight over.
+## Notes / limits
+- **TLS / mixed content:** an HTTPS app page can only connect to a `wss://` runner.
+  For LAN-over-HTTP use `ws://`. Put TLS in front of LiveKit (or your nginx) for `wss`.
+- **Kick** is cooperative (the kicked client disconnects on the WS signal), matching
+  the prior trust model. Server-enforced removal via LiveKit's RoomService is a
+  possible future hardening.
+- Single LiveKit node per room (no Redis cluster) — fine for this scale. For very
+  large multi-node single rooms, run LiveKit in distributed mode with Redis.

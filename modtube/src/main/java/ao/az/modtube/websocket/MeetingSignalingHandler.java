@@ -58,9 +58,6 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
     /** roomCode → { sessionId → session } */
     private final Map<String, Map<String, WebSocketSession>> rooms = new ConcurrentHashMap<>();
 
-    /** roomCode → sessionId of the current screen sharer (null = nobody sharing) */
-    private final Map<String, String> screenSharers = new ConcurrentHashMap<>();
-
     /**
      * roomCode → ordered chat history (ephemeral). Lets late joiners / reconnecting
      * clients see what was said while the meeting is live; wiped when the room ends
@@ -88,22 +85,6 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
             peers.add(peerInfo(s));
         }
         send(session, Map.of("type", "peers", "peers", peers));
-
-        // If someone is already sharing, notify the new joiner immediately
-        String currentSharer = screenSharers.get(roomCode);
-        if (currentSharer != null) {
-            WebSocketSession sharerSession = room.get(currentSharer);
-            if (sharerSession != null && sharerSession.isOpen()) {
-                Map<String, Object> shareState = new HashMap<>();
-                shareState.put("type",  "screen-start");
-                shareState.put("from",  currentSharer);
-                shareState.put("email", sharerSession.getAttributes().get("email"));
-                shareState.put("name",  sharerSession.getAttributes().get("name"));
-                send(session, shareState);
-            } else {
-                screenSharers.remove(roomCode);
-            }
-        }
 
         room.put(session.getId(), session);
 
@@ -148,43 +129,6 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
         if (room == null) return;
 
         switch (type) {
-            case "offer", "answer", "ice-candidate" -> {
-                Object targetId = payload.get("target");
-                WebSocketSession target = targetId != null ? room.get(targetId.toString()) : null;
-                if (target != null && target.isOpen()) {
-                    Map<String, Object> outgoing = new HashMap<>(payload);
-                    outgoing.put("from", session.getId());
-                    send(target, outgoing);
-                }
-            }
-            case "screen-start" -> {
-                // Only allow if nobody else is currently sharing
-                String current = screenSharers.get(roomCode);
-                if (current != null && !current.equals(session.getId())) {
-                    // Reject: tell the requester someone else is already sharing
-                    Map<String, Object> reject = new HashMap<>();
-                    reject.put("type",   "screen-rejected");
-                    reject.put("reason", "Başqa istifadəçi artıq ekranını paylaşır");
-                    send(session, reject);
-                    return;
-                }
-                screenSharers.put(roomCode, session.getId());
-                Map<String, Object> msg = new HashMap<>();
-                msg.put("type",  "screen-start");
-                msg.put("from",  session.getId());
-                msg.put("email", session.getAttributes().get("email"));
-                msg.put("name",  session.getAttributes().get("name"));
-                broadcastAll(room, msg);
-            }
-            case "screen-stop" -> {
-                // Only the current sharer can stop
-                screenSharers.remove(roomCode, session.getId());
-                Map<String, Object> msg = new HashMap<>();
-                msg.put("type",  "screen-stop");
-                msg.put("from",  session.getId());
-                msg.put("email", session.getAttributes().get("email"));
-                broadcastAll(room, msg);
-            }
             case "chat" -> {
                 Object text = payload.get("text");
                 Object attachment = payload.get("attachment");   // {url,name,size,contentType} or null
@@ -200,35 +144,41 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
                 if (attachment != null) msg.put("attachment", attachment);
                 msg.put("ts",    System.currentTimeMillis());
 
-                Object to = payload.get("to");   // target sessionId for a 1:1 private message
-                WebSocketSession target = (to != null && !to.toString().isBlank())
-                        ? room.get(to.toString()) : null;
-                if (to != null && !to.toString().isBlank()) {
-                    // Private message: deliver only to the recipient + echo back to the sender.
+                // Private messages target a participant by EMAIL (LiveKit identities
+                // are emails, so the UI has the email, not the WS session id).
+                Object to = payload.get("to");
+                String toEmail = (to != null && !to.toString().isBlank()) ? to.toString().trim() : null;
+                if (toEmail != null) {
+                    // Private message: deliver to all of the recipient's sessions + echo to the sender.
                     msg.put("private", true);
-                    msg.put("toId", to.toString());
-                    if (target != null) {
-                        msg.put("toEmail", target.getAttributes().get("email"));
-                        msg.put("toName",  target.getAttributes().get("name"));
+                    msg.put("toEmail", toEmail);
+                    msg.put("toName",  nameForEmail(room, toEmail));
+                    sendToEmail(room, toEmail, msg);
+                    if (!toEmail.equalsIgnoreCase((String) session.getAttributes().get("email"))) {
+                        send(session, msg);        // sender always sees their own message
                     }
-                    if (target != null && target.isOpen()) send(target, msg);
-                    send(session, msg);            // sender always sees their own message
                 } else {
                     broadcastAll(room, msg);
                 }
                 recordHistory(roomCode, msg);
             }
-            // Host/moderator moderation: remove a participant, or force-mute mic / force-off camera.
+            // Host/moderator moderation: remove a participant, or force-mute mic / force-off
+            // camera. Target is an EMAIL (matches the LiveKit identity shown in the UI).
             case "kick", "force-mute", "force-cam" -> {
                 if (!canModerate(session)) return; // host / super-admin / manage-meetings only
-                Object targetId = payload.get("target");
-                WebSocketSession target = targetId != null ? room.get(targetId.toString()) : null;
-                if (target == null || !target.isOpen()) return;
+                Object t = payload.get("target");
+                String targetEmail = (t != null) ? t.toString().trim() : null;
+                if (targetEmail == null || targetEmail.isEmpty()) return;
                 if ("kick".equals(type)) {
-                    send(target, Map.of("type", "kicked"));
-                    try { target.close(new CloseStatus(4002, "Removed by host")); } catch (Exception ignored) {}
+                    for (WebSocketSession s : room.values()) {
+                        if (targetEmail.equalsIgnoreCase((String) s.getAttributes().get("email"))) {
+                            send(s, Map.of("type", "kicked"));
+                            try { s.close(new CloseStatus(4002, "Removed by host")); } catch (Exception ignored) {}
+                        }
+                    }
                 } else {
-                    send(target, Map.of("type", type)); // force-mute | force-cam → client disables its own track
+                    // force-mute | force-cam → the targeted client disables its own LiveKit track.
+                    sendToEmail(room, targetEmail, Map.of("type", type));
                 }
             }
             default -> log.debug("Unhandled signaling message type: {}", type);
@@ -243,20 +193,10 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
 
         room.remove(session.getId());
 
-        // If this peer was sharing screen, broadcast screen-stop to everyone
-        if (screenSharers.remove(roomCode, session.getId())) {
-            Map<String, Object> stopMsg = new HashMap<>();
-            stopMsg.put("type",  "screen-stop");
-            stopMsg.put("from",  session.getId());
-            stopMsg.put("email", session.getAttributes().get("email"));
-            broadcastAll(room, stopMsg);
-        }
-
         broadcast(room, session.getId(), Map.of("type", "peer-left", "id", session.getId()));
 
         if (room.isEmpty()) {
             rooms.remove(roomCode);
-            screenSharers.remove(roomCode);
             // Last person left → meeting effectively over: drop ephemeral chat + attachments.
             purgeRoom(roomCode);
         }
@@ -275,7 +215,6 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
 
     public void endRoom(String roomCode) {
         Map<String, WebSocketSession> room = rooms.remove(roomCode);
-        screenSharers.remove(roomCode);
         if (room != null) {
             for (WebSocketSession s : room.values()) {
                 send(s, Map.of("type", "meeting-ended"));
@@ -310,6 +249,26 @@ public class MeetingSignalingHandler extends TextWebSocketHandler {
     private boolean canModerate(WebSocketSession session) {
         return Boolean.TRUE.equals(session.getAttributes().get("isHost"))
                 || Boolean.TRUE.equals(session.getAttributes().get("canManage"));
+    }
+
+    /** Send a payload to every session in the room whose email matches (all of a user's tabs). */
+    private void sendToEmail(Map<String, WebSocketSession> room, String email, Map<String, Object> payload) {
+        if (email == null) return;
+        for (WebSocketSession s : room.values()) {
+            if (email.equalsIgnoreCase((String) s.getAttributes().get("email"))) send(s, payload);
+        }
+    }
+
+    /** Resolve a display name for an email from the room's sessions (falls back to the email). */
+    private String nameForEmail(Map<String, WebSocketSession> room, String email) {
+        if (email == null) return null;
+        for (WebSocketSession s : room.values()) {
+            if (email.equalsIgnoreCase((String) s.getAttributes().get("email"))) {
+                Object name = s.getAttributes().get("name");
+                if (name != null) return name.toString();
+            }
+        }
+        return email;
     }
 
     private Map<String, Object> peerInfo(WebSocketSession session) {

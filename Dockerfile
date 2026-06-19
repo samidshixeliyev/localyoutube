@@ -49,13 +49,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends grafana && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ── coturn (bundled STUN/TURN) ─────────────────────────────────────────────────
-# No nginx here: the React frontend is built into Spring's static resources, so the
-# app serves everything on :4000. TLS / reverse-proxy is handled by the host's own
-# nginx. coturn is bundled so live video meetings work offline with no extra container.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends coturn && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# NOTE: video meetings now use a SEPARATE SFU container (LiveKit, see
+# docker-compose.livekit.yml) instead of bundled coturn + mesh WebRTC. This image
+# is just frontend + backend + PostgreSQL (+ Prometheus/node_exporter). No nginx:
+# the React build is served by Spring on :4000; TLS/reverse-proxy is the host's job.
 
 # ── Java 21 JRE (Eclipse Temurin) ────────────────────────────────────────────
 RUN set -eux; \
@@ -129,9 +126,8 @@ RUN chmod +x /docker-entrypoint.sh /start-spring.sh
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
 # 4000 — Spring Boot (serves API + the built React SPA). Put your own nginx in front.
-# 3478 — coturn STUN/TURN (TCP+UDP) for video meetings
-# 49152-49200/udp — coturn media relay range
-EXPOSE 4000 3478 3478/udp 49152-49200/udp
+# Video meeting media is handled by the separate LiveKit SFU container.
+EXPOSE 4000
 
 VOLUME ["/data", "/var/lib/postgresql/data", "/var/lib/prometheus"]
 

@@ -33,6 +33,7 @@ const Analytics      = lazy(() => import('./pages/admin/Analytics'));
 const NotificationManagement = lazy(() => import('./pages/admin/NotificationManagement'));
 const Embed          = lazy(() => import('./pages/Embed'));
 const MyPlaylists    = lazy(() => import('./pages/MyPlaylists'));
+const PublicPlaylists = lazy(() => import('./pages/PublicPlaylists'));
 const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
 const VideoMeetings  = lazy(() => import('./pages/VideoMeetings'));
 const MeetingRoom    = lazy(() => import('./pages/MeetingRoom'));
@@ -126,6 +127,7 @@ function AppContent() {
                     </PrivateRoute>
                   }
                 />
+                <Route path="/playlists" element={<PublicPlaylists />} />
                 <Route path="/playlists/:id" element={<PlaylistDetail />} />
 
                 {/* upload-video OR admin-modtube */}

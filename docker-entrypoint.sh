@@ -48,34 +48,9 @@ export SPRING_DATASOURCE_URL="${SPRING_DATASOURCE_URL:-jdbc:postgresql://localho
 export SPRING_DATASOURCE_USERNAME="${SPRING_DATASOURCE_USERNAME:-$PGUSER}"
 export SPRING_DATASOURCE_PASSWORD="${SPRING_DATASOURCE_PASSWORD:-}"
 
-# ── coturn (bundled STUN/TURN for video meetings) ─────────────────────────────
-# Clients reach this server at APP_HOST, so the ICE config we hand to browsers
-# must use APP_HOST (not localhost). On a flat LAN, calls also work via host
-# candidates; coturn guarantees connectivity across subnets.
-HOST="${APP_HOST:-localhost}"
-export WEBRTC_TURN_USERNAME="${WEBRTC_TURN_USERNAME:-modtube}"
-export WEBRTC_TURN_CREDENTIAL="${WEBRTC_TURN_CREDENTIAL:-modtube-turn-secret}"
-export WEBRTC_ICE_SERVERS="${WEBRTC_ICE_SERVERS:-stun:${HOST}:3478}"
-export WEBRTC_TURN_URL="${WEBRTC_TURN_URL:-turn:${HOST}:3478}"
-
-mkdir -p /etc/coturn
-_ext_ip_line=""
-if echo "$HOST" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
-    _ext_ip_line="external-ip=${HOST}"
-fi
-cat > /etc/coturn/turnserver.conf <<EOF
-listening-port=3478
-min-port=49152
-max-port=49200
-realm=modtube
-fingerprint
-lt-cred-mech
-user=${WEBRTC_TURN_USERNAME}:${WEBRTC_TURN_CREDENTIAL}
-no-tls
-no-dtls
-no-cli
-${_ext_ip_line}
-EOF
-echo "[entrypoint] coturn configured — turn:${HOST}:3478 (user=${WEBRTC_TURN_USERNAME})"
+# ── Video meetings ────────────────────────────────────────────────────────────
+# Media is handled by a SEPARATE LiveKit SFU container (docker-compose.livekit.yml).
+# Register the SFU under Admin → Görüş Serverləri (URL + API key/secret). No coturn
+# is bundled here anymore.
 
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

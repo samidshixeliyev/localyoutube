@@ -30,6 +30,11 @@ public class PlaylistService {
         return playlistRepository.findByOwnerEmailOrderByCreatedAtDesc(ownerEmail);
     }
 
+    /** All PUBLIC playlists (visible to everyone), newest first. */
+    public List<Playlist> getPublicPlaylists() {
+        return playlistRepository.findByVisibilityIgnoreCaseOrderByCreatedAtDesc("PUBLIC");
+    }
+
     @Transactional
     public Playlist createPlaylist(String name, String description, String visibility,
                                    String allowedEmails, ModTubePrincipal user) {

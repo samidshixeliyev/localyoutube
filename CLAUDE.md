@@ -1270,3 +1270,73 @@ Verified: frontend `npm run build` ✓ (MeetingRoom chunk 46 KB), backend `compi
 - **Bucket cleanup on delete too:** `purgeRoom` is now public and also called from
   `VideoMeetingService.deleteMeeting` (in addition to end/empty) so the
   `meeting-attachments/{roomCode}` folder is removed from the bucket.
+
+---
+
+### 2026-06-18 — Meetings moved to SFU (LiveKit) + registerable "runner" pool
+
+**Why:** full-mesh WebRTC lagged badly at 8+ participants (each browser uploads its
+camera N−1 times; screen-share saturates uplink). Architectural wall — no tuning
+fixes mesh past ~10. Switched media to an **SFU** (one upstream per client +
+simulcast). User wanted a GitLab-runner-style model: register SFU servers
+(URL+key+secret) in settings; meetings distributed across them.
+
+**Decisions (user):** pooled registerable runners · replace mesh entirely · offline
+LAN · chat stays on the existing WS (my call — least disruption). modtube image
+**loses coturn** (just FE+BE+PostgreSQL); SFU is a separate container. Image:
+`livekit/livekit-server`.
+
+**Backend**
+- `V13__meeting_runners.sql`: `meeting_runners` (name, ws_url, api_key, api_secret,
+  enabled) + `video_meetings.runner_id` + load index. `MeetingRunner` entity/repo.
+- `MeetingRunnerService`: CRUD, `pickRunner()` = enabled runner with fewest LIVE
+  meetings (`VideoMeetingRepository.countByRunnerIdAndStatus`), `isHealthy()` (GET on
+  ws→http base, 2s timeout), secret ≥32 char validation (write-only; blank keeps it).
+- `LiveKitTokenService.mint()`: LiveKit token = JWT signed (HS256) with the runner's
+  API secret, `iss`=apiKey, `video` grant claim (roomAdmin for host/mod). **No LiveKit
+  Java SDK** — reuses jjwt.
+- `VideoMeetingService.issueToken()`: access-checked (must be LIVE), assigns+persists a
+  runner on first use, mints token → `{url,token,identity}`. `endMeeting` clears
+  `runnerId` to free the slot.
+- `VideoMeetingController` `GET /{id}/token` (replaced dead `ice-config`).
+  `MeetingRunnerController` `/api/admin/meeting-runners` CRUD + `/{id}/health`
+  (secret never returned; `hasSecret` flag). `SecurityConfiguration`:
+  `/api/admin/meeting-runners/**` → super-admin/manage-settings.
+- `MeetingSignalingHandler` trimmed: removed offer/answer/ice + screen-start/stop
+  relay (LiveKit owns media + screen detection). **Chat private DM + moderation now
+  routed by EMAIL** (LiveKit identity), via new `sendToEmail`/`nameForEmail` helpers,
+  since the UI no longer has WS session ids for video tiles. Roster/cap/lifecycle
+  (peers, room-full, meeting-ended, kicked) unchanged.
+
+**Deploy**
+- Dropped coturn from `Dockerfile` (+ `EXPOSE` only 4000), `supervisord.conf`
+  ([program:coturn] gone), `docker-entrypoint.sh` (coturn conf gen gone),
+  `docker-compose.yml` (3478/relay ports + WEBRTC_TURN/ICE env gone; kept
+  `WEBRTC_MAX_PARTICIPANTS`, default 50).
+- New `docker-compose.livekit.yml` (host networking; offline pull/save notes) +
+  `livekit.yaml` (port 7880, rtc range, keys placeholder). `.env*.example` updated.
+
+**Frontend**
+- `livekit-client@^2.7` added. `MeetingRoom.jsx` media layer rewritten to LiveKit
+  (`Room`, TrackSubscribed/Unsubscribed, setMicrophone/Camera/ScreenShareEnabled,
+  `adaptiveStream:false, dynacast:true`). Remote tracks → per-peer MediaStream in a
+  ref + `useReducer` force-render; **remote audio plays via hidden `RemoteAudio`
+  sinks** (independent of tile visibility; tile video muted). Two separate effects:
+  LiveKit connect `[meeting,roomCode,mediaRetry]` and chat WS
+  `[meeting,roomCode,retryKey]`. Screen-share/pin/spotlight/moderation/chat UI all
+  preserved; peers keyed by email. `force-mute/cam` act on LiveKit local tracks.
+- New `admin/MeetingRunners.jsx` (list + health dot + load + add/edit modal +
+  ConfirmModal delete), route `/admin/meeting-runners`, Sidebar "Görüş Serverləri"
+  (Server icon, manage-settings). `api.js`: `getMeetingToken` + runner CRUD/health.
+
+**Verified:** `npm run build` ✓ (MeetingRoom 552 KB w/ livekit-client; MeetingRunners
+chunk present). Backend `gradlew compileJava` ✓ in temurin 21 container (only the
+pre-existing DaoAuthenticationProvider deprecation note).
+
+**Gotchas / follow-ups**
+- HTTPS app page ⇒ runner URL must be `wss://` (mixed-content). LAN-over-HTTP ⇒ `ws://`.
+- Kick is cooperative (WS signal → client disconnects LiveKit); server-side
+  RemoteParticipant removal via LiveKit RoomService is a future hardening.
+- Old `meeting.ice-servers/turn-*` runtime settings + `VideoMeetingController` @Value
+  TURN fields are now dead (left in place, harmless). Could be cleaned later.
+- LiveKit image must be pulled+saved for offline installs (separate from modtube tar).

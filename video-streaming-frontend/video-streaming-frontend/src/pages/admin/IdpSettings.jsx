@@ -416,50 +416,11 @@ const IdpSettings = () => {
               </p>
             </div>
 
-            {/* ICE servers */}
-            <div className="px-6 py-5">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">STUN/ICE serverləri</label>
-              <input
-                type="text"
-                value={values['meeting.ice-servers'] || ''}
-                onChange={e => handleChange('meeting.ice-servers', e.target.value)}
-                placeholder="stun:stun.l.google.com:19302"
-                className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-army-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
-              />
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-                Vergüllə ayrılmış STUN/ICE server siyahısı. Boş saxlasanız standart Google STUN istifadə olunur.
+            <div className="px-6 pb-5">
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Görüş media axını (kamera/ekran/səs) birbaşa backend üzərindən ötürülür —
+                əlavə media server və ya port tələb olunmur.
               </p>
-            </div>
-
-            {/* TURN server */}
-            <div className="px-6 py-5">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">TURN server URL (ixtiyari)</label>
-              <input
-                type="text"
-                value={values['meeting.turn-url'] || ''}
-                onChange={e => handleChange('meeting.turn-url', e.target.value)}
-                placeholder="turn:turn.example.com:3478"
-                className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-army-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-army-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
-              />
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-                Müxtəlif şəbəkələr/NAT arxasındakı iştirakçılar üçün lazımdır. Boş = yalnız STUN (eyni LAN üçün kifayətdir).
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                <input
-                  type="text"
-                  value={values['meeting.turn-username'] || ''}
-                  onChange={e => handleChange('meeting.turn-username', e.target.value)}
-                  placeholder="TURN istifadəçi adı"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-army-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
-                />
-                <input
-                  type="text"
-                  value={values['meeting.turn-credential'] || ''}
-                  onChange={e => handleChange('meeting.turn-credential', e.target.value)}
-                  placeholder="TURN şifrə / credential"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-army-600 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-army-700 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all font-mono"
-                />
-              </div>
             </div>
           </div>
 

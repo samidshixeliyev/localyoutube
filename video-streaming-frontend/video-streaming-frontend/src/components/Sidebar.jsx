@@ -2,15 +2,16 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Home, PlaySquare, Film, Upload,
-  Users, Shield, Settings, Activity, BarChart2, Menu, ListVideo, Video, Megaphone,
+  Users, Shield, Settings, Activity, BarChart2, Menu, ListVideo, Video, Megaphone, Library,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
 import ModTubeLogo from './ModTubeLogo';
 
 const MAIN_NAV = [
-  { to: '/',       icon: Home,       label: 'Ana Səhifə' },
-  { to: '/shorts', icon: PlaySquare, label: 'Shorts'      },
+  { to: '/',          icon: Home,       label: 'Ana Səhifə' },
+  { to: '/shorts',    icon: PlaySquare, label: 'Shorts'      },
+  { to: '/playlists', icon: Library,    label: 'Pleylistlər' },
 ];
 
 const CONTENT_NAV = [

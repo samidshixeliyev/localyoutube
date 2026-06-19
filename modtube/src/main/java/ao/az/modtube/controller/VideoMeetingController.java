@@ -246,30 +246,6 @@ public class VideoMeetingController {
         return base.isBlank() ? "file" : base;
     }
 
-    @GetMapping("/ice-config")
-    public ResponseEntity<Map<String, Object>> getIceConfig() {
-        // Runtime settings (admin Settings page) override the env/yaml defaults.
-        String ice   = settingService.get("meeting.ice-servers", iceServersConfig);
-        String tUrl  = settingService.get("meeting.turn-url", turnUrl);
-        String tUser = settingService.get("meeting.turn-username", turnUsername);
-        String tCred = settingService.get("meeting.turn-credential", turnCredential);
-
-        List<Map<String, Object>> iceServers = new ArrayList<>();
-        for (String url : (ice == null ? "" : ice).split(",")) {
-            String trimmed = url.trim();
-            if (!trimmed.isEmpty()) {
-                iceServers.add(Map.of("urls", trimmed));
-            }
-        }
-        if (tUrl != null && !tUrl.isBlank()) {
-            Map<String, Object> turn = new HashMap<>();
-            turn.put("urls", tUrl);
-            if (tUser != null && !tUser.isBlank()) turn.put("username", tUser);
-            if (tCred != null && !tCred.isBlank()) turn.put("credential", tCred);
-            iceServers.add(turn);
-        }
-        return ResponseEntity.ok(Map.of("iceServers", iceServers));
-    }
 
     private Map<String, Object> toResponse(VideoMeeting m, ModTubePrincipal user) {
         Map<String, Object> resp = new HashMap<>();

@@ -1,6 +1,7 @@
 package ao.az.modtube.config;
 
 import ao.az.modtube.config.security.MeetingHandshakeInterceptor;
+import ao.az.modtube.websocket.MeetingMediaHandler;
 import ao.az.modtube.websocket.MeetingSignalingHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -16,11 +17,18 @@ import org.springframework.web.socket.server.standard.ServletServerContainerFact
 public class WebSocketConfig implements WebSocketConfigurer {
 
     private final MeetingSignalingHandler meetingSignalingHandler;
+    private final MeetingMediaHandler meetingMediaHandler;
     private final MeetingHandshakeInterceptor meetingHandshakeInterceptor;
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        // Text: chat / roster / moderation / lifecycle.  /ws/meetings/{roomCode}
         registry.addHandler(meetingSignalingHandler, "/ws/meetings/*")
+                .addInterceptors(meetingHandshakeInterceptor)
+                .setAllowedOriginPatterns("*");
+        // Binary: WebCodecs media fan-out.  /ws/meetings/media/{roomCode}
+        // (two path segments, so it does NOT collide with /ws/meetings/* above)
+        registry.addHandler(meetingMediaHandler, "/ws/meetings/media/*")
                 .addInterceptors(meetingHandshakeInterceptor)
                 .setAllowedOriginPatterns("*");
     }
@@ -34,7 +42,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
     public ServletServerContainerFactoryBean createWebSocketContainer() {
         ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
         container.setMaxTextMessageBufferSize(512 * 1024);
-        container.setMaxBinaryMessageBufferSize(512 * 1024);
+        // Media keyframes (esp. screen share) can be a few hundred KB — allow headroom.
+        container.setMaxBinaryMessageBufferSize(4 * 1024 * 1024);
         return container;
     }
 }

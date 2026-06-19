@@ -53,6 +53,30 @@ public class PlaylistController {
         return ResponseEntity.ok(result);
     }
 
+    /** Public playlists from all users — browsable by everyone. */
+    @GetMapping("/public")
+    public ResponseEntity<List<Map<String, Object>>> getPublicPlaylists() {
+        List<Map<String, Object>> result = playlistService.getPublicPlaylists().stream()
+                .map(p -> {
+                    Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("id",          p.getId());
+                    m.put("name",        p.getName());
+                    m.put("description", p.getDescription() != null ? p.getDescription() : "");
+                    m.put("ownerEmail",  p.getOwnerEmail());
+                    m.put("itemCount",   playlistItemRepository.countByPlaylistId(p.getId()));
+                    m.put("createdAt",   p.getCreatedAt());
+                    String coverUrl = playlistItemRepository
+                            .findFirstByPlaylistIdOrderByPositionAsc(p.getId())
+                            .flatMap(item -> videoService.getVideo(item.getVideoId()))
+                            .map(v -> v.getThumbnailUrl())
+                            .orElse(null);
+                    m.put("coverUrl", coverUrl);
+                    return m;
+                })
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping
     public ResponseEntity<Map<String, Object>> createPlaylist(
             @RequestBody Map<String, String> body,

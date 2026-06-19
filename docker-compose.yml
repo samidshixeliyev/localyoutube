@@ -8,11 +8,8 @@ services:
     restart: unless-stopped
     ports:
       # App (API + built SPA). Put your own nginx in front of this for TLS.
+      # Video-meeting media is served by the separate LiveKit SFU (docker-compose.livekit.yml).
       - "0.0.0.0:${APP_PORT:-4000}:4000"
-      # Bundled coturn STUN/TURN for video meetings:
-      - "0.0.0.0:3478:3478"
-      - "0.0.0.0:3478:3478/udp"
-      - "0.0.0.0:49152-49200:49152-49200/udp"   # TURN media relay range
     environment:
       # ── PostgreSQL (internal) ─────────────────────────────────────────
       PGDATA: /var/lib/postgresql/data
@@ -52,17 +49,11 @@ services:
       # ── Rate limiting ─────────────────────────────────────────────────
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-100}
       RATE_LIMIT_UPLOAD_RPS: ${RATE_LIMIT_UPLOAD_RPS:-4}
-      # ── WebRTC (video meetings) ────────────────────────────────────────
-      # coturn is bundled inside this image. If these are left blank, the
-      # entrypoint auto-generates ICE/TURN URLs from APP_HOST (turn:APP_HOST:3478)
-      # so meetings work offline with no external STUN. Override only to point at
-      # an external TURN server.
-      WEBRTC_ICE_SERVERS: ${WEBRTC_ICE_SERVERS:-}
-      WEBRTC_TURN_URL: ${WEBRTC_TURN_URL:-}
-      WEBRTC_TURN_USERNAME: ${WEBRTC_TURN_USERNAME:-modtube}
-      WEBRTC_TURN_CREDENTIAL: ${WEBRTC_TURN_CREDENTIAL:-modtube-turn-secret}
-      # Max participants per meeting room.
-      WEBRTC_MAX_PARTICIPANTS: ${WEBRTC_MAX_PARTICIPANTS:-30}
+      # ── Video meetings (SFU) ───────────────────────────────────────────
+      # Media goes through a SEPARATE LiveKit SFU container (docker-compose.livekit.yml).
+      # Register the runner(s) at runtime under Admin → Görüş Serverləri (URL + API
+      # key/secret stored in the DB). Only the per-room participant cap is set here.
+      WEBRTC_MAX_PARTICIPANTS: ${WEBRTC_MAX_PARTICIPANTS:-50}
       # ── Object storage (MinIO) ─────────────────────────────────────────
       # In production, point MINIO_ENDPOINT at your existing MinIO and set
       # real credentials. Default targets the `minio` service on the shared

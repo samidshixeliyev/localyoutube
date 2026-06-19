@@ -9,4 +9,7 @@ import java.util.List;
 @Repository
 public interface PlaylistRepository extends JpaRepository<Playlist, String> {
     List<Playlist> findByOwnerEmailOrderByCreatedAtDesc(String ownerEmail);
+
+    /** All playlists of a given visibility (e.g. "PUBLIC"), newest first. */
+    List<Playlist> findByVisibilityIgnoreCaseOrderByCreatedAtDesc(String visibility);
 }

@@ -1,0 +1,121 @@
+================================================================================
+ ModTube — Video Meetings SFU (LiveKit) — DEPLOYMENT & USAGE
+================================================================================
+
+Video meetings run through a SEPARATE media server (an SFU = Selective Forwarding
+Unit) called LiveKit. This replaces the old full-mesh WebRTC, which lagged badly
+once 8+ people joined. With the SFU each participant uploads ONE stream and the
+server forwards it — 30-50 participants work smoothly.
+
+You can run MORE THAN ONE LiveKit server ("runner"). They are registered in the
+app and meetings are automatically balanced to the least-loaded one (GitLab-
+runner style).
+
+--------------------------------------------------------------------------------
+ FILES IN THIS BUNDLE
+--------------------------------------------------------------------------------
+  livekit-latest.tar         Docker image  livekit/livekit-server:latest  (~36 MB)
+  docker-compose.livekit.yml Compose file to run the SFU container
+  livekit.yaml               SFU config (ports, API key/secret)  ← EDIT THIS
+  MEETINGS_SFU_USAGE.txt      This file
+
+(The main app image + MinIO image are the SEPARATE tars you already deploy —
+ nothing about them changes here, except the app image no longer bundles coturn.)
+
+--------------------------------------------------------------------------------
+ STEP 1 — Load the image (offline host)
+--------------------------------------------------------------------------------
+Copy livekit-latest.tar to the server, then:
+
+    docker load -i livekit-latest.tar
+
+(If the host has internet you can instead: docker pull livekit/livekit-server:latest)
+
+--------------------------------------------------------------------------------
+ STEP 2 — Configure livekit.yaml
+--------------------------------------------------------------------------------
+Open livekit.yaml and set a STRONG key/secret pair under `keys:` —
+the secret MUST be at least 32 characters. Example generators:
+
+    openssl rand -hex 16      # use as the API key
+    openssl rand -hex 32      # use as the API secret
+
+keys:
+  APImodtube01: <your-32+char-secret>
+
+Networking:
+  * Default uses Docker HOST networking (recommended on a Linux LAN box) — LiveKit
+    binds the host's interfaces directly; clients reach it at the host's LAN IP.
+  * If you CANNOT use host networking (e.g. Docker Desktop), edit
+    docker-compose.livekit.yml: comment out `network_mode: host`, uncomment the
+    `ports:` block, and set `rtc.node_ip: <this-host-LAN-IP>` in livekit.yaml.
+
+Ports used: 7880 (signaling/ws), 7881 (tcp fallback), 50000-50200/udp (media).
+
+--------------------------------------------------------------------------------
+ STEP 3 — Start the SFU
+--------------------------------------------------------------------------------
+    docker compose -f docker-compose.livekit.yml up -d
+    docker logs -f modtube-livekit        # confirm it started
+
+Quick reachability check (should print "OK"):
+    curl http://<sfu-host>:7880/
+
+--------------------------------------------------------------------------------
+ STEP 4 — Register the runner in the app
+--------------------------------------------------------------------------------
+Log in as an admin (super-admin OR a role with `manage-settings`) and open:
+
+    Admin → Tənzimləmələr (Settings) → tab "Görüş Serverləri"
+    (or the sidebar item "Görüş Serverləri")
+
+Click "Yeni server" and fill:
+    Ad         : any label, e.g.  LiveKit-1
+    URL        : ws://<sfu-host-LAN-IP>:7880
+                 ── IMPORTANT ──
+                 If the ModTube app is served over HTTPS, the URL MUST be wss://
+                 (browsers block ws:// from an https page = "mixed content").
+                 Put TLS in front of LiveKit (nginx/Caddy) for wss://, OR serve
+                 the app over plain http on the LAN and use ws://.
+    API key    : exactly the key from livekit.yaml
+    API secret : exactly the secret from livekit.yaml (>= 32 chars)
+    Aktiv      : checked
+
+The row shows a live status dot (green = reachable) and the number of active
+meetings on that runner. Add several runners to scale horizontally; new meetings
+go to the least-loaded enabled one.
+
+--------------------------------------------------------------------------------
+ STEP 5 — Test
+--------------------------------------------------------------------------------
+Create/start a meeting and join from two devices/browsers. Verify audio, video,
+screen-share, and that 8+ participants no longer lag.
+
+--------------------------------------------------------------------------------
+ NOTES
+--------------------------------------------------------------------------------
+  * No app rebuild is needed to add/change/remove runners — it's all dynamic in
+    the Settings tab (stored in the database).
+  * Per-meeting participant cap lives in Settings → Ümumi Parametrlər →
+    "maksimum iştirakçı sayı" (also env WEBRTC_MAX_PARTICIPANTS, default 50).
+  * Chat / attachments / moderation still flow over the app's WebSocket; only the
+    audio/video/screen media uses LiveKit.
+  * The modtube app image NO LONGER bundles coturn. If you previously opened
+    ports 3478 / 49152-49200 for it, you can close them; open the LiveKit ports
+    above instead (on the SFU host).
+  * Health probe + load shown per runner are checked on demand (refresh icon).
+
+--------------------------------------------------------------------------------
+ TROUBLESHOOTING
+--------------------------------------------------------------------------------
+  "Görüş serverinə qoşulmaq alınmadı" / no video:
+    - No runner registered, or all runners disabled → add/enable one.
+    - HTTPS app + ws:// runner URL → switch to wss:// (mixed content blocked).
+    - SFU not reachable from the browser's network → check firewall, LAN IP,
+      and that UDP 50000-50200 is open to clients.
+  Status dot red:
+    - The app server can't reach the runner's 7880 port → check container is up
+      and the URL/host is correct.
+  Token / 401 from LiveKit:
+    - API key/secret in the app don't match livekit.yaml, or secret < 32 chars.
+================================================================================
